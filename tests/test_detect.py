@@ -1,5 +1,9 @@
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+import pytest
+
+import pipeline.detect
 from pipeline.detect import _split_clusters, crop_box, detect_pieces
 
 
@@ -43,6 +47,21 @@ def test_speck_noise_ignored():
     img[300:303, 600:603] = 0  # tiny speck, far below min area
     boxes = detect_pieces(img, method="cv")
     assert len(boxes) == 3
+
+
+def test_auto_falls_back_to_cv_without_weights(monkeypatch):
+    monkeypatch.setattr(
+        pipeline.detect, "YOLO_WEIGHTS", Path("models/does-not-exist.pt")
+    )
+    img, rects = make_scene()
+    boxes = detect_pieces(img, method="auto")
+    assert len(boxes) == 3  # cv fallback ran; no ultralytics import needed
+
+
+def test_unknown_method_raises():
+    img, _ = make_scene()
+    with pytest.raises(ValueError, match="unknown detector"):
+        detect_pieces(img, method="bogus")
 
 
 def test_oversized_box_flagged_as_cluster():
