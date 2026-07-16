@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from skimage.color import deltaE_ciede2000, rgb2lab
 
-from pipeline.color import PALETTE, dominant_rgb, match_color
+from pipeline.color import PALETTE, dominant_rgb, match_color, normalize_illumination
 
 
 def bgr(hexstr: str) -> tuple[int, int, int]:
@@ -35,6 +35,25 @@ def test_white_matches_white(solid_crop):
 def test_beige_and_tan_are_distinct(solid_crop):
     assert match_color(dominant_rgb(solid_crop(bgr("E4CD9E")))).name == "beige"
     assert match_color(dominant_rgb(solid_crop(bgr("AA7D55")))).name == "tan"
+
+
+def test_dim_white_brick_normalizes_to_white():
+    # A white brick photographed on a white table in dim light reads gray;
+    # scaling by the (near-neutral) background restores it.
+    rgb = normalize_illumination((180, 178, 175), bg_rgb=(190, 188, 186))
+    assert match_color(rgb, PALETTE).name == "white"
+
+
+def test_neutral_bg_removes_color_cast():
+    # Warm indoor light tints everything; the background tint cancels it.
+    rgb = normalize_illumination((170, 155, 140), bg_rgb=(225, 215, 200))
+    r, g, b = rgb
+    assert abs(r - g) < 12 and abs(g - b) < 12  # cast mostly gone
+
+
+def test_colored_background_left_alone():
+    # A wooden/colored table is no reference; correction must not fire.
+    assert normalize_illumination((100, 50, 25), bg_rgb=(160, 90, 40)) == (100, 50, 25)
 
 
 def test_palette_has_expected_colors():
