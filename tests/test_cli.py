@@ -34,7 +34,11 @@ def test_scan_image_builds_inventory(fake_identify):
         "color_id": 4, "quantity": 2,
     }
     assert len(result.labels) == 3
-    assert result.labels[0] == "Brick 2 x 4 | red | 0.90"
+    assert sorted(result.labels) == [
+        "Brick 2 x 4 | blue | 0.90",
+        "Brick 2 x 4 | red | 0.90",
+        "Brick 2 x 4 | red | 0.90",
+    ]
 
 
 def test_cli_writes_json_and_debug(tmp_path, fake_identify):
