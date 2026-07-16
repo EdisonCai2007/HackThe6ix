@@ -1,0 +1,10 @@
+.venv/
+.cache/
+__pycache__/
+*.pyc
+*.egg-info/
+models/*.pt
+debug.jpg
+detect_debug.jpg
+inventory.json
+.pytest_cache/
