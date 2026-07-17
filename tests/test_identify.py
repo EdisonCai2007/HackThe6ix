@@ -57,7 +57,10 @@ def mock_post(monkeypatch, side_effects):
 def test_takes_top_item(monkeypatch, tmp_path, crop):
     mock_post(monkeypatch, [FakeResponse(BRICK_RESP)])
     result = identify_crop(crop, cache_dir=tmp_path)
-    assert result == Identification("3001", "Brick 2 x 4", "Bricks", 0.93)
+    assert (result.part_id, result.name, result.category, result.score) == \
+        ("3001", "Brick 2 x 4", "Bricks", 0.93)
+    # Raw candidates ride along for downstream advisories (stud check).
+    assert result.candidates[0]["part_id"] == "3001"
 
 
 def test_low_score_discarded(monkeypatch, tmp_path, crop):

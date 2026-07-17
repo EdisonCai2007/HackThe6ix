@@ -33,6 +33,9 @@ class Identification:
     name: str
     category: str | None
     score: float
+    # Top raw API candidates ({part_id, name, score}), regardless of
+    # MIN_SCORE — downstream advisories (stud check) re-rank within these.
+    candidates: tuple = ()
 
 
 UNKNOWN = Identification(None, "unknown brick", None, 0.0)
@@ -66,11 +69,18 @@ def _parse(payload: dict) -> Identification:
     items = payload.get("items") or []
     if not items:
         return UNKNOWN
+    candidates = tuple(
+        {"part_id": item["id"], "name": item["name"],
+         "score": float(item.get("score", 0.0))}
+        for item in items[:5]
+    )
     top = items[0]
     score = float(top.get("score", 0.0))
     if score < MIN_SCORE:
-        return Identification(None, "unknown brick", None, score)
-    return Identification(top["id"], top["name"], top.get("category"), score)
+        return Identification(None, "unknown brick", None, score,
+                              candidates=candidates)
+    return Identification(top["id"], top["name"], top.get("category"), score,
+                          candidates=candidates)
 
 
 def _post_with_retries(
