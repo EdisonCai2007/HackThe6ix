@@ -8,3 +8,6 @@ debug.jpg
 detect_debug.jpg
 inventory.json
 .pytest_cache/
+training/data/
+training/artifacts/label-qa/
+training/artifacts/sam-feasibility/
