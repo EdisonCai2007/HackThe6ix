@@ -2,8 +2,11 @@ import numpy as np
 
 from pipeline.color import PALETTE
 from pipeline.multiview import (
+    FusedInstance,
     Observation,
+    RectifiedView,
     box_is_complete,
+    compose_object_aware_mosaic,
     fuse_observations,
 )
 
@@ -74,3 +77,32 @@ def test_one_cluster_never_contains_two_detections_from_the_same_view():
     assert len(instances) == 2
     assert all(len({obs.view_index for obs in instance.observations})
                == len(instance.observations) for instance in instances)
+
+
+def test_mosaic_contains_one_intact_selected_object_without_source_ghost():
+    first = np.full((100, 120, 3), 220, dtype=np.uint8)
+    second = np.full((100, 120, 3), 235, dtype=np.uint8)
+    first[30:60, 20:50] = (9, 26, 201)
+    second[30:60, 40:70] = (9, 26, 201)
+    valid = np.ones((100, 120), dtype=np.uint8) * 255
+    views = [
+        RectifiedView(1, 0, first, valid, 2.0),
+        RectifiedView(2, 1, second, valid, 1.0),
+    ]
+    first_obs = _obs(1, (20, 30, 50, 60), quality=2.0)
+    first_obs.view_index = 0
+    first_obs.image = first
+    first_obs.valid_mask = valid
+    second_obs = _obs(2, (40, 30, 70, 60), quality=1.0)
+    second_obs.view_index = 1
+    second_obs.image = second
+    second_obs.valid_mask = valid
+    instance = FusedInstance([first_obs, second_obs], first_obs)
+
+    mosaic = compose_object_aware_mosaic(views, [instance])
+
+    red = ((mosaic[..., 2] > 150) & (mosaic[..., 1] < 80)).astype(np.uint8)
+    count, _ = __import__("cv2").connectedComponents(red)
+    assert count - 1 == 1
+    assert red[30:60, 20:50].mean() > 0.95
+    assert red[30:60, 40:70].mean() < 0.40

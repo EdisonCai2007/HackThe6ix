@@ -28,6 +28,24 @@ python3.11 -m venv .venv
 .venv/bin/uvicorn api:app --reload
 ```
 
+For a moving-camera Record3D session, use the multi-view path so inventory
+does not depend on one camera frame or on detecting a stitched image:
+
+```bash
+cd /Users/emily/lego-capture
+.venv/bin/python multiview.py sessions/<timestamp>
+
+cd /Users/emily/lego-cv
+.venv/bin/python session_cli.py \
+  /Users/emily/lego-capture/sessions/<timestamp> --detector cv
+```
+
+This detects at most five complementary clean rectifications, fuses duplicate
+observations in table coordinates, identifies the best complete crop once, and
+writes `inventory.json`, `topdown.jpg`, `debug.jpg`, and
+`multiview_result.json` to the capture session. The mosaic is a visualization;
+inventory is never redetected from its blended pixels.
+
 API endpoints:
 
 | Endpoint | Purpose |

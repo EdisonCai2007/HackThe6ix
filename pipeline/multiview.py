@@ -10,6 +10,8 @@ import numpy as np
 
 from pipeline.color import LegoColor, dominant_rgb, match_color, normalize_illumination
 from pipeline.detect import Box, crop_box, detect
+from pipeline.identify import identify_all
+from pipeline.inventory import build_inventory
 
 
 _COLOR_FAMILY = {
@@ -44,6 +46,24 @@ class Observation:
 class FusedInstance:
     observations: list[Observation]
     best: Observation
+
+
+@dataclass
+class RectifiedView:
+    frame_id: int
+    view_index: int
+    image: np.ndarray
+    valid_mask: np.ndarray
+    quality: float
+
+
+@dataclass
+class MultiViewScanResult:
+    inventory: list[dict]
+    instances: list[FusedInstance]
+    labels: list[str]
+    mosaic: np.ndarray
+    manifest: dict
 
 
 def box_is_complete(box: Box, valid_mask: np.ndarray, margin: int = 8) -> bool:
@@ -166,13 +186,13 @@ def _background_rgb(image: np.ndarray) -> tuple[int, int, int]:
     return int(r), int(g), int(b)
 
 
-def load_observations(manifest_path, detector: str = "cv") -> list[Observation]:
+def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("version") != 1:
         raise ValueError(f"unsupported multiview manifest version: {manifest.get('version')}")
     session_dir = Path(manifest["session_dir"])
-    observations: list[Observation] = []
+    views = []
     for view_index, view in enumerate(manifest["views"]):
         image = cv2.imread(str(session_dir / view["image"]))
         valid_mask = cv2.imread(
@@ -180,6 +200,22 @@ def load_observations(manifest_path, detector: str = "cv") -> list[Observation]:
         )
         if image is None or valid_mask is None:
             raise ValueError(f"missing multiview image or mask for frame {view['frame_id']}")
+        views.append(RectifiedView(
+            frame_id=int(view["frame_id"]),
+            view_index=view_index,
+            image=image,
+            valid_mask=valid_mask,
+            quality=float(view["quality"]),
+        ))
+    return manifest, views
+
+
+def observations_from_views(
+    views: list[RectifiedView], detector: str = "cv"
+) -> list[Observation]:
+    observations: list[Observation] = []
+    for view in views:
+        image, valid_mask = view.image, view.valid_mask
         background_rgb = _background_rgb(image)
         detections = detect(image, method=detector)
         for box in detections.boxes:
@@ -188,14 +224,121 @@ def load_observations(manifest_path, detector: str = "cv") -> list[Observation]:
                 dominant_rgb(crop), background_rgb
             ))
             observations.append(Observation(
-                frame_id=int(view["frame_id"]),
-                view_index=view_index,
+                frame_id=view.frame_id,
+                view_index=view.view_index,
                 box=box,
                 color=color,
                 complete=box_is_complete(box, valid_mask),
                 boundary_clearance=_boundary_clearance(box, valid_mask),
-                quality=float(view["quality"]),
+                quality=view.quality,
                 image=image,
                 valid_mask=valid_mask,
             ))
     return observations
+
+
+def load_observations(manifest_path, detector: str = "cv") -> list[Observation]:
+    _, views = load_views(manifest_path)
+    return observations_from_views(views, detector=detector)
+
+
+def _normalized_view(view: RectifiedView, target_bgr: np.ndarray) -> np.ndarray:
+    valid_pixels = view.image[view.valid_mask > 0]
+    background = (np.median(valid_pixels, axis=0) if len(valid_pixels)
+                  else np.ones(3) * 128)
+    gain = np.clip(target_bgr / np.maximum(background, 1), 0.75, 1.35)
+    return np.clip(view.image.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+
+
+def _expanded_box(box: Box, pad: int, width: int, height: int) -> Box:
+    return (max(0, box[0] - pad), max(0, box[1] - pad),
+            min(width, box[2] + pad), min(height, box[3] + pad))
+
+
+def compose_object_aware_mosaic(
+    views: list[RectifiedView], instances: list[FusedInstance]
+) -> np.ndarray:
+    """Blend table pixels, then insert each selected piece from one view."""
+    if not views:
+        raise ValueError("cannot compose a mosaic without rectified views")
+    height, width = views[0].image.shape[:2]
+    medians = [
+        np.median(view.image[view.valid_mask > 0], axis=0)
+        for view in views if np.any(view.valid_mask > 0)
+    ]
+    target_bgr = np.median(np.stack(medians), axis=0)
+    normalized = {
+        view.view_index: _normalized_view(view, target_bgr) for view in views
+    }
+    protected = {
+        view.view_index: np.zeros((height, width), dtype=np.uint8)
+        for view in views
+    }
+    for instance in instances:
+        for observation in instance.observations:
+            x0, y0, x1, y1 = _expanded_box(
+                observation.box, 8, width, height
+            )
+            protected[observation.view_index][y0:y1, x0:x1] = 255
+
+    accum = np.zeros((height, width, 3), dtype=np.float64)
+    weight_sum = np.zeros((height, width), dtype=np.float64)
+    for view in views:
+        background_valid = (
+            (view.valid_mask > 0) & (protected[view.view_index] == 0)
+        ).astype(np.uint8)
+        distance = cv2.distanceTransform(background_valid, cv2.DIST_L2, 5)
+        weight = np.clip(distance / 20.0, 0.0, 1.0)
+        accum += normalized[view.view_index].astype(np.float64) * weight[..., None]
+        weight_sum += weight
+    mosaic = np.empty((height, width, 3), dtype=np.uint8)
+    covered = weight_sum > 0
+    mosaic[covered] = np.clip(
+        accum[covered] / weight_sum[covered, None], 0, 255
+    ).astype(np.uint8)
+    mosaic[~covered] = target_bgr.astype(np.uint8)
+
+    # Copy each chosen object observation as one indivisible patch. Only the
+    # outer table-colored padding is feathered; no source seam crosses a box.
+    for instance in sorted(instances, key=lambda item: _box_area(item.best.box),
+                           reverse=True):
+        observation = instance.best
+        source = normalized[observation.view_index]
+        x0, y0, x1, y1 = _expanded_box(observation.box, 6, width, height)
+        patch_height, patch_width = y1 - y0, x1 - x0
+        if patch_height <= 0 or patch_width <= 0:
+            continue
+        yy, xx = np.mgrid[:patch_height, :patch_width]
+        edge_distance = np.minimum.reduce([
+            yy + 1, xx + 1, patch_height - yy, patch_width - xx
+        ]).astype(np.float32)
+        alpha = np.clip(edge_distance / 5.0, 0.0, 1.0)[..., None]
+        destination = mosaic[y0:y1, x0:x1].astype(np.float32)
+        source_patch = source[y0:y1, x0:x1].astype(np.float32)
+        mosaic[y0:y1, x0:x1] = np.clip(
+            source_patch * alpha + destination * (1.0 - alpha), 0, 255
+        ).astype(np.uint8)
+    return mosaic
+
+
+def scan_manifest(
+    manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache")
+) -> MultiViewScanResult:
+    manifest, views = load_views(manifest_path)
+    observations = observations_from_views(views, detector=detector)
+    instances = fuse_observations(observations)
+    crops = [crop_box(instance.best.image, instance.best.box)
+             for instance in instances]
+    identifications = identify_all(crops, cache_dir=cache_dir)
+    colors = [instance.best.color for instance in instances]
+    labels = [
+        f"{identification.name} | {color.name} | {identification.score:.2f}"
+        for identification, color in zip(identifications, colors)
+    ]
+    return MultiViewScanResult(
+        inventory=build_inventory(list(zip(identifications, colors))),
+        instances=instances,
+        labels=labels,
+        mosaic=compose_object_aware_mosaic(views, instances),
+        manifest=manifest,
+    )
