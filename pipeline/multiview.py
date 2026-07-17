@@ -16,8 +16,11 @@ from pipeline.color import (
     normalize_illumination,
 )
 from pipeline.detect import Box, crop_box, detect
-from pipeline.identify import identify_all
+from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
+from pipeline.studs import advise, count_studs, stud_radius_px
+
+SECOND_CHANCE_MAX_ALTERNATES = 2
 
 
 _COLOR_FAMILY = {
@@ -424,10 +427,10 @@ def compose_object_aware_mosaic(
     return mosaic
 
 
-def _identification_observation(
+def _ranked_id_observations(
     instance: FusedInstance, views: list[RectifiedView]
-) -> tuple[Observation, list[int] | None]:
-    """Pick the observation whose ORIGINAL-frame crop should go to Brickognize.
+) -> list[tuple[Observation, list[int]]]:
+    """Observations usable for ORIGINAL-frame ID crops, best first.
 
     Ranking follows the Bridge spec: least obliquity and sharpness (the
     view's quality) first, canvas completeness after — a piece clipped by
@@ -449,12 +452,19 @@ def _identification_observation(
         ranked.append((
             (fits, view.quality, observation.complete,
              observation.boundary_clearance, -observation.frame_id),
-            observation, box,
+            observation, list(box),
         ))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [(observation, box) for _, observation, box in ranked]
+
+
+def _identification_observation(
+    instance: FusedInstance, views: list[RectifiedView]
+) -> tuple[Observation, list[int] | None]:
+    ranked = _ranked_id_observations(instance, views)
     if not ranked:
         return instance.best, None
-    _, observation, box = max(ranked, key=lambda item: item[0])
-    return observation, list(box)
+    return ranked[0]
 
 
 def _identification_crops(
@@ -496,6 +506,65 @@ def _identification_crops(
     return crops, provenance
 
 
+def _second_chance(
+    instances, views, session_dir, identifications, crops, id_crops, cache_dir
+):
+    """Weak chosen-crop IDs get one more try from alternate observations.
+
+    Evidence (234326 orange beam): the top-ranked view's crop identified as
+    unknown 0.59 while the next view's crop identified as Brick 1x8 0.84.
+    """
+    from pipeline.original_crop import masked_crop
+
+    originals: dict[int, np.ndarray] = {}
+    for index, instance in enumerate(instances):
+        if identifications[index].score >= MIN_SCORE:
+            continue
+        ranked = _ranked_id_observations(instance, views)
+        for observation, _ in ranked[1:1 + SECOND_CHANCE_MAX_ALTERNATES]:
+            view = views[observation.view_index]
+            if view.frame_id not in originals:
+                image = cv2.imread(str(session_dir / view.rgb))
+                if image is None:
+                    continue
+                originals[view.frame_id] = image
+            original = originals[view.frame_id]
+            box, crop = masked_crop(original, observation.box,
+                                    view.homography, original.shape[:2],
+                                    view.raise_uv_per_cm)
+            candidate = identify_crop(crop, cache_dir=cache_dir)
+            if candidate.score >= MIN_SCORE:
+                identifications[index] = candidate
+                crops[index] = crop
+                id_crops[index].update({
+                    "frame_id": observation.frame_id, "rgb": view.rgb,
+                    "box_original": list(box),
+                    "source": "original-masked-second-chance",
+                })
+                break
+    return identifications, crops, id_crops
+
+
+def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
+                         px_per_m):
+    for index, instance in enumerate(instances):
+        info = id_crops[index]
+        ident = identifications[index]
+        if info.get("box_original") is None:
+            info["stud"] = {"count": None, "action": "no-geometry"}
+            continue
+        observation, _ = _identification_observation(instance, views)
+        radius = stud_radius_px(observation.box, info["box_original"], px_per_m)
+        count = count_studs(crops[index], radius)
+        adjusted, action = advise(ident, count)
+        info["stud"] = {"count": count, "radius_px": round(radius, 1),
+                        "action": action}
+        if adjusted is not ident:
+            info["stud"]["was"] = f"{ident.name} ({ident.score:.2f})"
+            identifications[index] = adjusted
+    return identifications
+
+
 def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache")
 ) -> MultiViewScanResult:
@@ -504,10 +573,17 @@ def scan_manifest(
     instances = filter_unconfirmed_instances(
         fuse_observations(observations), views
     )
-    crops, id_crops = _identification_crops(
-        instances, views, Path(manifest["session_dir"])
-    )
+    session_dir = Path(manifest["session_dir"])
+    crops, id_crops = _identification_crops(instances, views, session_dir)
     identifications = identify_all(crops, cache_dir=cache_dir)
+    identifications, crops, id_crops = _second_chance(
+        instances, views, session_dir, identifications, crops, id_crops,
+        cache_dir,
+    )
+    identifications = _apply_stud_advisory(
+        instances, views, identifications, crops, id_crops,
+        manifest["px_per_m"],
+    )
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize"] = {
             "part_id": identification.part_id,

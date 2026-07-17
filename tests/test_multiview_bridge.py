@@ -14,45 +14,49 @@ RECTIFIED_BGR = (9, 26, 201)   # red-ish block in the rectified view
 ORIGINAL_BGR = (201, 26, 9)    # blue-ish block in the original frame
 
 
-def _write_session(session, with_bridge=True):
-    """One view: canvas 800x600, original 1600x1200, H = diag(2,2,1).
+def _write_session(session, with_bridge=True, second_view=False):
+    """Canvas 800x600, original 1600x1200 per view, H = diag(2,2,1).
 
     Block dimensions mirror the proven test_session_cli fixture — smaller
     synthetic blocks get fragmented by the cv detector's morphology.
+    second_view adds a lower-quality frame 2 seeing the same block.
     """
     output = session / "multiview"
     output.mkdir(parents=True)
     frames = session / "frames"
     frames.mkdir()
 
-    rectified = np.full((600, 800, 3), 245, dtype=np.uint8)
-    rectified[180:280, 250:370] = RECTIFIED_BGR
-    original = np.full((1200, 1600, 3), 245, dtype=np.uint8)
-    original[360:560, 500:740] = ORIGINAL_BGR
+    views = []
+    frame_specs = [(1, 1.0, 0)] + ([(2, 0.5, 4)] if second_view else [])
+    for frame_id, quality, offset in frame_specs:
+        rectified = np.full((600, 800, 3), 245, dtype=np.uint8)
+        rectified[180 + offset:280 + offset,
+                  250 + offset:370 + offset] = RECTIFIED_BGR
+        original = np.full((1200, 1600, 3), 245, dtype=np.uint8)
+        original[360:560, 500:740] = ORIGINAL_BGR
 
-    cv2.imwrite(str(output / "view_00001.jpg"), rectified)
-    cv2.imwrite(str(output / "view_00001.mask.png"),
-                np.full((600, 800), 255, dtype=np.uint8))
-    cv2.imwrite(str(frames / "00001.rgb.jpg"), original)
+        cv2.imwrite(str(output / f"view_{frame_id:05d}.jpg"), rectified)
+        cv2.imwrite(str(output / f"view_{frame_id:05d}.mask.png"),
+                    np.full((600, 800), 255, dtype=np.uint8))
+        cv2.imwrite(str(frames / f"{frame_id:05d}.rgb.jpg"), original)
 
-    view = {
-        "frame_id": 1,
-        "quality": 1.0,
-        "image": "multiview/view_00001.jpg",
-        "mask": "multiview/view_00001.mask.png",
-        "size_wh": [800, 600],
-    }
-    version = 1
-    if with_bridge:
-        version = 2
-        view.update({
-            "homography": np.diag([2.0, 2.0, 1.0]).tolist(),
-            "rgb": "frames/00001.rgb.jpg",
-            "rgb_size": [1200, 1600],
-            "raise_uv_per_cm": [4.0, -6.0],
-        })
+        view = {
+            "frame_id": frame_id,
+            "quality": quality,
+            "image": f"multiview/view_{frame_id:05d}.jpg",
+            "mask": f"multiview/view_{frame_id:05d}.mask.png",
+            "size_wh": [800, 600],
+        }
+        if with_bridge:
+            view.update({
+                "homography": np.diag([2.0, 2.0, 1.0]).tolist(),
+                "rgb": f"frames/{frame_id:05d}.rgb.jpg",
+                "rgb_size": [1200, 1600],
+                "raise_uv_per_cm": [4.0, -6.0],
+            })
+        views.append(view)
     manifest = {
-        "version": version,
+        "version": 2 if with_bridge else 1,
         "session_dir": str(session),
         "px_per_m": 1000.0,
         "origin_xy": [0.0, 0.0],
@@ -60,7 +64,7 @@ def _write_session(session, with_bridge=True):
         "edge_margin_px": 8,
         "union_coverage": 1.0,
         "selected_coverage": 1.0,
-        "views": [view],
+        "views": views,
     }
     path = output / "manifest.json"
     path.write_text(json.dumps(manifest))
@@ -160,3 +164,61 @@ def test_id_observation_rejects_view_clipped_in_original_frame():
     instance = FusedInstance([clipped, safe], best=safe)
     chosen, _ = _identification_observation(instance, views)
     assert chosen is safe
+
+
+def test_stud_advisory_corrects_contradicted_id(tmp_path, monkeypatch):
+    manifest = _write_session(tmp_path / "session", with_bridge=True)
+
+    def fake_identify(crops, **kwargs):
+        return [Identification("3008", "Brick 1 x 8", None, 0.79, candidates=(
+            {"part_id": "3008", "name": "Brick 1 x 8", "score": 0.79},
+            {"part_id": "3028", "name": "Plate 6 x 12", "score": 0.55},
+        )) for _ in crops]
+
+    monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify)
+    monkeypatch.setattr(pipeline.multiview, "count_studs",
+                        lambda crop, radius_px: 30)
+    result = scan_manifest(manifest, detector="cv")
+    assert result.id_crops[0]["stud"]["action"] == "corrected"
+    assert result.id_crops[0]["brickognize"]["part_id"] == "3028"
+    assert result.inventory[0]["part_id"] == "3028"
+
+
+def test_stud_advisory_skips_when_studs_invisible(tmp_path, monkeypatch):
+    manifest = _write_session(tmp_path / "session", with_bridge=True)
+
+    def fake_identify(crops, **kwargs):
+        return [Identification("3007", "Brick 2 x 8", None, 0.79)
+                for _ in crops]
+
+    monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify)
+    monkeypatch.setattr(pipeline.multiview, "count_studs",
+                        lambda crop, radius_px: 1)
+    result = scan_manifest(manifest, detector="cv")
+    assert result.id_crops[0]["stud"]["action"] == "skipped"
+    assert result.id_crops[0]["brickognize"]["part_id"] == "3007"
+
+
+def test_second_chance_uses_alternate_view_for_weak_id(tmp_path, monkeypatch):
+    # Two views of the same block; the chosen view's crop IDs weakly, the
+    # alternate strongly — the strong one must win and be recorded.
+    session = tmp_path / "session"
+    manifest = _write_session(session, with_bridge=True, second_view=True)
+
+    def fake_identify_all(crops, **kwargs):
+        return [Identification(None, "unknown brick", None, 0.55)
+                for _ in crops]
+
+    def fake_identify_crop(crop, **kwargs):
+        return Identification("3008", "Brick 1 x 8", None, 0.84)
+
+    monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify_all)
+    monkeypatch.setattr(pipeline.multiview, "identify_crop",
+                        fake_identify_crop)
+    monkeypatch.setattr(pipeline.multiview, "count_studs",
+                        lambda crop, radius_px: 0)
+    result = scan_manifest(manifest, detector="cv")
+    assert len(result.instances) == 1
+    prov = result.id_crops[0]
+    assert prov["source"] == "original-masked-second-chance"
+    assert prov["brickognize"]["part_id"] == "3008"
