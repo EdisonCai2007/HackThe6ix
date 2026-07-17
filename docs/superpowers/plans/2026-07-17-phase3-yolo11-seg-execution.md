@@ -8,6 +8,19 @@
 
 **Tech Stack:** Python 3.11, OpenCV, NumPy, PyYAML, pytest, Ultralytics `yolo11n-seg`, SAM2 only for offline annotation assistance, PyTorch MPS.
 
+## Execution status (2026-07-17)
+
+- Tasks 1–5 are implemented and tested. The capture workspace export is commit
+  `7a09cce`; CV catalog/audit, frame selection, and label/dataset safeguards are
+  commits `012c841`, `ebdb1d9`, and `4ef04fb`.
+- Phase 3C bootstrapped 71 original frames with SAM2 on MPS. All proposals are
+  explicitly unverified; QA prioritized 56 touching/overlapping frames.
+- A lossless Labelme review bundle and guarded verified-label importer are
+  prepared. Execution is stopped at the required human mask-correction gate.
+- Tasks 6 onward (verified dataset build, MPS smoke/full training, runtime
+  detector, fusion/crop integration, and product evaluation) remain unverified
+  and must not proceed on the SAM proposals.
+
 ## Global Constraints
 
 - Runtime segmentation has one semantic class: `lego_piece`.
@@ -670,4 +683,3 @@ The held-out environment is also the weakest geometry group, so segmentation gen
 - Spec coverage: audit/contact sheets, session split/provenance/leakage, annotation QA/human gate, MPS training, original-frame ROI, geometry gating, fusion invariant, mask crops/color, diagnostics, regressions, held-out reporting, and capture guidance are each mapped to a task.
 - Placeholder scan: no deferred implementation decisions or unspecified error-handling steps remain; angle-bracket notation is used only to describe generated filename fields or function signatures.
 - Type consistency: hard contours are table-metre polygons; runtime converts them through manifest origin/scale and view homography. Selection owns split/provenance. Only verified sidecars enter training. Original masks and canvas boxes remain linked through fusion.
-

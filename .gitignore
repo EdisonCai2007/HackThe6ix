@@ -10,4 +10,6 @@ inventory.json
 .pytest_cache/
 training/data/
 training/artifacts/label-qa/
-training/artifacts/sam-feasibility/
+training/artifacts/sam-feasibility*/
+/sam*.pt
+/yolo11n-seg.pt
