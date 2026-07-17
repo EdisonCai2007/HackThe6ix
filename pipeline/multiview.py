@@ -61,6 +61,11 @@ class RectifiedView:
     image: np.ndarray
     valid_mask: np.ndarray
     quality: float
+    # Bridge geometry (manifest v2, optional): canvas px -> original px.
+    homography: np.ndarray | None = None
+    rgb: str | None = None
+    rgb_size: tuple[int, int] | None = None
+    raise_uv_per_cm: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass
@@ -70,6 +75,8 @@ class MultiViewScanResult:
     labels: list[str]
     mosaic: np.ndarray
     manifest: dict
+    id_crops: list[dict] = field(default_factory=list)
+    crops: list[np.ndarray] = field(default_factory=list)
 
 
 def box_is_complete(box: Box, valid_mask: np.ndarray, margin: int = 8) -> bool:
@@ -249,7 +256,7 @@ def _background_rgb(image: np.ndarray) -> tuple[int, int, int]:
 def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    if manifest.get("version") != 1:
+    if manifest.get("version") not in (1, 2):
         raise ValueError(f"unsupported multiview manifest version: {manifest.get('version')}")
     session_dir = Path(manifest["session_dir"])
     views = []
@@ -260,12 +267,17 @@ def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
         )
         if image is None or valid_mask is None:
             raise ValueError(f"missing multiview image or mask for frame {view['frame_id']}")
+        homography = view.get("homography")
         views.append(RectifiedView(
             frame_id=int(view["frame_id"]),
             view_index=view_index,
             image=image,
             valid_mask=valid_mask,
             quality=float(view["quality"]),
+            homography=None if homography is None else np.array(homography),
+            rgb=view.get("rgb"),
+            rgb_size=tuple(view["rgb_size"]) if view.get("rgb_size") else None,
+            raise_uv_per_cm=tuple(view.get("raise_uv_per_cm", (0.0, 0.0))),
         ))
     return manifest, views
 
@@ -411,6 +423,46 @@ def compose_object_aware_mosaic(
     return mosaic
 
 
+def _identification_crops(
+    instances: list[FusedInstance], views: list[RectifiedView],
+    session_dir: Path,
+) -> tuple[list[np.ndarray], list[dict]]:
+    """Cut each instance's ID crop from its best view's ORIGINAL frame.
+
+    Rectification is exact only for the table plane; raised pieces get
+    stretched in rectified views, which corrupts Brickognize IDs. Falls back
+    to the rectified crop for v1 manifests without bridge geometry.
+    """
+    from pipeline.original_crop import original_box
+
+    originals: dict[int, np.ndarray] = {}
+    crops, provenance = [], []
+    for instance in instances:
+        observation = instance.best
+        view = views[observation.view_index]
+        if view.homography is None or view.rgb is None:
+            crops.append(crop_box(observation.image, observation.box))
+            provenance.append({
+                "frame_id": observation.frame_id, "rgb": None,
+                "box_original": None, "source": "rectified-fallback",
+            })
+            continue
+        if view.frame_id not in originals:
+            original = cv2.imread(str(session_dir / view.rgb))
+            if original is None:
+                raise ValueError(f"missing original frame {view.rgb}")
+            originals[view.frame_id] = original
+        original = originals[view.frame_id]
+        box = original_box(observation.box, view.homography,
+                           original.shape[:2], view.raise_uv_per_cm)
+        crops.append(original[box[1]:box[3], box[0]:box[2]])
+        provenance.append({
+            "frame_id": observation.frame_id, "rgb": view.rgb,
+            "box_original": list(box), "source": "original",
+        })
+    return crops, provenance
+
+
 def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache")
 ) -> MultiViewScanResult:
@@ -419,9 +471,16 @@ def scan_manifest(
     instances = filter_unconfirmed_instances(
         fuse_observations(observations), views
     )
-    crops = [crop_box(instance.best.image, instance.best.box)
-             for instance in instances]
+    crops, id_crops = _identification_crops(
+        instances, views, Path(manifest["session_dir"])
+    )
     identifications = identify_all(crops, cache_dir=cache_dir)
+    for crop_info, identification in zip(id_crops, identifications):
+        crop_info["brickognize"] = {
+            "part_id": identification.part_id,
+            "name": identification.name,
+            "score": identification.score,
+        }
     colors = [consensus_color(instance) for instance in instances]
     labels = [
         f"{identification.name} | {color.name} | {identification.score:.2f}"
@@ -433,4 +492,6 @@ def scan_manifest(
         labels=labels,
         mosaic=compose_object_aware_mosaic(views, instances),
         manifest=manifest,
+        id_crops=id_crops,
+        crops=crops,
     )
