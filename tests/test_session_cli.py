@@ -65,6 +65,31 @@ def test_session_cli_identifies_one_best_crop_and_writes_outputs(
     assert sum(item["quantity"] for item in inventory) == 1
     assert len(calls) == 1
     assert (session / "topdown.jpg").exists()
-    assert (session / "debug.jpg").exists()
+    # Boxes are never drawn on the mosaic; debug moved to debug/.
+    assert not (session / "debug.jpg").exists()
+    assert (session / "debug" / "crop_gallery.jpg").exists()
     result = json.loads((session / "multiview_result.json").read_text())
     assert result["instance_count"] == 1
+    assert result["instances"][0]["id_crop"]["source"] == "rectified-fallback"
+
+
+def test_session_cli_writes_frame_overlays_for_v2(tmp_path, monkeypatch):
+    from tests.test_multiview_bridge import _write_session
+
+    session = tmp_path / "session"
+    manifest = _write_session(session, with_bridge=True)
+
+    def fake_identify(crops, **kwargs):
+        return [Identification("3001", "Brick 2 x 4", "Bricks", 0.9)
+                for _ in crops]
+
+    monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify)
+    session_cli.main([str(manifest), "--detector", "cv"])
+
+    assert (session / "debug" / "crop_gallery.jpg").exists()
+    assert (session / "debug" / "frame_00001_overlay.jpg").exists()
+    result = json.loads((session / "multiview_result.json").read_text())
+    id_crop = result["instances"][0]["id_crop"]
+    assert id_crop["source"] == "original"
+    assert id_crop["rgb"] == "frames/00001.rgb.jpg"
+    assert id_crop["brickognize"]["part_id"] == "3001"

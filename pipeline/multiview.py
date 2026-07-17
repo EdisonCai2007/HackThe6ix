@@ -77,6 +77,7 @@ class MultiViewScanResult:
     manifest: dict
     id_crops: list[dict] = field(default_factory=list)
     crops: list[np.ndarray] = field(default_factory=list)
+    views: list["RectifiedView"] = field(default_factory=list)
 
 
 def box_is_complete(box: Box, valid_mask: np.ndarray, margin: int = 8) -> bool:
@@ -494,4 +495,5 @@ def scan_manifest(
         manifest=manifest,
         id_crops=id_crops,
         crops=crops,
+        views=views,
     )
