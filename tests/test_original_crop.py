@@ -79,3 +79,21 @@ def test_masked_crop_hides_neighbor_in_aabb_corner_of_diagonal_piece():
     assert tuple(target) == (0, 0, 200)  # target pixels intact
     neighbor = crop[155 - box[1], 242 - box[0]].astype(int)
     assert np.abs(neighbor - 240).max() < 25  # neighbor blanked to background
+
+
+def test_masked_instance_crop_excludes_neighbor_and_retains_padding():
+    from pipeline.original_crop import masked_instance_crop
+
+    original = np.full((120, 160, 3), 235, np.uint8)
+    original[40:80, 50:90] = (10, 30, 210)
+    original[45:75, 95:120] = (210, 30, 10)
+    mask = np.zeros(original.shape[:2], dtype=bool)
+    mask[40:80, 50:90] = True
+
+    box, crop = masked_instance_crop(original, mask, pad_fraction=0.5)
+
+    assert box[0] < 50 and box[1] < 40 and box[2] > 90 and box[3] > 80
+    target = crop[60 - box[1], 70 - box[0]]
+    neighbor = crop[60 - box[1], 105 - box[0]].astype(int)
+    assert tuple(target) == (10, 30, 210)
+    assert np.abs(neighbor - 235).max() < 10

@@ -15,6 +15,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
 from skimage.color import deltaE_ciede2000, rgb2lab
 
@@ -94,6 +95,37 @@ def dominant_rgb(crop_bgr: np.ndarray) -> tuple[int, int, int]:
     if len(keep) == 0:  # uniformly dark/bright crop: use everything
         keep = px
     b, g, r = np.median(keep, axis=0).astype(int)
+    return int(r), int(g), int(b)
+
+
+def dominant_rgb_masked(
+    image_bgr: np.ndarray, mask: np.ndarray
+) -> tuple[int, int, int]:
+    """Robust piece color from only one segmentation instance's pixels."""
+    mask = np.asarray(mask, dtype=bool)
+    if mask.shape != image_bgr.shape[:2]:
+        raise ValueError("color mask must match image dimensions")
+    if not mask.any():
+        raise ValueError("color mask is empty")
+    interior = cv2.erode(
+        mask.astype(np.uint8), np.ones((3, 3), np.uint8)
+    ).astype(bool)
+    if interior.sum() < max(9, 0.25 * mask.sum()):
+        interior = mask
+    pixels = image_bgr[interior].reshape(-1, 3).astype(np.int32)
+    luminance = pixels.mean(axis=1)
+    usable = pixels[(luminance > 25) & (luminance < 245)]
+    if len(usable) < 9:
+        usable = pixels
+    if len(usable) >= 20:
+        usable_luminance = usable.mean(axis=1)
+        low, high = np.quantile(usable_luminance, [0.10, 0.90])
+        central = usable[
+            (usable_luminance >= low) & (usable_luminance <= high)
+        ]
+        if len(central):
+            usable = central
+    b, g, r = np.median(usable, axis=0).astype(int)
     return int(r), int(g), int(b)
 
 

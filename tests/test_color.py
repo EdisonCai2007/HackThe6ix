@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 from skimage.color import deltaE_ciede2000, rgb2lab
 
-from pipeline.color import PALETTE, dominant_rgb, match_color, normalize_illumination
+from pipeline.color import (
+    PALETTE,
+    dominant_rgb,
+    dominant_rgb_masked,
+    match_color,
+    normalize_illumination,
+)
 
 
 def bgr(hexstr: str) -> tuple[int, int, int]:
@@ -96,3 +102,15 @@ def test_palette_is_well_separated():
             if d < min_d:
                 min_d, worst = d, (PALETTE[i].name, PALETTE[j].name)
     assert min_d > 8.0, f"palette pair too close: {worst} (dE={min_d:.1f})"
+
+
+def test_masked_dominant_color_ignores_touching_neighbor_and_background():
+    image = np.full((100, 120, 3), (220, 220, 220), np.uint8)
+    image[20:80, 20:60] = (10, 20, 210)   # red target in BGR
+    image[20:80, 60:100] = (210, 40, 10)  # blue neighbor
+    mask = np.zeros(image.shape[:2], dtype=bool)
+    mask[20:80, 20:60] = True
+
+    rgb = dominant_rgb_masked(image, mask)
+
+    assert match_color(rgb).name in {"red", "dark red"}

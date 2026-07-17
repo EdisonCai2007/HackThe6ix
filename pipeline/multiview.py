@@ -12,6 +12,7 @@ from pipeline.color import (
     PALETTE,
     LegoColor,
     dominant_rgb,
+    dominant_rgb_masked,
     match_color,
     normalize_illumination,
 )
@@ -49,6 +50,25 @@ class Observation:
     quality: float
     image: np.ndarray | None = field(default=None, repr=False, compare=False)
     valid_mask: np.ndarray | None = field(default=None, repr=False, compare=False)
+    detector: str = "cv"
+    confidence: float | None = None
+    source_instance_id: str | None = None
+    box_original: Box | None = None
+    mask_original: np.ndarray | None = field(
+        default=None, repr=False, compare=False
+    )
+    mask_canvas: np.ndarray | None = field(
+        default=None, repr=False, compare=False
+    )
+    polygons_canvas: tuple[np.ndarray, ...] = field(
+        default=(), repr=False, compare=False
+    )
+    original_image: np.ndarray | None = field(
+        default=None, repr=False, compare=False
+    )
+    gate_provenance: dict | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass
@@ -81,6 +101,7 @@ class MultiViewScanResult:
     id_crops: list[dict] = field(default_factory=list)
     crops: list[np.ndarray] = field(default_factory=list)
     views: list["RectifiedView"] = field(default_factory=list)
+    segmentation_detections: list = field(default_factory=list)
 
 
 def box_is_complete(box: Box, valid_mask: np.ndarray, margin: int = 8) -> bool:
@@ -260,7 +281,7 @@ def _background_rgb(image: np.ndarray) -> tuple[int, int, int]:
 def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    if manifest.get("version") not in (1, 2):
+    if manifest.get("version") not in (1, 2, 3):
         raise ValueError(f"unsupported multiview manifest version: {manifest.get('version')}")
     session_dir = Path(manifest["session_dir"])
     views = []
@@ -310,6 +331,57 @@ def observations_from_views(
                 image=image,
                 valid_mask=valid_mask,
             ))
+    return observations
+
+
+def observations_from_segmentations(
+    detections, views: list[RectifiedView]
+) -> list[Observation]:
+    """Convert accepted original-frame masks into table-canvas observations."""
+    by_index = {view.view_index: view for view in views}
+    observations = []
+    for detection in detections:
+        if not detection.accepted:
+            continue
+        view = by_index[detection.view_index]
+        original = detection.image_original
+        background_rgb = _background_rgb(original)
+        color = match_color(normalize_illumination(
+            dominant_rgb_masked(original, detection.mask_original),
+            background_rgb,
+            neutral_tolerance=45,
+        ))
+        gate = detection.gate
+        observations.append(Observation(
+            frame_id=detection.frame_id,
+            view_index=detection.view_index,
+            box=detection.box_canvas,
+            color=color,
+            complete=not gate.boundary_zone,
+            boundary_clearance=(
+                0.0 if gate.boundary_zone
+                else _boundary_clearance(detection.box_canvas, view.valid_mask)
+            ),
+            quality=view.quality,
+            image=view.image,
+            valid_mask=view.valid_mask,
+            detector="seg",
+            confidence=detection.confidence,
+            source_instance_id=detection.source_instance_id,
+            box_original=detection.box_original,
+            mask_original=detection.mask_original,
+            mask_canvas=detection.mask_canvas,
+            polygons_canvas=detection.polygons_canvas,
+            original_image=original,
+            gate_provenance={
+                "accepted": gate.accepted,
+                "reason": gate.reason,
+                "workspace_overlap": gate.workspace_overlap,
+                "outside_fraction": gate.outside_fraction,
+                "centroid_inside": gate.centroid_inside,
+                "boundary_zone": gate.boundary_zone,
+            },
+        ))
     return observations
 
 
@@ -445,10 +517,28 @@ def _ranked_id_observations(
         view = views[observation.view_index]
         if view.homography is None or view.rgb is None or view.rgb_size is None:
             continue
-        box, fits = original_box_and_fit(
-            observation.box, view.homography, view.rgb_size,
-            view.raise_uv_per_cm,
-        )
+        if observation.mask_original is not None:
+            ys, xs = np.nonzero(observation.mask_original)
+            if not len(xs):
+                continue
+            x0, y0 = int(xs.min()), int(ys.min())
+            x1, y1 = int(xs.max()) + 1, int(ys.max()) + 1
+            pad_x = max(2, round((x1 - x0) * 0.20))
+            pad_y = max(2, round((y1 - y0) * 0.20))
+            height, width = observation.mask_original.shape
+            fits = (
+                x0 - pad_x >= 0 and y0 - pad_y >= 0
+                and x1 + pad_x <= width and y1 + pad_y <= height
+            )
+            box = (
+                max(0, x0 - pad_x), max(0, y0 - pad_y),
+                min(width, x1 + pad_x), min(height, y1 + pad_y),
+            )
+        else:
+            box, fits = original_box_and_fit(
+                observation.box, view.homography, view.rgb_size,
+                view.raise_uv_per_cm,
+            )
         ranked.append((
             (fits, view.quality, observation.complete,
              observation.boundary_clearance, -observation.frame_id),
@@ -489,20 +579,42 @@ def _identification_crops(
                 "box_original": None, "source": "rectified-fallback",
             })
             continue
-        if view.frame_id not in originals:
+        if observation.original_image is not None:
+            original = observation.original_image
+        elif view.frame_id not in originals:
             original = cv2.imread(str(session_dir / view.rgb))
             if original is None:
                 raise ValueError(f"missing original frame {view.rgb}")
             originals[view.frame_id] = original
-        original = originals[view.frame_id]
-        from pipeline.original_crop import masked_crop
-        box, crop = masked_crop(original, observation.box, view.homography,
-                                original.shape[:2], view.raise_uv_per_cm)
+        else:
+            original = originals[view.frame_id]
+        if observation.mask_original is not None:
+            from pipeline.original_crop import masked_instance_crop
+
+            box, crop = masked_instance_crop(
+                original, observation.mask_original
+            )
+            source = "yolo-instance-mask"
+        else:
+            from pipeline.original_crop import masked_crop
+
+            box, crop = masked_crop(
+                original, observation.box, view.homography,
+                original.shape[:2], view.raise_uv_per_cm,
+            )
+            source = "original-masked"
         crops.append(crop)
-        provenance.append({
+        info = {
             "frame_id": observation.frame_id, "rgb": view.rgb,
-            "box_original": list(box), "source": "original-masked",
-        })
+            "box_original": list(box), "source": source,
+        }
+        if observation.mask_original is not None:
+            info.update({
+                "source_instance_id": observation.source_instance_id,
+                "segmentation_confidence": observation.confidence,
+                "gate": observation.gate_provenance,
+            })
+        provenance.append(info)
     return crops, provenance
 
 
@@ -514,7 +626,7 @@ def _second_chance(
     Evidence (234326 orange beam): the top-ranked view's crop identified as
     unknown 0.59 while the next view's crop identified as Brick 1x8 0.84.
     """
-    from pipeline.original_crop import masked_crop
+    from pipeline.original_crop import masked_crop, masked_instance_crop
 
     originals: dict[int, np.ndarray] = {}
     for index, instance in enumerate(instances):
@@ -527,15 +639,25 @@ def _second_chance(
         best = None
         for observation, _ in ranked[1:1 + SECOND_CHANCE_MAX_ALTERNATES]:
             view = views[observation.view_index]
-            if view.frame_id not in originals:
+            if observation.original_image is not None:
+                original = observation.original_image
+            elif view.frame_id not in originals:
                 image = cv2.imread(str(session_dir / view.rgb))
                 if image is None:
                     continue
                 originals[view.frame_id] = image
-            original = originals[view.frame_id]
-            box, crop = masked_crop(original, observation.box,
-                                    view.homography, original.shape[:2],
-                                    view.raise_uv_per_cm)
+                original = image
+            else:
+                original = originals[view.frame_id]
+            if observation.mask_original is not None:
+                box, crop = masked_instance_crop(
+                    original, observation.mask_original
+                )
+            else:
+                box, crop = masked_crop(
+                    original, observation.box, view.homography,
+                    original.shape[:2], view.raise_uv_per_cm,
+                )
             candidate = identify_crop(crop, cache_dir=cache_dir)
             if candidate.score >= MIN_SCORE and (
                     best is None or candidate.score > best[0].score):
@@ -544,11 +666,23 @@ def _second_chance(
             candidate, observation, view, box, crop = best
             identifications[index] = candidate
             crops[index] = crop
-            id_crops[index].update({
+            source = (
+                "yolo-instance-mask-second-chance"
+                if observation.mask_original is not None
+                else "original-masked-second-chance"
+            )
+            update = {
                 "frame_id": observation.frame_id, "rgb": view.rgb,
                 "box_original": list(box),
-                "source": "original-masked-second-chance",
-            })
+                "source": source,
+            }
+            if observation.mask_original is not None:
+                update.update({
+                    "source_instance_id": observation.source_instance_id,
+                    "segmentation_confidence": observation.confidence,
+                    "gate": observation.gate_provenance,
+                })
+            id_crops[index].update(update)
     return identifications, crops, id_crops
 
 
@@ -573,10 +707,30 @@ def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
 
 
 def scan_manifest(
-    manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache")
+    manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache"),
+    seg_model=None, gate_config=None,
 ) -> MultiViewScanResult:
     manifest, views = load_views(manifest_path)
-    observations = observations_from_views(views, detector=detector)
+    segmentation_detections = []
+    if detector == "seg":
+        from pipeline.segdetect import (
+            GateConfig,
+            YoloSegModel,
+            detect_original_instances,
+        )
+
+        gate_config = gate_config or GateConfig()
+        seg_model = seg_model or YoloSegModel(
+            confidence=gate_config.inference_confidence
+        )
+        segmentation_detections = detect_original_instances(
+            manifest, views, seg_model, gate_config
+        )
+        observations = observations_from_segmentations(
+            segmentation_detections, views
+        )
+    else:
+        observations = observations_from_views(views, detector=detector)
     instances = filter_unconfirmed_instances(
         fuse_observations(observations), views
     )
@@ -611,4 +765,5 @@ def scan_manifest(
         id_crops=id_crops,
         crops=crops,
         views=views,
+        segmentation_detections=segmentation_detections,
     )

@@ -1,6 +1,6 @@
 """Scan a Record3D multi-view session into one fused LEGO inventory.
 
-Usage: python session_cli.py /path/to/session [--detector cv]
+Usage: python session_cli.py /path/to/session [--detector auto]
 
 Outputs in the session dir: inventory.json, topdown.jpg (box-free coverage
 preview), multiview_result.json (instances + id-crop provenance), and debug/:
@@ -22,6 +22,19 @@ from pipeline.original_crop import original_box
 
 GALLERY_TILE_H = 180
 GALLERY_PAD = 8
+SEG_WEIGHTS = Path(__file__).resolve().parent / "models" / "lego_seg.pt"
+
+
+def resolve_detector(requested: str, model_path: Path = SEG_WEIGHTS) -> str:
+    """Resolve ``auto`` without silently selecting unavailable weights."""
+    if requested == "auto":
+        return "seg" if Path(model_path).exists() else "cv"
+    if requested == "seg" and not Path(model_path).exists():
+        raise FileNotFoundError(
+            f"missing segmentation weights: {model_path}; "
+            "install models/lego_seg.pt or run with --detector cv"
+        )
+    return requested
 
 
 def _manifest_path(value: str) -> Path:
@@ -83,12 +96,135 @@ def frame_overlays(result, session_dir: Path, debug_dir: Path) -> list[Path]:
     return written
 
 
+def segmentation_gate_overlays(result, debug_dir: Path) -> list[Path]:
+    """Write inspectable original-frame workspace and gate diagnostics."""
+    if not result.segmentation_detections:
+        return []
+    from pipeline.segdetect import projected_workspace_roi
+
+    fused_ids = {}
+    for fused_id, instance in enumerate(result.instances):
+        for observation in instance.observations:
+            if observation.source_instance_id is not None:
+                fused_ids[(
+                    observation.view_index, observation.source_instance_id
+                )] = fused_id
+    by_view = {}
+    for detection in result.segmentation_detections:
+        by_view.setdefault(detection.view_index, []).append(detection)
+
+    manifest = result.manifest
+    contours_table = manifest["workspace_geometry"][
+        "hard_contours_table_xy"
+    ]
+    written = []
+    for view in result.views:
+        if view.homography is None or view.rgb is None:
+            continue
+        detections = by_view.get(view.view_index, [])
+        if detections:
+            image = detections[0].image_original.copy()
+        else:
+            image = cv2.imread(str(Path(manifest["session_dir"]) / view.rgb))
+            if image is None:
+                continue
+        projection = projected_workspace_roi(
+            contours_table,
+            manifest["origin_xy"],
+            float(manifest["px_per_m"]),
+            view.homography,
+            (image.shape[1], image.shape[0]),
+            pad_fraction=0.04,
+        )
+        cv2.drawContours(
+            image,
+            [np.rint(contour).astype(np.int32)
+             for contour in projection.contours_original],
+            -1,
+            (255, 255, 0),
+            2,
+        )
+        x0, y0, x1, y1 = projection.roi.as_tuple()
+        cv2.rectangle(image, (x0, y0), (x1 - 1, y1 - 1),
+                      (255, 0, 255), 2)
+        for detection in detections:
+            color = (0, 210, 0) if detection.accepted else (0, 0, 230)
+            overlay = image.copy()
+            overlay[detection.mask_original] = color
+            image = cv2.addWeighted(overlay, 0.22, image, 0.78, 0)
+            mask_contours, _ = cv2.findContours(
+                detection.mask_original.astype(np.uint8),
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+            cv2.drawContours(image, mask_contours, -1, color, 2)
+            bx0, by0, _, _ = detection.box_original
+            fused_id = fused_ids.get((
+                detection.view_index, detection.source_instance_id
+            ))
+            prefix = f"#{fused_id}" if fused_id is not None else "reject"
+            label = (
+                f"{prefix} {detection.source_instance_id} "
+                f"c={detection.confidence:.2f} "
+                f"ws={detection.gate.workspace_overlap:.2f} "
+                f"{detection.gate.reason}"
+            )
+            cv2.putText(
+                image, label, (max(2, bx0), max(16, by0 - 5)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA,
+            )
+        path = debug_dir / f"frame_{view.frame_id:05d}_seg_gate.jpg"
+        cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        written.append(path)
+    return written
+
+
+def _segmentation_details(result) -> dict:
+    detections = result.segmentation_detections
+    accepted = sum(detection.accepted for detection in detections)
+    reasons = {}
+    for detection in detections:
+        reasons[detection.gate.reason] = reasons.get(
+            detection.gate.reason, 0
+        ) + 1
+    return {
+        "raw": len(detections),
+        "accepted": accepted,
+        "rejected": len(detections) - accepted,
+        "reasons": reasons,
+        "detections": [
+            {
+                "frame_id": detection.frame_id,
+                "source_instance_id": detection.source_instance_id,
+                "confidence": detection.confidence,
+                "box_original": list(detection.box_original),
+                "box_canvas": list(detection.box_canvas),
+                "accepted": detection.accepted,
+                "reason": detection.gate.reason,
+                "workspace_overlap": detection.gate.workspace_overlap,
+                "outside_fraction": detection.gate.outside_fraction,
+                "centroid_inside": detection.gate.centroid_inside,
+                "boundary_zone": detection.gate.boundary_zone,
+            }
+            for detection in detections
+        ],
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session_or_manifest")
     parser.add_argument("--detector", default="auto",
-                        choices=["auto", "yolo", "cv"])
+                        choices=["auto", "seg", "yolo", "cv"])
+    parser.add_argument(
+        "--seg-model", type=Path, default=SEG_WEIGHTS,
+        help="YOLO segmentation weights used by auto/seg",
+    )
     args = parser.parse_args(argv)
+    try:
+        detector = resolve_detector(args.detector, args.seg_model)
+    except FileNotFoundError as error:
+        raise SystemExit(str(error)) from error
     manifest_path = _manifest_path(args.session_or_manifest)
     if not manifest_path.exists():
         raise SystemExit(
@@ -96,10 +232,13 @@ def main(argv: list[str] | None = None) -> None:
         )
     manifest = json.loads(manifest_path.read_text())
     session_dir = Path(manifest["session_dir"])
-    result = scan_manifest(
-        manifest_path, detector=args.detector,
-        cache_dir=Path(".cache"),
-    )
+    seg_model = None
+    if detector == "seg":
+        from pipeline.segdetect import YoloSegModel
+
+        seg_model = YoloSegModel(weights=args.seg_model)
+    result = scan_manifest(manifest_path, detector=detector,
+                           cache_dir=Path(".cache"), seg_model=seg_model)
     (session_dir / "inventory.json").write_text(
         json.dumps(result.inventory, indent=2) + "\n"
     )
@@ -113,9 +252,11 @@ def main(argv: list[str] | None = None) -> None:
     cv2.imwrite(str(debug_dir / "crop_gallery.jpg"), gallery,
                 [cv2.IMWRITE_JPEG_QUALITY, 92])
     overlays = frame_overlays(result, session_dir, debug_dir)
+    gate_overlays = segmentation_gate_overlays(result, debug_dir)
 
     details = {
         "manifest": str(manifest_path.resolve()),
+        "detector": detector,
         "instance_count": len(result.instances),
         "partial_count": sum(not instance.best.complete
                              for instance in result.instances),
@@ -134,11 +275,13 @@ def main(argv: list[str] | None = None) -> None:
             for instance, id_crop in zip(result.instances, result.id_crops)
         ],
     }
+    if detector == "seg":
+        details["segmentation"] = _segmentation_details(result)
     (session_dir / "multiview_result.json").write_text(
         json.dumps(details, indent=2) + "\n"
     )
     print(
-        f"{len(result.instances)} fused pieces from "
+        f"{len(result.instances)} fused pieces ({detector}) from "
         f"{len(result.manifest['views'])} views -> {session_dir}"
     )
     print(
@@ -146,7 +289,8 @@ def main(argv: list[str] | None = None) -> None:
         f"({100 * result.manifest['union_coverage']:.1f}% recorded union)"
     )
     print(f"debug: {debug_dir / 'crop_gallery.jpg'} + "
-          f"{len(overlays)} frame overlay(s)")
+          f"{len(overlays)} frame overlay(s) + "
+          f"{len(gate_overlays)} gate overlay(s)")
     if details["partial_count"]:
         print(f"warning: {details['partial_count']} piece(s) only partially observed")
 
