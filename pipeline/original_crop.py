@@ -12,6 +12,26 @@ import numpy as np
 Box = tuple[int, int, int, int]
 
 
+def original_box_and_fit(
+    box_canvas: Box,
+    homography: np.ndarray,
+    rgb_size: tuple[int, int],
+    raise_uv_per_cm: tuple[float, float] = (0.0, 0.0),
+    pad_frac: float = 0.2,
+    raise_cm: float = 1.5,
+) -> tuple[Box, bool]:
+    """Like original_box, but also reports whether the padded box fits the
+    original image without clamping — a clamped crop means the piece may run
+    off the physical camera frame and that view is a poor ID source."""
+    box = original_box(box_canvas, homography, rgb_size, raise_uv_per_cm,
+                       pad_frac=pad_frac, raise_cm=raise_cm, _clamp=False)
+    height, width = rgb_size
+    fits = box[0] >= 0 and box[1] >= 0 and box[2] <= width and box[3] <= height
+    clamped = (max(0, box[0]), max(0, box[1]),
+               min(width, box[2]), min(height, box[3]))
+    return clamped, fits
+
+
 def original_box(
     box_canvas: Box,
     homography: np.ndarray,
@@ -19,6 +39,7 @@ def original_box(
     raise_uv_per_cm: tuple[float, float] = (0.0, 0.0),
     pad_frac: float = 0.2,
     raise_cm: float = 1.5,
+    _clamp: bool = True,
 ) -> Box:
     """AABB of the canvas box mapped into the original frame, padded.
 
@@ -54,6 +75,9 @@ def original_box(
         my0 += dv
 
     height, width = rgb_size
+    if not _clamp:
+        return (int(np.floor(mx0)), int(np.floor(my0)),
+                int(np.ceil(mx1)), int(np.ceil(my1)))
     return (
         int(max(0, np.floor(mx0))),
         int(max(0, np.floor(my0))),

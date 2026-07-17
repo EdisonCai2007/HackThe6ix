@@ -424,24 +424,55 @@ def compose_object_aware_mosaic(
     return mosaic
 
 
+def _identification_observation(
+    instance: FusedInstance, views: list[RectifiedView]
+) -> tuple[Observation, list[int] | None]:
+    """Pick the observation whose ORIGINAL-frame crop should go to Brickognize.
+
+    Ranking follows the Bridge spec: least obliquity and sharpness (the
+    view's quality) first, canvas completeness after — a piece clipped by
+    the workspace canvas is usually whole in the original frame. A view
+    whose mapped crop runs off the original image is ranked below all
+    fitting ones.
+    """
+    from pipeline.original_crop import original_box_and_fit
+
+    ranked = []
+    for observation in instance.observations:
+        view = views[observation.view_index]
+        if view.homography is None or view.rgb is None or view.rgb_size is None:
+            continue
+        box, fits = original_box_and_fit(
+            observation.box, view.homography, view.rgb_size,
+            view.raise_uv_per_cm,
+        )
+        ranked.append((
+            (fits, view.quality, observation.complete,
+             observation.boundary_clearance, -observation.frame_id),
+            observation, box,
+        ))
+    if not ranked:
+        return instance.best, None
+    _, observation, box = max(ranked, key=lambda item: item[0])
+    return observation, list(box)
+
+
 def _identification_crops(
     instances: list[FusedInstance], views: list[RectifiedView],
     session_dir: Path,
 ) -> tuple[list[np.ndarray], list[dict]]:
-    """Cut each instance's ID crop from its best view's ORIGINAL frame.
+    """Cut each instance's ID crop from its chosen view's ORIGINAL frame.
 
     Rectification is exact only for the table plane; raised pieces get
     stretched in rectified views, which corrupts Brickognize IDs. Falls back
     to the rectified crop for v1 manifests without bridge geometry.
     """
-    from pipeline.original_crop import original_box
-
     originals: dict[int, np.ndarray] = {}
     crops, provenance = [], []
     for instance in instances:
-        observation = instance.best
+        observation, box = _identification_observation(instance, views)
         view = views[observation.view_index]
-        if view.homography is None or view.rgb is None:
+        if box is None:
             crops.append(crop_box(observation.image, observation.box))
             provenance.append({
                 "frame_id": observation.frame_id, "rgb": None,
@@ -454,8 +485,6 @@ def _identification_crops(
                 raise ValueError(f"missing original frame {view.rgb}")
             originals[view.frame_id] = original
         original = originals[view.frame_id]
-        box = original_box(observation.box, view.homography,
-                           original.shape[:2], view.raise_uv_per_cm)
         crops.append(original[box[1]:box[3], box[0]:box[2]])
         provenance.append({
             "frame_id": observation.frame_id, "rgb": view.rgb,

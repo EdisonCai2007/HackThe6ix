@@ -107,3 +107,56 @@ def test_v1_falls_back_to_rectified_crop(tmp_path, monkeypatch):
     center = captured[0][captured[0].shape[0] // 2, captured[0].shape[1] // 2]
     assert np.abs(center.astype(int) - RECTIFIED_BGR).max() < 30
     assert result.id_crops[0]["rgb"] is None  # provenance marks the fallback
+
+
+def _obs(view_index, box, complete, clearance=10.0):
+    from pipeline.color import PALETTE
+    from pipeline.multiview import Observation
+    return Observation(
+        frame_id=view_index, view_index=view_index, box=box,
+        color=PALETTE[0], complete=complete, boundary_clearance=clearance,
+        quality=0.0,
+    )
+
+
+def _view(view_index, quality, rgb_size=(1200, 1600)):
+    from pipeline.multiview import RectifiedView
+    return RectifiedView(
+        frame_id=view_index, view_index=view_index,
+        image=np.zeros((600, 800, 3), np.uint8),
+        valid_mask=np.full((600, 800), 255, np.uint8),
+        quality=quality,
+        homography=np.diag([2.0, 2.0, 1.0]),
+        rgb=f"frames/{view_index:05d}.rgb.jpg",
+        rgb_size=rgb_size,
+        raise_uv_per_cm=(0.0, 0.0),
+    )
+
+
+def test_id_observation_prefers_sharp_topdown_view_over_canvas_complete():
+    """A piece clipped by the CANVAS crop is usually whole in the original
+    frame — the sharp top-down view must win over an oblique complete one."""
+    from pipeline.multiview import FusedInstance, _identification_observation
+
+    views = [_view(0, quality=8.0), _view(1, quality=1.0)]
+    # In view 0 (sharp, top-down) the observation is canvas-incomplete;
+    # in view 1 (oblique) it is complete. Both fit the original frame.
+    sharp = _obs(0, (600, 400, 690, 490), complete=False)
+    oblique = _obs(1, (100, 100, 190, 190), complete=True)
+    instance = FusedInstance([sharp, oblique], best=oblique)
+    chosen, box = _identification_observation(instance, views)
+    assert chosen is sharp
+    assert box is not None
+
+
+def test_id_observation_rejects_view_clipped_in_original_frame():
+    """If the mapped crop runs off the original image, that view loses."""
+    from pipeline.multiview import FusedInstance, _identification_observation
+
+    # Tiny original: the mapped box (plus padding) cannot fit.
+    views = [_view(0, quality=8.0, rgb_size=(300, 300)), _view(1, quality=1.0)]
+    clipped = _obs(0, (700, 500, 790, 590), complete=False)
+    safe = _obs(1, (100, 100, 190, 190), complete=True)
+    instance = FusedInstance([clipped, safe], best=safe)
+    chosen, _ = _identification_observation(instance, views)
+    assert chosen is safe
