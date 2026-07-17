@@ -54,3 +54,28 @@ def test_clamped_to_image_bounds():
                         raise_uv_per_cm=(50.0, 50.0), pad_frac=0.2,
                         raise_cm=2.0)
     assert out2[2] <= 80 and out2[3] <= 100
+
+
+def test_masked_crop_hides_neighbor_in_aabb_corner_of_diagonal_piece():
+    """A diagonal piece's AABB contains its neighbors; the quad mask must
+    blank them (identity mappings mask nothing — quad == AABB there)."""
+    import cv2
+    from pipeline.original_crop import masked_crop, _mapped_quad
+
+    c = s = np.sqrt(0.5)
+    H = np.array([[c, -s, 300.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+    box_canvas = (100, 100, 200, 200)  # maps to a diamond in the original
+
+    original = np.full((400, 500, 3), 240, dtype=np.uint8)
+    quad = _mapped_quad(box_canvas, H).astype(np.int32)
+    cv2.fillConvexPoly(original, quad, (0, 0, 200))       # the target diamond
+    original[145:165, 232:252] = (200, 0, 0)               # neighbor in corner
+
+    box, crop = masked_crop(original, box_canvas, H, original.shape[:2],
+                            raise_uv_per_cm=(0.0, 0.0), pad_frac=0.1)
+    assert box[0] <= 232  # neighbor sits inside the crop's AABB
+    center = quad.mean(axis=0).astype(int)
+    target = crop[center[1] - box[1], center[0] - box[0]]
+    assert tuple(target) == (0, 0, 200)  # target pixels intact
+    neighbor = crop[155 - box[1], 242 - box[0]].astype(int)
+    assert np.abs(neighbor - 240).max() < 25  # neighbor blanked to background

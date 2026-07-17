@@ -7,9 +7,56 @@ anything above it gets stretched, which corrupted Brickognize IDs).
 """
 from __future__ import annotations
 
+import cv2
 import numpy as np
 
 Box = tuple[int, int, int, int]
+
+
+def _mapped_quad(box_canvas: Box, homography: np.ndarray) -> np.ndarray:
+    x0, y0, x1, y1 = box_canvas
+    corners = np.array(
+        [[x0, y0, 1.0], [x1, y0, 1.0], [x1, y1, 1.0], [x0, y1, 1.0]]
+    )
+    mapped = corners @ np.asarray(homography, dtype=float).T
+    return mapped[:, :2] / mapped[:, 2:3]
+
+
+def masked_crop(
+    original: np.ndarray,
+    box_canvas: Box,
+    homography: np.ndarray,
+    rgb_size: tuple[int, int],
+    raise_uv_per_cm: tuple[float, float] = (0.0, 0.0),
+    pad_frac: float = 0.2,
+    raise_cm: float = 1.5,
+) -> tuple[Box, np.ndarray]:
+    """Crop the padded AABB but blank everything outside the piece's own
+    projected quad (+pad, +raise extension) to the local background color.
+
+    The AABB of a diagonal piece contains its neighbors; Brickognize then
+    sometimes identifies a neighbor or a composite instead of the target.
+    """
+    box = original_box(box_canvas, homography, rgb_size, raise_uv_per_cm,
+                       pad_frac=pad_frac, raise_cm=raise_cm)
+    x0, y0, x1, y1 = box
+    crop = original[y0:y1, x0:x1].copy()
+    if crop.size == 0:
+        return box, crop
+
+    quad = _mapped_quad(box_canvas, homography) - [x0, y0]
+    center = quad.mean(axis=0)
+    expanded = center + (quad - center) * (1.0 + 2.0 * pad_frac)
+    shift = np.array(raise_uv_per_cm) * raise_cm
+    hull = cv2.convexHull(
+        np.vstack([expanded, expanded + shift]).astype(np.int32)
+    )
+    keep = np.zeros(crop.shape[:2], dtype=np.uint8)
+    cv2.fillConvexPoly(keep, hull, 255)
+    outside = keep == 0
+    if outside.any() and (~outside).any():
+        crop[outside] = np.median(crop[outside], axis=0).astype(crop.dtype)
+    return box, crop
 
 
 def original_box_and_fit(

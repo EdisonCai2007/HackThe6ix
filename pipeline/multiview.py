@@ -485,10 +485,13 @@ def _identification_crops(
                 raise ValueError(f"missing original frame {view.rgb}")
             originals[view.frame_id] = original
         original = originals[view.frame_id]
-        crops.append(original[box[1]:box[3], box[0]:box[2]])
+        from pipeline.original_crop import masked_crop
+        box, crop = masked_crop(original, observation.box, view.homography,
+                                original.shape[:2], view.raise_uv_per_cm)
+        crops.append(crop)
         provenance.append({
             "frame_id": observation.frame_id, "rgb": view.rgb,
-            "box_original": list(box), "source": "original",
+            "box_original": list(box), "source": "original-masked",
         })
     return crops, provenance
 

@@ -90,6 +90,6 @@ def test_session_cli_writes_frame_overlays_for_v2(tmp_path, monkeypatch):
     assert (session / "debug" / "frame_00001_overlay.jpg").exists()
     result = json.loads((session / "multiview_result.json").read_text())
     id_crop = result["instances"][0]["id_crop"]
-    assert id_crop["source"] == "original"
+    assert id_crop["source"] == "original-masked"
     assert id_crop["rgb"] == "frames/00001.rgb.jpg"
     assert id_crop["brickognize"]["part_id"] == "3001"
