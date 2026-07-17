@@ -89,6 +89,14 @@ def test_similar_sized_pieces_never_clustered():
     assert len(result.boxes) == 4
 
 
+def test_long_piece_below_five_percent_of_image_is_not_a_cluster():
+    pieces = [(20, 20, 60, 60), (80, 20, 120, 60), (140, 20, 180, 60)]
+    long_piece = (200, 100, 320, 200)  # 4% of a 600x500 crop
+    result = _split_clusters(pieces + [long_piece], img_area=600 * 500)
+    assert long_piece in result.boxes
+    assert result.clusters == []
+
+
 def test_crop_box_pads_ten_percent():
     img = np.zeros((600, 800, 3), dtype=np.uint8)
     crop = crop_box(img, (100, 100, 300, 200))
@@ -111,3 +119,47 @@ def test_boxes_scale_back_to_original_coords():
     scaled_rects = [(4 * x0, 4 * y0, 4 * x1, 4 * y1) for x0, y0, x1, y1 in rects]
     assert len(boxes) == 3
     assert centers_covered(boxes, scaled_rects)
+
+
+def test_filter_drops_box_spanning_most_of_image():
+    boxes = [(100, 100, 180, 160), (20, 300, 980, 380)]
+    kept = pipeline.detect._filter_implausible_boxes(boxes, (800, 1000, 3))
+    assert kept == [boxes[0]]
+
+
+def test_filter_drops_only_large_isolated_outlier():
+    central = [
+        (350, 350, 390, 390),
+        (420, 350, 460, 390),
+        (490, 350, 530, 390),
+        (420, 420, 460, 460),
+    ]
+    long_brick_in_group = (330, 450, 530, 510)
+    large_isolated_junk = (800, 800, 920, 920)
+    kept = pipeline.detect._filter_implausible_boxes(
+        central + [long_brick_in_group, large_isolated_junk],
+        (1000, 1000, 3),
+    )
+    assert long_brick_in_group in kept
+    assert large_isolated_junk not in kept
+
+
+def test_filter_keeps_normal_sized_isolated_piece():
+    central = [
+        (350, 350, 390, 390),
+        (420, 350, 460, 390),
+        (490, 350, 530, 390),
+        (420, 420, 460, 460),
+        (470, 420, 510, 460),
+    ]
+    isolated_piece = (850, 850, 890, 890)
+    kept = pipeline.detect._filter_implausible_boxes(
+        central + [isolated_piece], (1000, 1000, 3)
+    )
+    assert isolated_piece in kept
+
+
+def test_background_kernel_remains_large_on_workspace_crop():
+    ksize = pipeline.detect._background_kernel_size(701, 601)
+    assert ksize >= 41
+    assert ksize % 2 == 1

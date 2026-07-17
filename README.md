@@ -13,7 +13,7 @@ inventory as JSON.
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/download_colors.py   # refresh data/colors.csv (optional)
-.venv/bin/python -m pytest                    # 67 tests, no network needed
+.venv/bin/python -m pytest                    # 72 tests, no network needed
 ```
 
 ## Usage
@@ -51,7 +51,10 @@ were skipped.
    - `cv` fallback: foreground = pixels differing from a local background
      estimate; needs a plain background. Blobs much larger than the median
      piece are flagged as *clusters* (touching pieces it can't split) and
-     excluded from the count rather than miscounted.
+     excluded from the count rather than miscounted. A conservative
+     post-filter also removes boxes spanning most of the image, plus very
+     large isolated outliers when a clear main piece group exists; normal-size
+     isolated pieces are kept.
 2. **IDENTIFY** ([pipeline/identify.py](pipeline/identify.py)) — each crop is
    POSTed to the free [Brickognize](https://api.brickognize.com/) API
    (4 workers behind a global ~1 req/s throttle, retry with backoff).

@@ -27,6 +27,12 @@ _MIN_AREA_FRAC = 0.001
 _BORDER_MARGIN_FRAC = 0.005  # boxes touching the border are background clutter
 _BG_DIFF_THRESH = 22
 _CLUSTER_FACTOR = 3.0  # blob > factor * median piece area => cluster
+_MIN_CLUSTER_AREA_FRAC = 0.05
+_MAX_BOX_AREA_FRAC = 0.30
+_MAX_BOX_DIM_FRAC = 0.90
+_ISOLATION_RADIUS_FRAC = 0.20
+_ISOLATED_AREA_FACTOR = 4.0
+_MIN_BOXES_FOR_REGION_FILTER = 5
 
 Box = tuple[int, int, int, int]
 
@@ -41,14 +47,83 @@ def detect(img: np.ndarray, method: str = "auto") -> Detections:
     if method == "auto":
         method = "yolo" if YOLO_WEIGHTS.exists() else "cv"
     if method == "yolo":
-        return _detect_yolo(img)
-    if method == "cv":
-        return _detect_cv(img)
-    raise ValueError(f"unknown detector: {method}")
+        result = _detect_yolo(img)
+    elif method == "cv":
+        result = _detect_cv(img)
+    else:
+        raise ValueError(f"unknown detector: {method}")
+    result.boxes = _filter_implausible_boxes(result.boxes, img.shape)
+    return result
 
 
 def detect_pieces(img: np.ndarray, method: str = "auto") -> list[Box]:
     return detect(img, method).boxes
+
+
+def _filter_implausible_boxes(
+    boxes: list[Box], image_shape: tuple[int, ...]
+) -> list[Box]:
+    """Drop clear background boxes while retaining plausible isolated pieces.
+
+    A box is always rejected if it spans most of the image.  The relative
+    size/position rule only activates with at least five detections and a
+    strict-majority spatial cluster; even then, a spatial outlier is removed
+    only when it is over four times the median box area.  Small isolated LEGO
+    pieces therefore survive the filter.
+    """
+    if not boxes:
+        return []
+    h, w = image_shape[:2]
+    image_area = h * w
+
+    def area(box: Box) -> int:
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    plausible = [
+        box for box in boxes
+        if (area(box) < _MAX_BOX_AREA_FRAC * image_area
+            and box[2] - box[0] < _MAX_BOX_DIM_FRAC * w
+            and box[3] - box[1] < _MAX_BOX_DIM_FRAC * h)
+    ]
+    if len(plausible) < _MIN_BOXES_FOR_REGION_FILTER:
+        return plausible
+
+    centers = np.array([
+        ((box[0] + box[2]) * 0.5, (box[1] + box[3]) * 0.5)
+        for box in plausible
+    ])
+    radius2 = (_ISOLATION_RADIUS_FRAC * np.hypot(w, h)) ** 2
+    unvisited = set(range(len(plausible)))
+    components: list[set[int]] = []
+    while unvisited:
+        component = {unvisited.pop()}
+        frontier = list(component)
+        while frontier:
+            i = frontier.pop()
+            neighbors = {
+                j for j in unvisited
+                if float(np.sum((centers[i] - centers[j]) ** 2)) <= radius2
+            }
+            unvisited.difference_update(neighbors)
+            component.update(neighbors)
+            frontier.extend(neighbors)
+        components.append(component)
+
+    main = max(components, key=len)
+    if len(main) * 2 <= len(plausible):
+        return plausible  # no unambiguous dominant piece region
+
+    areas = sorted(area(box) for box in plausible)
+    median_area = areas[(len(areas) - 1) // 2]
+    return [
+        box for i, box in enumerate(plausible)
+        if i in main or area(box) <= _ISOLATED_AREA_FACTOR * median_area
+    ]
+
+
+def _background_kernel_size(height: int, width: int) -> int:
+    """Odd median-blur kernel kept large enough for cropped long bricks."""
+    return max(41, (max(height, width) // 20) | 1)
 
 
 def _detect_cv(img: np.ndarray) -> Detections:
@@ -62,7 +137,7 @@ def _detect_cv(img: np.ndarray) -> Detections:
     # differ from it). Median blur is edge-preserving though, so perfectly
     # flat renders can vanish from the diff; if no boxes emerge, retry with
     # a per-tile median background surface, which handles the flat case.
-    ksize = max(31, (max(h, w) // 20) | 1)
+    ksize = _background_kernel_size(h, w)
     smallf = small.astype(np.float32)
 
     def boxes_from(diff: np.ndarray) -> list[Box]:
@@ -124,7 +199,10 @@ def _split_clusters(boxes: list[Box], img_area: float) -> Detections:
         return result
     areas = sorted((b[2] - b[0]) * (b[3] - b[1]) for b in boxes)
     median_area = areas[(len(areas) - 1) // 2]
-    cluster_thresh = max(_CLUSTER_FACTOR * median_area, 0.03 * img_area)
+    cluster_thresh = max(
+        _CLUSTER_FACTOR * median_area,
+        _MIN_CLUSTER_AREA_FRAC * img_area,
+    )
     for b in boxes:
         area = (b[2] - b[0]) * (b[3] - b[1])
         (result.clusters if area > cluster_thresh else result.boxes).append(b)
