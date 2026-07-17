@@ -106,6 +106,37 @@ Every stage runs standalone for debugging:
 - Top-down, fill the frame, keep clutter away from the edges.
 - Even, bright light; avoid harsh shadows and glare.
 
+## Phase 3 instance-segmentation training
+
+The single-class `yolo11n-seg` separator is trained only from human-verified
+original-frame polygons. It predicts one `lego_piece` mask per visible physical
+piece; Brickognize still identifies the part and the existing color pipeline
+still determines color.
+
+Build the immutable dataset and run the bounded Apple-Silicon smoke test before
+any full training run:
+
+```bash
+.venv/bin/python -m training.build_dataset \
+  --selection training/data/selected/manifest.jsonl \
+  --labels training/data/verified-labels \
+  --output training/data/yolo
+
+.venv/bin/python -m training.train_seg \
+  --data training/data/yolo/lego-seg-a751e0b2b456/data.yaml --smoke
+
+.venv/bin/python -m training.train_seg \
+  --data training/data/yolo/lego-seg-a751e0b2b456/data.yaml --full
+```
+
+Training refuses unverified metadata or session leakage. Reports keep
+train-seen, whole-session validation, and environment-held-out test metrics
+separate. A successful full run installs `models/lego_seg.pt` and writes its
+dataset/config/checkpoint hashes to `models/lego_seg.metadata.json`. PyTorch
+currently warns that one MPS gradient operation is not fully deterministic;
+the seed, versions, configuration, and hashes are retained even though bitwise
+reproduction is therefore not promised.
+
 ## Legacy YOLO box-detector training
 
 ```bash

@@ -138,6 +138,57 @@ def test_import_converts_corrected_polygons_and_marks_sidecars_verified(tmp_path
     assert sidecar["source_session"] == "session_1"
 
 
+def test_import_accepts_labelme_points_on_outer_image_boundary(tmp_path):
+    manifest, labels, qa = _fixture(tmp_path)
+    bundle = tmp_path / "review-labelme"
+    export_labelme_bundle(manifest, labels, qa, bundle)
+    rows = [
+        json.loads(line)
+        for line in (bundle / "bundle-manifest.jsonl").read_text().splitlines()
+    ]
+    for row in rows:
+        path = bundle / "review" / row["review_json"]
+        data = json.loads(path.read_text())
+        data["flags"]["reviewed"] = True
+        path.write_text(json.dumps(data))
+    path = bundle / "review" / rows[0]["review_json"]
+    data = json.loads(path.read_text())
+    data["shapes"][0]["points"] = [
+        [20, 20], [100, 20], [100, 80], [20, 80]
+    ]
+    path.write_text(json.dumps(data))
+
+    import_labelme_bundle(bundle, tmp_path / "verified", "Emily", True)
+
+    instances = parse_label_file(
+        tmp_path / "verified" / f"{rows[0]['dataset_id']}.txt"
+    )
+    assert max(x for x, _ in instances[0].points) == 1.0
+    assert max(y for _, y in instances[0].points) == 1.0
+
+
+def test_import_rejects_points_beyond_labelme_outer_boundary(tmp_path):
+    manifest, labels, qa = _fixture(tmp_path)
+    bundle = tmp_path / "review-labelme"
+    export_labelme_bundle(manifest, labels, qa, bundle)
+    rows = [
+        json.loads(line)
+        for line in (bundle / "bundle-manifest.jsonl").read_text().splitlines()
+    ]
+    for row in rows:
+        path = bundle / "review" / row["review_json"]
+        data = json.loads(path.read_text())
+        data["flags"]["reviewed"] = True
+        path.write_text(json.dumps(data))
+    path = bundle / "review" / rows[0]["review_json"]
+    data = json.loads(path.read_text())
+    data["shapes"][0]["points"][0] = [100.01, 20]
+    path.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="outside image boundary"):
+        import_labelme_bundle(bundle, tmp_path / "verified", "Emily", True)
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [

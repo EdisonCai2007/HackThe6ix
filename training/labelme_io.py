@@ -200,6 +200,13 @@ def _labelme_lines(data: dict, row: dict, json_path: Path) -> list[str]:
                 raise ValueError(
                     f"non-numeric point in shape {shape_index}: {json_path}"
                 ) from exc
+            if not (0 <= x <= width and 0 <= y <= height):
+                raise ValueError(
+                    f"point outside image boundary in shape {shape_index}: "
+                    f"{json_path}"
+                )
+            x = min(x, width - 1)
+            y = min(y, height - 1)
             normalized.append((x / max(1, width - 1), y / max(1, height - 1)))
         line = _format_instance(normalized)
         try:

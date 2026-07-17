@@ -16,10 +16,14 @@
 - Phase 3C bootstrapped 71 original frames with SAM2 on MPS. All proposals are
   explicitly unverified; QA prioritized 56 touching/overlapping frames.
 - A lossless Labelme review bundle and guarded verified-label importer are
-  prepared. Execution is stopped at the required human mask-correction gate.
-- Tasks 6 onward (verified dataset build, MPS smoke/full training, runtime
-  detector, fusion/crop integration, and product evaluation) remain unverified
-  and must not proceed on the SAM proposals.
+  prepared. All 71 images were human-reviewed and imported as 1,157 verified
+  instances; the content-addressed dataset is `lego-seg-a751e0b2b456`.
+- Task 6 is complete. The MPS smoke and 100-epoch full run succeeded; checkpoint
+  `c792bdad...` is installed as `models/lego_seg.pt`. Frame-level mask mAP50-95
+  is 0.847 train-seen, 0.837 whole-session validation, and 0.877 on the held-out
+  white-table environment. These are not yet product-level inventory results.
+- Tasks 7 onward (runtime detector, fusion/crop integration, and product
+  evaluation) remain unverified.
 
 ## Global Constraints
 

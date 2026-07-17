@@ -11,5 +11,6 @@ inventory.json
 training/data/
 training/artifacts/label-qa/
 training/artifacts/sam-feasibility*/
+training/runs/
 /sam*.pt
 /yolo11n-seg.pt
