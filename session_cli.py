@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 
 from pipeline.inventory import draw_debug
-from pipeline.multiview import scan_manifest
+from pipeline.multiview import consensus_color, scan_manifest
 
 
 def _manifest_path(value: str) -> Path:
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> None:
         "instances": [
             {
                 "box": list(instance.best.box),
-                "color": instance.best.color.name,
+                "color": consensus_color(instance).name,
                 "best_frame_id": instance.best.frame_id,
                 "complete": instance.best.complete,
                 "observation_frames": [observation.frame_id

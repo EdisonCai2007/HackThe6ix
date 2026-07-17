@@ -8,7 +8,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from pipeline.color import LegoColor, dominant_rgb, match_color, normalize_illumination
+from pipeline.color import (
+    PALETTE,
+    LegoColor,
+    dominant_rgb,
+    match_color,
+    normalize_illumination,
+)
 from pipeline.detect import Box, crop_box, detect
 from pipeline.identify import identify_all
 from pipeline.inventory import build_inventory
@@ -102,10 +108,9 @@ def _compatibility(first: Observation, second: Observation) -> float | None:
         return None
     first_family = _COLOR_FAMILY.get(first.color.name, first.color.name)
     second_family = _COLOR_FAMILY.get(second.color.name, second.color.name)
-    if first_family != second_family:
-        return None
     areas = (_box_area(first.box), _box_area(second.box))
-    if min(areas) / max(1, max(areas)) < 0.40:
+    min_area_ratio = 0.40 if first.complete and second.complete else 0.20
+    if min(areas) / max(1, max(areas)) < min_area_ratio:
         return None
     c1 = np.array(((first.box[0] + first.box[2]) / 2,
                    (first.box[1] + first.box[3]) / 2))
@@ -121,6 +126,20 @@ def _compatibility(first: Observation, second: Observation) -> float | None:
     iou = _box_iou(first.box, second.box)
     if iou < 0.05 and normalized_distance > 0.45:
         return None
+    same_family = first_family == second_family
+    warm_shift = (
+        first_family in {"red", "orange", "yellow"}
+        and second_family in {"red", "orange", "yellow"}
+        and (iou >= 0.08 or normalized_distance <= 0.35)
+    )
+    neutral_partial_shift = (
+        first_family in {"light-neutral", "dark-neutral"}
+        and second_family in {"light-neutral", "dark-neutral"}
+        and not first.complete and not second.complete
+        and (iou >= 0.08 or normalized_distance <= 0.35)
+    )
+    if not (same_family or warm_shift or neutral_partial_shift):
+        return None
     return normalized_distance - 0.5 * iou
 
 
@@ -135,6 +154,17 @@ def _best_observation(observations: list[Observation]) -> Observation:
             -observation.frame_id,
         ),
     )
+
+
+def consensus_color(instance: FusedInstance) -> LegoColor:
+    """Choose color across views instead of trusting one shadow-prone crop."""
+    votes: dict[str, int] = {}
+    for observation in instance.observations:
+        name = observation.color.name
+        votes[name] = votes.get(name, 0) + 1
+    best_name = instance.best.color.name
+    winner = max(votes, key=lambda name: (votes[name], name == best_name))
+    return next(color for color in PALETTE if color.name == winner)
 
 
 def fuse_observations(observations: list[Observation]) -> list[FusedInstance]:
@@ -180,6 +210,36 @@ def fuse_observations(observations: list[Observation]) -> list[FusedInstance]:
     )
 
 
+def filter_unconfirmed_instances(
+    instances: list[FusedInstance], views: list[RectifiedView]
+) -> list[FusedInstance]:
+    """Drop one-view detections contradicted by another usable observation.
+
+    A singleton is retained when no other selected frame covers its table
+    location; that is a genuinely single-view/partial piece. Only two or more
+    clean views that cover the center without a corresponding object can
+    reject it as a per-view shadow/stud artifact.
+    """
+    kept = []
+    for instance in instances:
+        if len(instance.observations) > 1 or len(views) <= 1:
+            kept.append(instance)
+            continue
+        observation = instance.best
+        cx = int(round((observation.box[0] + observation.box[2]) / 2))
+        cy = int(round((observation.box[1] + observation.box[3]) / 2))
+        contradicting_views = sum(
+            view.view_index != observation.view_index
+            and 0 <= cy < view.valid_mask.shape[0]
+            and 0 <= cx < view.valid_mask.shape[1]
+            and view.valid_mask[cy, cx] > 0
+            for view in views
+        )
+        if contradicting_views < 2:
+            kept.append(instance)
+    return kept
+
+
 def _background_rgb(image: np.ndarray) -> tuple[int, int, int]:
     thumb = cv2.resize(image, (200, 200))
     b, g, r = np.median(thumb.reshape(-1, 3), axis=0).astype(int)
@@ -221,7 +281,7 @@ def observations_from_views(
         for box in detections.boxes:
             crop = crop_box(image, box)
             color = match_color(normalize_illumination(
-                dominant_rgb(crop), background_rgb
+                dominant_rgb(crop), background_rgb, neutral_tolerance=45
             ))
             observations.append(Observation(
                 frame_id=view.frame_id,
@@ -258,7 +318,7 @@ def _expanded_box(box: Box, pad: int, width: int, height: int) -> Box:
 def compose_object_aware_mosaic(
     views: list[RectifiedView], instances: list[FusedInstance]
 ) -> np.ndarray:
-    """Blend table pixels, then insert each selected piece from one view."""
+    """Keep one clean base view and supplement only what it cannot see."""
     if not views:
         raise ValueError("cannot compose a mosaic without rectified views")
     height, width = views[0].image.shape[:2]
@@ -270,51 +330,81 @@ def compose_object_aware_mosaic(
     normalized = {
         view.view_index: _normalized_view(view, target_bgr) for view in views
     }
-    protected = {
-        view.view_index: np.zeros((height, width), dtype=np.uint8)
-        for view in views
-    }
-    for instance in instances:
-        for observation in instance.observations:
-            x0, y0, x1, y1 = _expanded_box(
-                observation.box, 8, width, height
-            )
-            protected[observation.view_index][y0:y1, x0:x1] = 255
-
+    base = max(
+        views,
+        key=lambda view: (np.count_nonzero(view.valid_mask), view.quality),
+    )
     accum = np.zeros((height, width, 3), dtype=np.float64)
     weight_sum = np.zeros((height, width), dtype=np.float64)
     for view in views:
-        background_valid = (
-            (view.valid_mask > 0) & (protected[view.view_index] == 0)
-        ).astype(np.uint8)
-        distance = cv2.distanceTransform(background_valid, cv2.DIST_L2, 5)
+        if view.view_index == base.view_index:
+            continue
+        distance = cv2.distanceTransform(
+            (view.valid_mask > 0).astype(np.uint8), cv2.DIST_L2, 5
+        )
         weight = np.clip(distance / 20.0, 0.0, 1.0)
         accum += normalized[view.view_index].astype(np.float64) * weight[..., None]
         weight_sum += weight
-    mosaic = np.empty((height, width, 3), dtype=np.uint8)
-    covered = weight_sum > 0
-    mosaic[covered] = np.clip(
-        accum[covered] / weight_sum[covered, None], 0, 255
+    supplement = np.empty((height, width, 3), dtype=np.uint8)
+    supplemented = weight_sum > 0
+    supplement[supplemented] = np.clip(
+        accum[supplemented] / weight_sum[supplemented, None], 0, 255
     ).astype(np.uint8)
-    mosaic[~covered] = target_bgr.astype(np.uint8)
+    supplement[~supplemented] = target_bgr.astype(np.uint8)
+    base_distance = cv2.distanceTransform(
+        (base.valid_mask > 0).astype(np.uint8), cv2.DIST_L2, 5
+    )
+    base_alpha = np.clip(base_distance / 12.0, 0.0, 1.0)[..., None]
+    mosaic = np.clip(
+        normalized[base.view_index].astype(np.float32) * base_alpha
+        + supplement.astype(np.float32) * (1.0 - base_alpha),
+        0,
+        255,
+    ).astype(np.uint8)
 
-    # Copy each chosen object observation as one indivisible patch. Only the
-    # outer table-colored padding is feathered; no source seam crosses a box.
+    # A complete base-view observation needs no patch at all. For an object
+    # visible only partially (or not at all) in the base, copy the best source
+    # using a content-shaped alpha mask so rectangular crop edges stay hidden.
     for instance in sorted(instances, key=lambda item: _box_area(item.best.box),
                            reverse=True):
+        base_observation = next(
+            (observation for observation in instance.observations
+             if observation.view_index == base.view_index),
+            None,
+        )
+        if base_observation is not None and base_observation.complete:
+            continue
         observation = instance.best
+        if observation.view_index == base.view_index:
+            continue
         source = normalized[observation.view_index]
         x0, y0, x1, y1 = _expanded_box(observation.box, 6, width, height)
         patch_height, patch_width = y1 - y0, x1 - x0
         if patch_height <= 0 or patch_width <= 0:
             continue
-        yy, xx = np.mgrid[:patch_height, :patch_width]
-        edge_distance = np.minimum.reduce([
-            yy + 1, xx + 1, patch_height - yy, patch_width - xx
-        ]).astype(np.float32)
-        alpha = np.clip(edge_distance / 5.0, 0.0, 1.0)[..., None]
         destination = mosaic[y0:y1, x0:x1].astype(np.float32)
         source_patch = source[y0:y1, x0:x1].astype(np.float32)
+        core = np.zeros((patch_height, patch_width), dtype=np.uint8)
+        bx0 = max(0, observation.box[0] - x0)
+        by0 = max(0, observation.box[1] - y0)
+        bx1 = min(patch_width, observation.box[2] - x0)
+        by1 = min(patch_height, observation.box[3] - y0)
+        core[by0:by1, bx0:bx1] = 1
+        ring_pixels = source_patch[core == 0]
+        local_background = (
+            np.median(ring_pixels, axis=0)
+            if len(ring_pixels) else target_bgr
+        )
+        difference = np.linalg.norm(source_patch - local_background, axis=2)
+        foreground = ((difference > 22) & (core > 0)).astype(np.uint8) * 255
+        foreground = cv2.morphologyEx(
+            foreground, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)
+        )
+        foreground = cv2.morphologyEx(
+            foreground, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)
+        )
+        alpha = cv2.GaussianBlur(foreground, (9, 9), 0).astype(np.float32)
+        alpha = (alpha / 255.0)[..., None]
         mosaic[y0:y1, x0:x1] = np.clip(
             source_patch * alpha + destination * (1.0 - alpha), 0, 255
         ).astype(np.uint8)
@@ -326,11 +416,13 @@ def scan_manifest(
 ) -> MultiViewScanResult:
     manifest, views = load_views(manifest_path)
     observations = observations_from_views(views, detector=detector)
-    instances = fuse_observations(observations)
+    instances = filter_unconfirmed_instances(
+        fuse_observations(observations), views
+    )
     crops = [crop_box(instance.best.image, instance.best.box)
              for instance in instances]
     identifications = identify_all(crops, cache_dir=cache_dir)
-    colors = [instance.best.color for instance in instances]
+    colors = [consensus_color(instance) for instance in instances]
     labels = [
         f"{identification.name} | {color.name} | {identification.score:.2f}"
         for identification, color in zip(identifications, colors)

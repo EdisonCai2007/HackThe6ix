@@ -56,6 +56,14 @@ def test_colored_background_left_alone():
     assert normalize_illumination((100, 50, 25), bg_rgb=(160, 90, 40)) == (100, 50, 25)
 
 
+def test_rectified_view_can_use_a_slightly_wider_neutral_tolerance():
+    corrected = normalize_illumination(
+        (205, 66, 11), bg_rgb=(167, 150, 130), neutral_tolerance=45
+    )
+
+    assert match_color(corrected).name == "orange"
+
+
 def test_palette_has_expected_colors():
     names = {c.name for c in PALETTE}
     expected = {

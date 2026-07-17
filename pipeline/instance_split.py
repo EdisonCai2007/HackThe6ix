@@ -129,8 +129,38 @@ def _merge_spatial_variants(seeds: list[_Seed]) -> list[np.ndarray]:
     for i, first in enumerate(seeds):
         for j in range(i + 1, len(seeds)):
             second = seeds[j]
-            if (first.family == second.family
-                    and _boxes_overlap(first.bbox, second.bbox)):
+            ix0 = max(first.bbox[0], second.bbox[0])
+            iy0 = max(first.bbox[1], second.bbox[1])
+            ix1 = min(first.bbox[2], second.bbox[2])
+            iy1 = min(first.bbox[3], second.bbox[3])
+            intersection = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+            first_area = ((first.bbox[2] - first.bbox[0])
+                          * (first.bbox[3] - first.bbox[1]))
+            second_area = ((second.bbox[2] - second.bbox[0])
+                           * (second.bbox[3] - second.bbox[1]))
+            overlap = intersection / max(1, min(first_area, second_area))
+            first_aspect = max(
+                first.bbox[2] - first.bbox[0], first.bbox[3] - first.bbox[1]
+            ) / max(1, min(
+                first.bbox[2] - first.bbox[0], first.bbox[3] - first.bbox[1]
+            ))
+            second_aspect = max(
+                second.bbox[2] - second.bbox[0], second.bbox[3] - second.bbox[1]
+            ) / max(1, min(
+                second.bbox[2] - second.bbox[0], second.bbox[3] - second.bbox[1]
+            ))
+            adjacent = bool(np.any(
+                cv2.dilate(first.mask.astype(np.uint8),
+                           np.ones((3, 3), np.uint8)).astype(bool)
+                & second.mask
+            ))
+            same_shaded_region = adjacent and (
+                overlap >= 0.50
+                or (overlap >= 0.05 and max(first_aspect, second_aspect) >= 3.0)
+            )
+            if ((first.family == second.family
+                 and _boxes_overlap(first.bbox, second.bbox))
+                    or same_shaded_region):
                 union(i, j)
 
     merged: dict[int, np.ndarray] = {}

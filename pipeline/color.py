@@ -98,14 +98,16 @@ def dominant_rgb(crop_bgr: np.ndarray) -> tuple[int, int, int]:
 
 
 def normalize_illumination(
-    rgb: tuple[int, int, int], bg_rgb: tuple[int, int, int]
+    rgb: tuple[int, int, int],
+    bg_rgb: tuple[int, int, int],
+    neutral_tolerance: int = 30,
 ) -> tuple[int, int, int]:
     """White-patch correction: if the background is near-neutral (a white or
     gray table), scale channels so the background maps to white, cancelling
     dim light and color casts. Colored backgrounds are no reference — the
     input is returned unchanged.
     """
-    if max(bg_rgb) - min(bg_rgb) > 30 or max(bg_rgb) < 100:
+    if max(bg_rgb) - min(bg_rgb) > neutral_tolerance or max(bg_rgb) < 100:
         return rgb
     scaled = tuple(
         min(255, int(round(c * min(2.0, 245 / max(1, b)))))

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from pipeline.instance_split import split_component
+from pipeline.instance_split import _Seed, _merge_spatial_variants, split_component
 
 
 def _scene():
@@ -61,3 +61,61 @@ def test_keeps_one_long_orange_piece_whole():
     assert len(boxes) == 1
     x0, y0, x1, y1 = boxes[0]
     assert x0 <= 25 and y0 <= 80 and x1 >= 225 and y1 >= 125
+
+
+def test_keeps_one_piece_whole_when_lighting_creates_nested_palette_family():
+    image = _scene()
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    image[35:185, 55:205] = (55, 205, 242)  # yellow base
+    image[80:140, 95:165] = (85, 125, 170)  # tan-looking shadow/highlight
+    mask[35:185, 55:205] = 255
+
+    boxes = split_component(image, mask, min_area=300)
+
+    assert len(boxes) == 1
+
+
+def test_keeps_long_piece_whole_when_shading_splits_its_color_core():
+    image = _scene()
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    image[25:200, 90:125] = (24, 138, 254)  # orange base
+    image[35:105, 103:125] = (9, 26, 201)   # red-looking shaded side
+    image[145:190, 108:125] = (9, 26, 201)
+    mask[25:200, 90:125] = 255
+
+    boxes = split_component(image, mask, min_area=300)
+
+    assert len(boxes) == 1
+
+
+def test_merges_adjacent_overlapping_seed_shapes_from_different_families():
+    first = np.zeros((120, 60), dtype=bool)
+    first[10:30, 20:30] = True
+    first[25:80, 25:30] = True
+    second = np.zeros_like(first)
+    second[30:100, 10:25] = True
+    seeds = [
+        _Seed(first, (20, 10, 30, 80), "red"),
+        _Seed(second, (10, 30, 25, 100), "orange"),
+    ]
+
+    merged = _merge_spatial_variants(seeds)
+
+    assert len(merged) == 1
+
+
+def test_keeps_adjacent_compact_seed_shapes_as_different_pieces():
+    first = np.zeros((80, 80), dtype=bool)
+    first[10:20, 20:60] = True
+    first[20:50, 55:60] = True
+    second = np.zeros_like(first)
+    second[20:60, 10:20] = True
+    second[20:25, 20:25] = True
+    seeds = [
+        _Seed(first, (20, 10, 60, 50), "yellow"),
+        _Seed(second, (10, 20, 25, 60), "light-neutral"),
+    ]
+
+    merged = _merge_spatial_variants(seeds)
+
+    assert len(merged) == 2
