@@ -222,3 +222,45 @@ def test_second_chance_uses_alternate_view_for_weak_id(tmp_path, monkeypatch):
     prov = result.id_crops[0]
     assert prov["source"] == "original-masked-second-chance"
     assert prov["brickognize"]["part_id"] == "3008"
+
+
+def test_second_chance_picks_best_alternate_not_first(tmp_path, monkeypatch):
+    """Among alternates, the highest confident score wins — a clipped view's
+    confident-but-lower ID (wedge 0.74) must lose to a clean 0.84."""
+    from pipeline.multiview import FusedInstance, _second_chance
+
+    session = tmp_path / "session"
+    frames = session / "frames"
+    frames.mkdir(parents=True)
+    for fid in (1, 2, 3):
+        cv2.imwrite(str(frames / f"{fid:05d}.rgb.jpg"),
+                    np.full((1200, 1600, 3), 245, dtype=np.uint8))
+
+    views = [_view(i, quality=8.0 - i) for i in range(3)]
+    # RectifiedView is a plain dataclass; fix rgb paths to match frame ids.
+    for i, v in enumerate(views):
+        v.rgb = f"frames/{i + 1:05d}.rgb.jpg"
+        v.frame_id = i + 1
+    obs = [_obs(i, (300, 300, 390, 390), complete=True) for i in range(3)]
+    instance = FusedInstance(obs, best=obs[0])
+
+    by_frame = {2: Identification("XXXX", "Wedge 2 x 2", None, 0.74),
+                3: Identification("3008", "Brick 1 x 8", None, 0.84)}
+    calls = []
+
+    def fake_identify_crop(crop, **kwargs):
+        calls.append(1)
+        return by_frame[len(calls) + 1]
+
+    monkeypatch.setattr(pipeline.multiview, "identify_crop",
+                        fake_identify_crop)
+    identifications = [Identification(None, "unknown brick", None, 0.55)]
+    crops = [np.zeros((8, 8, 3), np.uint8)]
+    id_crops = [{"frame_id": 1, "rgb": views[0].rgb, "box_original": [0, 0, 8, 8],
+                 "source": "original-masked"}]
+    identifications, crops, id_crops = _second_chance(
+        [instance], views, session, identifications, crops, id_crops,
+        cache_dir=tmp_path)
+    assert identifications[0].part_id == "3008"
+    assert identifications[0].score == 0.84
+    assert id_crops[0]["source"] == "original-masked-second-chance"

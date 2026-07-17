@@ -20,7 +20,7 @@ from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
 from pipeline.studs import advise, count_studs, stud_radius_px
 
-SECOND_CHANCE_MAX_ALTERNATES = 2
+SECOND_CHANCE_MAX_ALTERNATES = 3
 
 
 _COLOR_FAMILY = {
@@ -521,6 +521,10 @@ def _second_chance(
         if identifications[index].score >= MIN_SCORE:
             continue
         ranked = _ranked_id_observations(instance, views)
+        # Evaluate ALL alternates and keep the highest-scoring acceptance:
+        # a canvas-clipped alternate can produce a confident-but-wrong ID
+        # (a cut-off beam reads as a wedge), so first-accept is unsafe.
+        best = None
         for observation, _ in ranked[1:1 + SECOND_CHANCE_MAX_ALTERNATES]:
             view = views[observation.view_index]
             if view.frame_id not in originals:
@@ -533,15 +537,18 @@ def _second_chance(
                                     view.homography, original.shape[:2],
                                     view.raise_uv_per_cm)
             candidate = identify_crop(crop, cache_dir=cache_dir)
-            if candidate.score >= MIN_SCORE:
-                identifications[index] = candidate
-                crops[index] = crop
-                id_crops[index].update({
-                    "frame_id": observation.frame_id, "rgb": view.rgb,
-                    "box_original": list(box),
-                    "source": "original-masked-second-chance",
-                })
-                break
+            if candidate.score >= MIN_SCORE and (
+                    best is None or candidate.score > best[0].score):
+                best = (candidate, observation, view, box, crop)
+        if best is not None:
+            candidate, observation, view, box, crop = best
+            identifications[index] = candidate
+            crops[index] = crop
+            id_crops[index].update({
+                "frame_id": observation.frame_id, "rgb": view.rgb,
+                "box_original": list(box),
+                "source": "original-masked-second-chance",
+            })
     return identifications, crops, id_crops
 
 
