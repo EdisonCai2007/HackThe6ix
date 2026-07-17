@@ -22,6 +22,7 @@ from pipeline.inventory import build_inventory
 from pipeline.studs import advise, count_studs, stud_radius_px
 
 SECOND_CHANCE_MAX_ALTERNATES = 3
+SEG_SINGLETON_MIN_CONFIDENCE = 0.50
 
 
 _COLOR_FAMILY = {
@@ -170,7 +171,14 @@ def _compatibility(first: Observation, second: Observation) -> float | None:
         and not first.complete and not second.complete
         and (iou >= 0.08 or normalized_distance <= 0.35)
     )
-    if not (same_family or warm_shift or neutral_partial_shift):
+    # Color is supporting evidence, not identity.  The same neutral plate can
+    # shift blue/gray under changing white balance; near-identical table-space
+    # geometry is stronger than that cross-family color disagreement.
+    strong_geometric_match = iou >= 0.60 and normalized_distance <= 0.15
+    if not (
+        same_family or warm_shift or neutral_partial_shift
+        or strong_geometric_match
+    ):
         return None
     return normalized_distance - 0.5 * iou
 
@@ -254,10 +262,46 @@ def filter_unconfirmed_instances(
     """
     kept = []
     for instance in instances:
-        if len(instance.observations) > 1 or len(views) <= 1:
+        if len(views) <= 1:
+            kept.append(instance)
+            continue
+        if len(instance.observations) > 1:
+            segmentation = all(
+                observation.detector == "seg"
+                for observation in instance.observations
+            )
+            boundary_only = all(
+                not observation.complete
+                for observation in instance.observations
+            )
+            if (
+                segmentation
+                and len(views) >= 3
+                and boundary_only
+                and len(instance.observations) <= len(views) // 2
+            ):
+                continue
             kept.append(instance)
             continue
         observation = instance.best
+        # With three or more independent segmentation views, a mask seen only
+        # once at a workspace/frame boundary is weak evidence, not a countable
+        # piece.  The same applies to a very weak complete singleton.  Strong,
+        # fully-contained singletons remain valid when other views genuinely
+        # do not cover their location.  Keep the classical detector's legacy
+        # behavior unchanged.
+        if (
+            len(views) >= 3
+            and observation.detector == "seg"
+            and (
+                not observation.complete
+                or (
+                    observation.confidence is not None
+                    and observation.confidence < SEG_SINGLETON_MIN_CONFIDENCE
+                )
+            )
+        ):
+            continue
         cx = int(round((observation.box[0] + observation.box[2]) / 2))
         cy = int(round((observation.box[1] + observation.box[3]) / 2))
         contradicting_views = sum(

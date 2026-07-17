@@ -37,14 +37,37 @@ cd /Users/emily/lego-capture
 
 cd /Users/emily/lego-cv
 .venv/bin/python session_cli.py \
-  /Users/emily/lego-capture/sessions/<timestamp> --detector cv
+  /Users/emily/lego-capture/sessions/<timestamp> --detector auto
 ```
 
-This detects at most five complementary clean rectifications, fuses duplicate
-observations in table coordinates, identifies the best complete crop once, and
-writes `inventory.json`, `topdown.jpg`, `debug.jpg`, and
-`multiview_result.json` to the capture session. The mosaic is a visualization;
-inventory is never redetected from its blended pixels.
+`auto` uses `models/lego_seg.pt` when the verified instance-segmentation
+checkpoint is installed and otherwise falls back to the classical detector.
+Use `--detector seg` to require masks or `--detector cv` to force the legacy
+path. The capture exporter retains at least three time-diverse clean views
+(when the session contains them) even if one frame already covers the canvas;
+this lets independent views reject boundary-only clutter without raising a
+global threshold that would delete real pieces.
+
+The segmented path predicts on each original RGB workspace crop, gates masks
+against detector-independent depth/table geometry, maps them into common table
+coordinates, fuses duplicate observations, and sends one isolated original
+mask crop per physical piece to Brickognize. It writes `inventory.json`, a
+box-free `topdown.jpg`, `multiview_result.json`, and `debug/` diagnostics. Gate
+overlays use cyan for the physical workspace, magenta for the inference crop,
+green for accepted masks, and red for rejected masks with their reason. The
+mosaic is visualization only; inventory is never redetected from blended
+pixels.
+
+Run the split-safe product report after manifests have been exported:
+
+```bash
+.venv/bin/python -m training.evaluate_sessions
+```
+
+The generated JSON/Markdown keeps historical/train-seen, whole-session
+validation, and the held-out `white_round` environment separate. Reference
+counts for Phase 3 are maxima from human-verified source frames, not exhaustive
+3D ground truth.
 
 API endpoints:
 

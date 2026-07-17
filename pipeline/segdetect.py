@@ -230,7 +230,8 @@ def gate_instance(
     )
     margin = max(1, int(config.boundary_margin_px))
     eroded = cv2.erode(
-        workspace.astype(np.uint8), np.ones((margin, margin), np.uint8)
+        workspace.astype(np.uint8), np.ones((margin, margin), np.uint8),
+        borderType=cv2.BORDER_CONSTANT, borderValue=0,
     ).astype(bool)
     boundary_zone = bool(
         outside > 0.001

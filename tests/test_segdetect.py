@@ -71,11 +71,30 @@ def test_low_overlap_side_clutter_is_rejected_with_evidence():
     assert evidence.outside_fraction > 0.70
 
 
+def test_mask_near_full_frame_workspace_edge_is_boundary_evidence():
+    workspace = np.ones((100, 100), dtype=bool)
+    mask = np.zeros_like(workspace)
+    mask[1:12, 30:70] = True
+
+    evidence = gate_instance(mask, workspace, confidence=0.90)
+
+    assert evidence.accepted
+    assert evidence.boundary_zone
+    assert evidence.reason == "accepted_boundary"
+
+
 class _FakeModel:
     def predict(self, image):
         mask = np.zeros(image.shape[:2], dtype=bool)
         mask[20:50, 30:70] = True
         return [RawSegmentation(mask, 0.92, "fake-0")]
+
+
+class _CropBoundaryModel:
+    def predict(self, image):
+        mask = np.zeros(image.shape[:2], dtype=bool)
+        mask[:20, 30:70] = True
+        return [RawSegmentation(mask, 0.92, "crop-boundary")]
 
 
 def _write_v3_fixture(tmp_path):
@@ -152,6 +171,24 @@ def test_injected_model_runs_on_original_workspace_crop_and_maps_back(tmp_path):
     assert observations[0].source_instance_id == "fake-0"
     assert observations[0].confidence == pytest.approx(0.92)
     assert observations[0].mask_original is detection.mask_original
+
+
+def test_mask_touching_inference_crop_boundary_is_partial(tmp_path):
+    from pipeline.multiview import load_views
+
+    manifest = _write_v3_fixture(tmp_path)
+    path = tmp_path / "session/multiview/manifest.json"
+    path.write_text(json.dumps(manifest))
+    loaded, views = load_views(path)
+
+    detections = detect_original_instances(
+        loaded, views, _CropBoundaryModel()
+    )
+
+    assert len(detections) == 1
+    assert detections[0].accepted
+    assert detections[0].gate.boundary_zone
+    assert detections[0].gate.reason == "accepted_boundary"
 
 
 def test_segmenter_refuses_legacy_manifest_without_physical_workspace():

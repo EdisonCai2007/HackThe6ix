@@ -101,6 +101,15 @@ def test_same_piece_fuses_when_warm_color_shifts_between_views():
     assert len(fuse_observations(observations)) == 1
 
 
+def test_nearly_identical_geometry_overrules_cross_family_color_shift():
+    observations = [
+        _obs(1, (220, 635, 477, 904), color="dark blue"),
+        _obs(2, (276, 645, 473, 872), color="dark gray"),
+    ]
+
+    assert len(fuse_observations(observations)) == 1
+
+
 def test_consensus_color_overrules_one_bad_best_crop():
     observations = [
         _obs(1, (30, 30, 80, 100), color="red", complete=False),
@@ -145,6 +154,72 @@ def test_one_detector_miss_cannot_remove_a_singleton():
     ]
 
     assert filter_unconfirmed_instances([instance], views) == [instance]
+
+
+def test_three_segmentation_views_require_support_for_boundary_singleton():
+    observation = _obs(
+        1, (-20, 30, 15, 70), color="gray", complete=False
+    )
+    observation.detector = "seg"
+    observation.confidence = 0.95
+    instance = FusedInstance([observation], observation)
+    empty = np.zeros((100, 100), dtype=np.uint8)
+    image = np.full((100, 100, 3), 220, dtype=np.uint8)
+    views = [
+        RectifiedView(frame, frame, image, empty, 1.0)
+        for frame in (1, 2, 3)
+    ]
+
+    assert filter_unconfirmed_instances([instance], views) == []
+
+
+def test_three_segmentation_views_keep_strong_complete_uncovered_singleton():
+    observation = _obs(1, (30, 30, 60, 60), color="red", complete=True)
+    observation.detector = "seg"
+    observation.confidence = 0.95
+    instance = FusedInstance([observation], observation)
+    empty = np.zeros((100, 100), dtype=np.uint8)
+    image = np.full((100, 100, 3), 220, dtype=np.uint8)
+    views = [
+        RectifiedView(frame, frame, image, empty, 1.0)
+        for frame in (1, 2, 3)
+    ]
+
+    assert filter_unconfirmed_instances([instance], views) == [instance]
+
+
+def test_three_segmentation_views_reject_weak_complete_singleton():
+    observation = _obs(1, (30, 30, 60, 60), complete=True)
+    observation.detector = "seg"
+    observation.confidence = 0.24
+    instance = FusedInstance([observation], observation)
+    empty = np.zeros((100, 100), dtype=np.uint8)
+    image = np.full((100, 100, 3), 220, dtype=np.uint8)
+    views = [
+        RectifiedView(frame, frame, image, empty, 1.0)
+        for frame in (1, 2, 3)
+    ]
+
+    assert filter_unconfirmed_instances([instance], views) == []
+
+
+def test_boundary_only_segmentation_needs_majority_view_support():
+    observations = [
+        _obs(frame, (30, 30, 60, 60), complete=False)
+        for frame in (1, 2)
+    ]
+    for observation in observations:
+        observation.detector = "seg"
+        observation.confidence = 0.95
+    instance = FusedInstance(observations, observations[0])
+    empty = np.zeros((100, 100), dtype=np.uint8)
+    image = np.full((100, 100, 3), 220, dtype=np.uint8)
+    views = [
+        RectifiedView(frame, frame, image, empty, 1.0)
+        for frame in (1, 2, 3, 4)
+    ]
+
+    assert filter_unconfirmed_instances([instance], views) == []
 
 
 def test_mosaic_contains_one_intact_selected_object_without_source_ghost():
