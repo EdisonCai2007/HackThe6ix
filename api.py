@@ -38,11 +38,9 @@ def _scan_response(inventory: list[dict], clusters: int) -> dict:
         "inventory": inventory,
         "total_pieces": sum(e["quantity"] for e in inventory),
         "clusters": clusters,
-        "warning": (
-            "touching pieces detected — separate them and re-scan"
-            if clusters
-            else None
-        ),
+        # Kept for response compatibility; color-aware detection no longer
+        # asks users to rearrange and re-scan nearby pieces.
+        "warning": None,
     }
 
 

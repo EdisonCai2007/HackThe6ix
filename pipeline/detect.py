@@ -3,12 +3,8 @@
 Two detectors:
 - "yolo": ultralytics model from models/lego_yolo.pt (preferred when present)
 - "cv":   classical fallback for plain backgrounds. Foreground = pixels that
-          differ from a local background estimate (median blur with a kernel
-          far larger than any piece), which cancels lighting gradients and
-          catches white pieces on white tables via their shading. Blobs much
-          larger than the median piece are returned as `clusters` (touching
-          pieces the fallback cannot split — YOLO territory) rather than
-          being silently miscounted as one piece.
+          differ from a local background estimate. Color-consistent interior
+          seeds split nearby pieces with marker-controlled watershed.
 "auto" picks yolo when the weights file exists, else cv.
 
 Independently runnable: python -m pipeline.detect photo.jpg [--detector cv]
@@ -21,18 +17,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from pipeline.instance_split import split_component
+
 YOLO_WEIGHTS = Path("models/lego_yolo.pt")
 _PROCESS_MAX_DIM = 1600  # downscale before mask analysis for speed
 _MIN_AREA_FRAC = 0.001
-_BORDER_MARGIN_FRAC = 0.005  # boxes touching the border are background clutter
 _BG_DIFF_THRESH = 22
-_CLUSTER_FACTOR = 3.0  # blob > factor * median piece area => cluster
-_MIN_CLUSTER_AREA_FRAC = 0.05
-_MAX_BOX_AREA_FRAC = 0.30
-_MAX_BOX_DIM_FRAC = 0.90
-_ISOLATION_RADIUS_FRAC = 0.20
-_ISOLATED_AREA_FACTOR = 4.0
-_MIN_BOXES_FOR_REGION_FILTER = 5
 
 Box = tuple[int, int, int, int]
 
@@ -40,7 +30,7 @@ Box = tuple[int, int, int, int]
 @dataclass
 class Detections:
     boxes: list[Box] = field(default_factory=list)  # individual pieces
-    clusters: list[Box] = field(default_factory=list)  # touching groups
+    clusters: list[Box] = field(default_factory=list)  # legacy API compatibility
 
 
 def detect(img: np.ndarray, method: str = "auto") -> Detections:
@@ -52,73 +42,11 @@ def detect(img: np.ndarray, method: str = "auto") -> Detections:
         result = _detect_cv(img)
     else:
         raise ValueError(f"unknown detector: {method}")
-    result.boxes = _filter_implausible_boxes(result.boxes, img.shape)
     return result
 
 
 def detect_pieces(img: np.ndarray, method: str = "auto") -> list[Box]:
     return detect(img, method).boxes
-
-
-def _filter_implausible_boxes(
-    boxes: list[Box], image_shape: tuple[int, ...]
-) -> list[Box]:
-    """Drop clear background boxes while retaining plausible isolated pieces.
-
-    A box is always rejected if it spans most of the image.  The relative
-    size/position rule only activates with at least five detections and a
-    strict-majority spatial cluster; even then, a spatial outlier is removed
-    only when it is over four times the median box area.  Small isolated LEGO
-    pieces therefore survive the filter.
-    """
-    if not boxes:
-        return []
-    h, w = image_shape[:2]
-    image_area = h * w
-
-    def area(box: Box) -> int:
-        return (box[2] - box[0]) * (box[3] - box[1])
-
-    plausible = [
-        box for box in boxes
-        if (area(box) < _MAX_BOX_AREA_FRAC * image_area
-            and box[2] - box[0] < _MAX_BOX_DIM_FRAC * w
-            and box[3] - box[1] < _MAX_BOX_DIM_FRAC * h)
-    ]
-    if len(plausible) < _MIN_BOXES_FOR_REGION_FILTER:
-        return plausible
-
-    centers = np.array([
-        ((box[0] + box[2]) * 0.5, (box[1] + box[3]) * 0.5)
-        for box in plausible
-    ])
-    radius2 = (_ISOLATION_RADIUS_FRAC * np.hypot(w, h)) ** 2
-    unvisited = set(range(len(plausible)))
-    components: list[set[int]] = []
-    while unvisited:
-        component = {unvisited.pop()}
-        frontier = list(component)
-        while frontier:
-            i = frontier.pop()
-            neighbors = {
-                j for j in unvisited
-                if float(np.sum((centers[i] - centers[j]) ** 2)) <= radius2
-            }
-            unvisited.difference_update(neighbors)
-            component.update(neighbors)
-            frontier.extend(neighbors)
-        components.append(component)
-
-    main = max(components, key=len)
-    if len(main) * 2 <= len(plausible):
-        return plausible  # no unambiguous dominant piece region
-
-    areas = sorted(area(box) for box in plausible)
-    median_area = areas[(len(areas) - 1) // 2]
-    return [
-        box for i, box in enumerate(plausible)
-        if i in main or area(box) <= _ISOLATED_AREA_FACTOR * median_area
-    ]
 
 
 def _background_kernel_size(height: int, width: int) -> int:
@@ -140,33 +68,41 @@ def _detect_cv(img: np.ndarray) -> Detections:
     ksize = _background_kernel_size(h, w)
     smallf = small.astype(np.float32)
 
-    def boxes_from(diff: np.ndarray) -> list[Box]:
+    def mask_from(diff: np.ndarray) -> np.ndarray:
         mask = (diff > _BG_DIFF_THRESH).astype(np.uint8) * 255
         mask = cv2.morphologyEx(
             mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=2
         )
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        margin = max(2, int(_BORDER_MARGIN_FRAC * max(h, w)))
+        return mask
+
+    def boxes_from(mask: np.ndarray) -> list[Box]:
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
         found: list[Box] = []
-        for c in contours:
-            x, y, bw, bh = cv2.boundingRect(c)
+        for component_id in range(1, count):
+            x, y, bw, bh, _ = stats[component_id]
             if bw * bh < _MIN_AREA_FRAC * img_area:
                 continue
-            if (
-                x <= margin
-                or y <= margin
-                or x + bw >= w - margin
-                or y + bh >= h - margin
-            ):
-                continue  # touching the border: table edge / clutter
-            found.append((x, y, x + bw, y + bh))
+            # Preserve border-touching LEGO plates. Only reject a thin strip
+            # that hugs almost an entire image edge (a crop/table boundary).
+            vertical_strip = bh >= 0.9 * h and bw <= 0.08 * w
+            horizontal_strip = bw >= 0.9 * w and bh <= 0.08 * h
+            touches_border = x == 0 or y == 0 or x + bw == w or y + bh == h
+            shallow_edge_sliver = (
+                touches_border
+                and min(bw, bh) <= 0.02 * max(h, w)
+                and max(bw, bh) >= 3 * min(bw, bh)
+            )
+            if vertical_strip or horizontal_strip or shallow_edge_sliver:
+                continue
+            component = labels == component_id
+            found.extend(split_component(small, component,
+                                         _MIN_AREA_FRAC * img_area))
         return found
 
     bg_blur = cv2.medianBlur(small, ksize)
-    raw = boxes_from(np.linalg.norm(smallf - bg_blur.astype(np.float32), axis=2))
+    mask = mask_from(np.linalg.norm(smallf - bg_blur.astype(np.float32), axis=2))
+    raw = boxes_from(mask)
     if not raw:
         tiles_y, tiles_x = 12, 16
         th, tw = h // tiles_y, w // tiles_x
@@ -178,34 +114,16 @@ def _detect_cv(img: np.ndarray) -> Detections:
             axis=2,
         ).astype(np.float32)
         bg_tile = cv2.resize(grid, (w, h), interpolation=cv2.INTER_LINEAR)
-        raw = boxes_from(np.linalg.norm(smallf - bg_tile, axis=2))
+        mask = mask_from(np.linalg.norm(smallf - bg_tile, axis=2))
+        raw = boxes_from(mask)
 
-    result = _split_clusters(raw, img_area)
+    result = Detections(boxes=raw)
 
     def unscale(b: Box) -> Box:
         return tuple(int(v / scale) for v in b)  # type: ignore[return-value]
 
     result.boxes = [unscale(b) for b in result.boxes]
     result.clusters = [unscale(b) for b in result.clusters]
-    return result
-
-
-def _split_clusters(boxes: list[Box], img_area: float) -> Detections:
-    """Classify boxes: ones far larger than the median piece are touching
-    groups the cv fallback cannot split — flag them instead of miscounting.
-    Uses the lower median so a lone huge blob cannot drag the baseline up."""
-    result = Detections()
-    if not boxes:
-        return result
-    areas = sorted((b[2] - b[0]) * (b[3] - b[1]) for b in boxes)
-    median_area = areas[(len(areas) - 1) // 2]
-    cluster_thresh = max(
-        _CLUSTER_FACTOR * median_area,
-        _MIN_CLUSTER_AREA_FRAC * img_area,
-    )
-    for b in boxes:
-        area = (b[2] - b[0]) * (b[3] - b[1])
-        (result.clusters if area > cluster_thresh else result.boxes).append(b)
     return result
 
 
@@ -250,9 +168,5 @@ if __name__ == "__main__":
         cv2.rectangle(debug, (x0, y0), (x1, y1), (0, 255, 0), 6)
         cv2.putText(debug, str(i), (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                     2.0, (0, 255, 0), 4)
-    for x0, y0, x1, y1 in dets.clusters:
-        cv2.rectangle(debug, (x0, y0), (x1, y1), (0, 165, 255), 6)
-        cv2.putText(debug, "cluster: separate pieces", (x0, y0 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 165, 255), 4)
     cv2.imwrite("detect_debug.jpg", debug)
     print("wrote detect_debug.jpg")

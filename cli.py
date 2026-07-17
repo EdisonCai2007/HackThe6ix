@@ -36,10 +36,6 @@ def main(argv: list[str] | None = None) -> None:
     out.write_text(json.dumps(result.inventory, indent=2) + "\n")
     total = sum(e["quantity"] for e in result.inventory)
     print(f"{total} pieces ({len(result.inventory)} kinds) -> {out}")
-    if result.clusters:
-        print(f"WARNING: {len(result.clusters)} cluster(s) of touching pieces "
-              "skipped — separate them and re-scan")
-
     if args.debug:
         debug_path = out.parent / "debug.jpg"
         cv2.imwrite(

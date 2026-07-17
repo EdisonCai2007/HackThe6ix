@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import pipeline.detect
-from pipeline.detect import _split_clusters, crop_box, detect_pieces
+from pipeline.detect import crop_box, detect, detect_pieces
 
 
 def make_scene():
@@ -42,6 +42,16 @@ def test_border_clutter_ignored():
     assert centers_covered(boxes, rects)
 
 
+def test_shallow_crop_edge_sliver_is_ignored():
+    img, rects = make_scene()
+    img[590:600, 710:770] = 20
+
+    boxes = detect_pieces(img, method="cv")
+
+    assert len(boxes) == 3
+    assert centers_covered(boxes, rects)
+
+
 def test_speck_noise_ignored():
     img, rects = make_scene()
     img[300:303, 600:603] = 0  # tiny speck, far below min area
@@ -64,37 +74,28 @@ def test_unknown_method_raises():
         detect_pieces(img, method="bogus")
 
 
-def test_oversized_box_flagged_as_cluster():
-    pieces = [(0, 0, 100, 80), (200, 0, 310, 90), (0, 200, 120, 290)]
-    blob = (300, 300, 600, 520)  # ~7x the median piece area
-    result = _split_clusters(pieces + [blob], img_area=800 * 600)
-    assert result.boxes == pieces
-    assert result.clusters == [blob]
+def test_large_gray_piece_touching_border_is_retained():
+    img, rects = make_scene()
+    gray = (0, 265, 225, 570)
+    img[gray[1]:gray[3], gray[0]:gray[2]] = (65, 65, 65)
 
+    result = detect(img, method="cv")
 
-def test_lone_huge_blob_still_flagged():
-    # Even-count regression: the blob must not drag the median baseline up.
-    piece = (0, 0, 150, 120)
-    blob = (200, 200, 700, 640)
-    result = _split_clusters([piece, blob], img_area=800 * 600)
-    assert result.boxes == [piece]
-    assert result.clusters == [blob]
-
-
-def test_similar_sized_pieces_never_clustered():
-    pieces = [(0, 0, 100, 80), (200, 0, 300, 85), (0, 200, 110, 280),
-              (400, 400, 520, 490)]
-    result = _split_clusters(pieces, img_area=800 * 600)
     assert result.clusters == []
     assert len(result.boxes) == 4
+    assert centers_covered(result.boxes, rects + [gray])
 
 
-def test_long_piece_below_five_percent_of_image_is_not_a_cluster():
-    pieces = [(20, 20, 60, 60), (80, 20, 120, 60), (140, 20, 180, 60)]
-    long_piece = (200, 100, 320, 200)  # 4% of a 600x500 crop
-    result = _split_clusters(pieces + [long_piece], img_area=600 * 500)
-    assert long_piece in result.boxes
+def test_long_valid_piece_is_never_converted_to_rescan_cluster():
+    img = np.full((600, 800, 3), 245, dtype=np.uint8)
+    long_piece = (40, 220, 500, 360)
+    img[long_piece[1]:long_piece[3], long_piece[0]:long_piece[2]] = (24, 138, 254)
+
+    result = detect(img, method="cv")
+
     assert result.clusters == []
+    assert len(result.boxes) == 1
+    assert centers_covered(result.boxes, [long_piece])
 
 
 def test_crop_box_pads_ten_percent():
@@ -119,44 +120,6 @@ def test_boxes_scale_back_to_original_coords():
     scaled_rects = [(4 * x0, 4 * y0, 4 * x1, 4 * y1) for x0, y0, x1, y1 in rects]
     assert len(boxes) == 3
     assert centers_covered(boxes, scaled_rects)
-
-
-def test_filter_drops_box_spanning_most_of_image():
-    boxes = [(100, 100, 180, 160), (20, 300, 980, 380)]
-    kept = pipeline.detect._filter_implausible_boxes(boxes, (800, 1000, 3))
-    assert kept == [boxes[0]]
-
-
-def test_filter_drops_only_large_isolated_outlier():
-    central = [
-        (350, 350, 390, 390),
-        (420, 350, 460, 390),
-        (490, 350, 530, 390),
-        (420, 420, 460, 460),
-    ]
-    long_brick_in_group = (330, 450, 530, 510)
-    large_isolated_junk = (800, 800, 920, 920)
-    kept = pipeline.detect._filter_implausible_boxes(
-        central + [long_brick_in_group, large_isolated_junk],
-        (1000, 1000, 3),
-    )
-    assert long_brick_in_group in kept
-    assert large_isolated_junk not in kept
-
-
-def test_filter_keeps_normal_sized_isolated_piece():
-    central = [
-        (350, 350, 390, 390),
-        (420, 350, 460, 390),
-        (490, 350, 530, 390),
-        (420, 420, 460, 460),
-        (470, 420, 510, 460),
-    ]
-    isolated_piece = (850, 850, 890, 890)
-    kept = pipeline.detect._filter_implausible_boxes(
-        central + [isolated_piece], (1000, 1000, 3)
-    )
-    assert isolated_piece in kept
 
 
 def test_background_kernel_remains_large_on_workspace_crop():

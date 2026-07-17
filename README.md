@@ -13,7 +13,7 @@ inventory as JSON.
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/download_colors.py   # refresh data/colors.csv (optional)
-.venv/bin/python -m pytest                    # 72 tests, no network needed
+.venv/bin/python -m pytest                    # no network needed
 ```
 
 ## Usage
@@ -38,8 +38,8 @@ API endpoints:
 | `GET /sessions/{id}/inventory` | current accumulated inventory |
 
 Sessions let the app scan a big bucket in small batches; quantities merge
-across photos. Responses include a `warning` when touching-piece clusters
-were skipped.
+across photos. The legacy `clusters` and `warning` response fields remain for
+client compatibility but are empty/`null` in the color-aware CV path.
 
 ## Pipeline
 
@@ -48,13 +48,12 @@ were skipped.
    - `yolo`: ultralytics model from `models/lego_yolo.pt` (train with
      [scripts/train_yolo.py](scripts/train_yolo.py); no usable pretrained
      public weights existed as of 2026-07).
-   - `cv` fallback: foreground = pixels differing from a local background
-     estimate; needs a plain background. Blobs much larger than the median
-     piece are flagged as *clusters* (touching pieces it can't split) and
-     excluded from the count rather than miscounted. A conservative
-     post-filter also removes boxes spanning most of the image, plus very
-     large isolated outliers when a clear main piece group exists; normal-size
-     isolated pieces are kept.
+   - `cv` fallback (the current active detector when no model weights are
+     installed): foreground = pixels differing from a local background
+     estimate; needs a plain background. Palette-aware interior markers and
+     watershed split nearby pieces, including same-color pieces joined only by
+     weak shadows. Large and border-touching LEGO pieces remain valid; only
+     shallow crop-edge slivers are discarded.
 2. **IDENTIFY** ([pipeline/identify.py](pipeline/identify.py)) — each crop is
    POSTed to the free [Brickognize](https://api.brickognize.com/) API
    (4 workers behind a global ~1 req/s throttle, retry with backoff).
@@ -82,14 +81,14 @@ Every stage runs standalone for debugging:
 
 ## Taking good photos
 
-- **Single layer, pieces not touching** — touching pieces merge into one
-  "cluster" box the cv detector skips (the debug overlay marks them orange).
+- Single layer. Small gaps are helpful, but nearby pieces no longer need to be
+  manually separated and re-scanned; color and spatial interiors split them.
 - Plain, light, uncluttered background; a white/gray table doubles as the
   white reference for color correction.
 - Top-down, fill the frame, keep clutter away from the edges.
 - Even, bright light; avoid harsh shadows and glare.
 
-## Training the YOLO detector
+## Legacy YOLO box-detector training
 
 ```bash
 .venv/bin/pip install roboflow
@@ -99,5 +98,8 @@ Every stage runs standalone for debugging:
     --device mps        # Apple Silicon; "cpu" works but is slow
 ```
 
-Installs `models/lego_yolo.pt`; `--detector auto` then prefers it. YOLO
-handles touching pieces far better than the cv fallback.
+Installs `models/lego_yolo.pt`; `--detector auto` then prefers it. This script
+trains bounding boxes, not masks. The planned Task B upgrade is a single-class
+YOLO **instance-segmentation** dataset/model, with session-level train/validation
+splits and tiled or multi-view inference for larger batches; that work should
+start only after the live Option A test.

@@ -74,8 +74,4 @@ def draw_debug(
         cv2.rectangle(out, (x0, ty - th - 4), (x0 + tw + 4, ty + 4), (0, 0, 0), -1)
         cv2.putText(out, label, (x0 + 2, ty), cv2.FONT_HERSHEY_SIMPLEX,
                     font_scale, (0, 255, 0), thick)
-    for x0, y0, x1, y1 in clusters or []:
-        cv2.rectangle(out, (x0, y0), (x1, y1), (0, 165, 255), thick)
-        cv2.putText(out, "cluster: separate pieces and re-scan", (x0, max(20, y0 - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 165, 255), thick)
     return out

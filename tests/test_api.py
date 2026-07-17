@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import pipeline.scan
-from api import app
+from api import _scan_response, app
 from pipeline.identify import Identification
 
 
@@ -36,6 +36,12 @@ def test_scan_returns_inventory(client):
     assert sum(e["quantity"] for e in body["inventory"]) == 3
     assert body["total_pieces"] == 3
     assert body["clusters"] == 0
+
+
+def test_legacy_cluster_field_never_requests_manual_rescan():
+    body = _scan_response([], clusters=1)
+    assert body["clusters"] == 1
+    assert body["warning"] is None
 
 
 def test_scan_rejects_non_image(client):
