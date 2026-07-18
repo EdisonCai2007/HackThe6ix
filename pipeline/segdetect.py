@@ -1,7 +1,7 @@
 """YOLO instance masks on original RGB frames, gated by physical workspace."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +94,78 @@ class SegmentationDetection:
     @property
     def accepted(self) -> bool:
         return self.gate.accepted
+
+
+def _box_iou(first: Box, second: Box) -> float:
+    ix0, iy0 = max(first[0], second[0]), max(first[1], second[1])
+    ix1, iy1 = min(first[2], second[2]), min(first[3], second[3])
+    intersection = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+    first_area = max(0, first[2] - first[0]) * max(0, first[3] - first[1])
+    second_area = max(0, second[2] - second[0]) * max(0, second[3] - second[1])
+    union = first_area + second_area - intersection
+    return intersection / union if union else 0.0
+
+
+def _near_identical_instance_masks(
+    first: SegmentationDetection, second: SegmentationDetection
+) -> bool:
+    first_mask = np.asarray(first.mask_original, dtype=bool)
+    second_mask = np.asarray(second.mask_original, dtype=bool)
+    if first_mask.shape != second_mask.shape:
+        return False
+    first_area, second_area = int(first_mask.sum()), int(second_mask.sum())
+    if not first_area or not second_area:
+        return False
+    intersection = int((first_mask & second_mask).sum())
+    union = first_area + second_area - intersection
+    mask_iou = intersection / union if union else 0.0
+    containment = intersection / min(first_area, second_area)
+    area_ratio = min(first_area, second_area) / max(first_area, second_area)
+    return bool(
+        mask_iou >= 0.65
+        and containment >= 0.85
+        and area_ratio >= 0.70
+        and _box_iou(first.box_original, second.box_original) >= 0.60
+    )
+
+
+def suppress_same_view_duplicates(
+    detections: list[SegmentationDetection],
+) -> list[SegmentationDetection]:
+    """Reject only near-identical accepted masks from one source view.
+
+    Every detection remains in the returned audit list.  The lower-confidence
+    duplicate receives a provenance gate instead of disappearing, while
+    detections from different views and overlapping-but-disjoint masks are
+    never compared as duplicates.
+    """
+    by_view: dict[int, list[int]] = {}
+    for index, detection in enumerate(detections):
+        if detection.accepted:
+            by_view.setdefault(detection.view_index, []).append(index)
+    for indices in by_view.values():
+        kept: list[SegmentationDetection] = []
+        ordered = sorted(
+            indices,
+            key=lambda index: (
+                -detections[index].confidence,
+                detections[index].source_instance_id,
+            ),
+        )
+        for index in ordered:
+            detection = detections[index]
+            if any(
+                _near_identical_instance_masks(detection, accepted)
+                for accepted in kept
+            ):
+                detection.gate = replace(
+                    detection.gate,
+                    accepted=False,
+                    reason="duplicate_suppressed",
+                )
+            else:
+                kept.append(detection)
+    return detections
 
 
 def _perspective_points(points: np.ndarray, homography: np.ndarray) -> np.ndarray:
@@ -382,4 +454,4 @@ def detect_original_instances(
                 workspace_contours_original=projection.contours_original,
                 image_original=original,
             ))
-    return detections
+    return suppress_same_view_duplicates(detections)

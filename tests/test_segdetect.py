@@ -6,12 +6,87 @@ import pytest
 
 from pipeline.segdetect import (
     GateConfig,
+    GateEvidence,
     RawSegmentation,
+    SegmentationDetection,
     detect_original_instances,
     gate_instance,
     map_instance,
     projected_workspace_roi,
+    suppress_same_view_duplicates,
 )
+
+
+def _accepted_detection(mask, confidence, source, view_index=0, box=None):
+    ys, xs = np.nonzero(mask)
+    inferred_box = (
+        int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+    )
+    box = inferred_box if box is None else box
+    gate = GateEvidence(
+        True, "accepted", confidence, 1.0, 0.0, True, False
+    )
+    return SegmentationDetection(
+        frame_id=view_index + 1,
+        view_index=view_index,
+        source_instance_id=source,
+        confidence=confidence,
+        box_original=box,
+        box_canvas=box,
+        mask_original=mask,
+        mask_canvas=mask,
+        polygons_canvas=(),
+        gate=gate,
+        inference_roi=(0, 0, mask.shape[1], mask.shape[0]),
+        workspace_contours_original=(),
+        image_original=np.zeros((*mask.shape, 3), dtype=np.uint8),
+    )
+
+
+def test_same_view_near_identical_masks_keep_higher_confidence():
+    strong_mask = np.zeros((100, 120), dtype=bool)
+    strong_mask[20:60, 20:80] = True
+    weak_mask = np.zeros_like(strong_mask)
+    weak_mask[21:61, 21:81] = True
+    strong = _accepted_detection(strong_mask, 0.88, "strong")
+    weak = _accepted_detection(weak_mask, 0.31, "weak")
+
+    result = suppress_same_view_duplicates([strong, weak])
+
+    assert result[0].accepted
+    assert not result[1].accepted
+    assert result[1].gate.reason == "duplicate_suppressed"
+
+
+def test_overlapping_boxes_with_disjoint_piece_masks_are_preserved():
+    first_mask = np.zeros((100, 120), dtype=bool)
+    first_mask[20:30, 20:80] = True
+    first_mask[20:70, 20:30] = True
+    second_mask = np.zeros_like(first_mask)
+    second_mask[60:70, 20:80] = True
+    second_mask[20:70, 70:80] = True
+    shared_box = (20, 20, 80, 70)
+    first = _accepted_detection(
+        first_mask, 0.88, "first", box=shared_box
+    )
+    second = _accepted_detection(
+        second_mask, 0.82, "second", box=shared_box
+    )
+
+    result = suppress_same_view_duplicates([first, second])
+
+    assert all(detection.accepted for detection in result)
+
+
+def test_identical_masks_from_different_views_are_preserved():
+    mask = np.zeros((100, 120), dtype=bool)
+    mask[20:60, 20:80] = True
+    first = _accepted_detection(mask.copy(), 0.88, "first", view_index=0)
+    second = _accepted_detection(mask.copy(), 0.82, "second", view_index=1)
+
+    result = suppress_same_view_duplicates([first, second])
+
+    assert all(detection.accepted for detection in result)
 
 
 def test_projected_workspace_roi_clips_to_original_bounds():
