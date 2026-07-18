@@ -38,6 +38,73 @@ function backboardRequest() {
 }
 
 describe("Backboard generation client", () => {
+  it("forwards Backboard streaming responses through the shared async contract", async () => {
+    const encoder = new TextEncoder();
+    let requestBody;
+    const client = createBackboardGenerationClient({
+      apiKey: "test-key",
+      fetchImpl: async (url, options) => {
+        requestBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          body: {
+            async *[Symbol.asyncIterator]() {
+              yield encoder.encode(`data: ${JSON.stringify({ content: '{"bricks":[' })}\n\n`);
+              yield encoder.encode(`data: ${JSON.stringify({ content: '{"id":"a"}' })}\n\n`);
+              yield encoder.encode(`data: ${JSON.stringify({ content: "]}", status: "COMPLETED", total_tokens: 9 })}\n\n`);
+            },
+          },
+        };
+      },
+    });
+
+    const output = [];
+    for await (const item of client.streamWithMetadata(backboardRequest())) output.push(item);
+    assert.equal(requestBody.stream, true);
+    assert.deepEqual(output.map((item) => item.text), ['{"bricks":[', '{"id":"a"}', "]}"]);
+    assert.equal(output.at(-1).metadata.finishReason, "COMPLETED");
+  });
+
+  it("keeps reasoning out of JSON, treats run_ended as terminal metadata, and rejects tools", async () => {
+    const encoder = new TextEncoder();
+    const client = createBackboardGenerationClient({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        body: {
+          async *[Symbol.asyncIterator]() {
+            yield encoder.encode(`data: ${JSON.stringify({ type: "reasoning_streaming", content: "ignore me" })}\n\n`);
+            yield encoder.encode(`data: ${JSON.stringify({ type: "content_streaming", content: '{"bricks":[' })}\n\n`);
+            yield encoder.encode(`data: ${JSON.stringify({ type: "run_ended", status: "COMPLETED" })}\n\n`);
+          },
+        },
+      }),
+    });
+
+    const output = [];
+    for await (const item of client.streamWithMetadata(backboardRequest())) output.push(item);
+    assert.deepEqual(output.map((item) => item.text), ['{"bricks":[', ""]);
+    assert.equal(output.at(-1).metadata.finishReason, "COMPLETED");
+
+    const toolClient = createBackboardGenerationClient({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        body: {
+          async *[Symbol.asyncIterator]() {
+            yield encoder.encode(`data: ${JSON.stringify({ type: "tool_submit_required" })}\n\n`);
+          },
+        },
+      }),
+    });
+    await assert.rejects(
+      async () => {
+        for await (const item of toolClient.streamWithMetadata(backboardRequest())) void item;
+      },
+      /requires a tool action/,
+    );
+  });
+
   it("sends the full inventory and returns the completed message content", async () => {
     const calls = [];
     const fetchImpl = async (url, options) => {
