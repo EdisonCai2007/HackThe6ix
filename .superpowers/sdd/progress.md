@@ -3,3 +3,6 @@ Task 2: complete (no git commits; review clean after fix; npm test 31/31 passing
 Task 3: complete (no git commits; review clean; npm test 35/35 passing)
 Task 4: complete (no git commits; review clean; npm test 35/35 passing; server missing-key check passed with elevated localhost binding)
 Task 5: complete (no git commits; review clean; npm test 35/35 passing; minor noted: LDraw parse error fallback could be more defensive)
+Task 6: complete (no git commits; task and final reviews clean; production build and 69 focused tests passing; 13 intentionally stale legacy repair tests remain)
+Always-visible brick outlines Task 1: complete (no git commits; task and final reviews clean after transparent-material fix; 11/11 focused tests passing)
+Streaming build generation: complete (no git commits; subagent review/fix pass; focused streaming checks 31/31 plus service streaming/replacement checks 2/2; 13 pre-existing buffered-repair expectations remain red)
