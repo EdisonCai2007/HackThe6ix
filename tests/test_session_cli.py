@@ -133,7 +133,14 @@ def test_seg_debug_writes_workspace_and_gate_overlays(tmp_path, monkeypatch):
             for _ in crops
         ],
     )
-    monkeypatch.setattr(pipeline.multiview, "count_studs", lambda *args: 0)
+    from pipeline.studs import StudEvidence
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda *args, **kwargs: StudEvidence(
+            0, "low", "not_visible", False, 200.0, (), "fixture"
+        ),
+    )
 
     session_cli.main([str(path), "--detector", "seg"])
 

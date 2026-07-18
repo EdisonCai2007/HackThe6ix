@@ -212,7 +212,14 @@ def test_segmented_scan_uses_true_instance_mask_for_original_crop(
             for _ in crops
         ],
     )
-    monkeypatch.setattr(pipeline.multiview, "count_studs", lambda *args: 0)
+    from pipeline.studs import StudEvidence
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda *args, **kwargs: StudEvidence(
+            0, "low", "not_visible", False, 100.0, (), "fixture"
+        ),
+    )
 
     result = pipeline.multiview.scan_manifest(
         path, detector="seg", seg_model=_FakeModel()

@@ -6,6 +6,8 @@ import pytest
 
 from pipeline.identify import Identification
 from pipeline.studs import (
+    StudEvidence,
+    analyze_studs,
     advise,
     count_studs,
     expected_studs,
@@ -17,6 +19,26 @@ DATA = Path(__file__).parent / "data"
 
 def _ident(part_id, name, score, candidates=()):
     return Identification(part_id, name, None, score, candidates=candidates)
+
+
+def _dark_grid(rows, cols, *, radius=11):
+    spacing = radius * 3
+    pad = radius * 3
+    height = pad * 2 + max(0, rows - 1) * spacing
+    width = pad * 2 + max(0, cols - 1) * spacing
+    image = np.full((height, width, 3), 238, dtype=np.uint8)
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.rectangle(mask, (radius, radius),
+                  (width - radius - 1, height - radius - 1), 255, -1)
+    image[mask > 0] = (34, 34, 34)
+    for row in range(rows):
+        for col in range(cols):
+            center = (pad + col * spacing, pad + row * spacing)
+            cv2.circle(image, center, radius, (50, 50, 50), -1)
+            cv2.circle(image, center, radius, (15, 15, 15), 2)
+            cv2.circle(image, (center[0] - 2, center[1] - 2),
+                       max(1, radius // 4), (78, 78, 78), -1)
+    return image, mask
 
 
 # --- expected_studs -------------------------------------------------------
@@ -73,6 +95,42 @@ def test_count_studs_blank_image_is_zero_or_tiny():
     assert count_studs(img, radius_px=15) <= 2
 
 
+def test_dark_2x12_grid_uses_enhanced_variants():
+    image, mask = _dark_grid(2, 12)
+
+    evidence = analyze_studs(image, radius_px=11, mask=mask)
+
+    assert evidence.is_dark
+    assert 18 <= evidence.count <= 30
+    assert evidence.visibility == "stud_face"
+    assert evidence.reliability in {"high", "medium"}
+    assert {variant.name for variant in evidence.variants} == {
+        "clahe", "gamma_clahe"
+    }
+
+
+def test_dark_2x2_does_not_hallucinate_large_grid():
+    image, mask = _dark_grid(2, 2)
+
+    evidence = analyze_studs(image, radius_px=11, mask=mask)
+
+    assert evidence.is_dark
+    assert evidence.count <= 8
+
+
+def test_side_view_without_stud_edges_is_not_reliable_negative_evidence():
+    image = np.full((120, 220, 3), 238, dtype=np.uint8)
+    mask = np.zeros((120, 220), dtype=np.uint8)
+    mask[35:85, 20:200] = 255
+    image[mask > 0] = (32, 32, 32)
+
+    evidence = analyze_studs(image, radius_px=11, mask=mask)
+
+    assert evidence.count < 4
+    assert evidence.visibility != "stud_face"
+    assert evidence.reliability in {"low", "unavailable"}
+
+
 # --- advise ---------------------------------------------------------------
 
 def _cands(*triples):
@@ -83,6 +141,42 @@ def test_advise_skips_on_unreliable_count():
     ident = _ident("3007", "Brick 2 x 8", 0.795)
     out, action = advise(ident, stud_count=1)
     assert out is ident and action == "skipped"
+
+
+def test_advise_does_not_demote_low_reliability_dark_undercount():
+    ident = _ident("2445", "Plate 2 x 12", 0.8905)
+    evidence = StudEvidence(
+        count=4,
+        reliability="low",
+        visibility="partial",
+        is_dark=True,
+        median_luma=34.0,
+        variants=(),
+        reason="preprocessing variants disagree",
+    )
+
+    out, action = advise(ident, evidence)
+
+    assert out is ident
+    assert action == "unreliable"
+
+
+def test_advise_keeps_high_reliability_negative_evidence_bidirectional():
+    ident = _ident("2445", "Plate 2 x 12", 0.85)
+    evidence = StudEvidence(
+        count=4,
+        reliability="high",
+        visibility="stud_face",
+        is_dark=True,
+        median_luma=34.0,
+        variants=(),
+        reason="stable visible grid",
+    )
+
+    out, action = advise(ident, evidence)
+
+    assert out.part_id is None
+    assert action == "demoted"
 
 
 def test_advise_never_overrides_high_confidence():

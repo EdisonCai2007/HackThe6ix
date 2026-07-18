@@ -176,10 +176,17 @@ def test_stud_advisory_corrects_contradicted_id(tmp_path, monkeypatch):
         )) for _ in crops]
 
     monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify)
-    monkeypatch.setattr(pipeline.multiview, "count_studs",
-                        lambda crop, radius_px: 30)
+    from pipeline.studs import StudEvidence
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda crop, radius_px, mask=None: StudEvidence(
+            30, "high", "stud_face", False, 100.0, (), "fixture"
+        ),
+    )
     result = scan_manifest(manifest, detector="cv")
     assert result.id_crops[0]["stud"]["action"] == "corrected"
+    assert result.id_crops[0]["brickognize_raw"]["part_id"] == "3008"
     assert result.id_crops[0]["brickognize"]["part_id"] == "3028"
     assert result.inventory[0]["part_id"] == "3028"
 
@@ -192,10 +199,16 @@ def test_stud_advisory_skips_when_studs_invisible(tmp_path, monkeypatch):
                 for _ in crops]
 
     monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify)
-    monkeypatch.setattr(pipeline.multiview, "count_studs",
-                        lambda crop, radius_px: 1)
+    from pipeline.studs import StudEvidence
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda crop, radius_px, mask=None: StudEvidence(
+            1, "low", "partial", False, 100.0, (), "fixture"
+        ),
+    )
     result = scan_manifest(manifest, detector="cv")
-    assert result.id_crops[0]["stud"]["action"] == "skipped"
+    assert result.id_crops[0]["stud"]["action"] == "unreliable"
     assert result.id_crops[0]["brickognize"]["part_id"] == "3007"
 
 
@@ -215,8 +228,14 @@ def test_second_chance_uses_alternate_view_for_weak_id(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.multiview, "identify_all", fake_identify_all)
     monkeypatch.setattr(pipeline.multiview, "identify_crop",
                         fake_identify_crop)
-    monkeypatch.setattr(pipeline.multiview, "count_studs",
-                        lambda crop, radius_px: 0)
+    from pipeline.studs import StudEvidence
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda crop, radius_px, mask=None: StudEvidence(
+            0, "low", "not_visible", False, 100.0, (), "fixture"
+        ),
+    )
     result = scan_manifest(manifest, detector="cv")
     assert len(result.instances) == 1
     prov = result.id_crops[0]

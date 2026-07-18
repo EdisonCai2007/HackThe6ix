@@ -20,7 +20,7 @@ from pipeline.color import (
 from pipeline.detect import Box, crop_box, detect
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
-from pipeline.studs import advise, count_studs, stud_radius_px
+from pipeline.studs import advise, analyze_studs, stud_radius_px
 
 SECOND_CHANCE_MAX_ALTERNATES = 3
 SEG_SINGLETON_MIN_CONFIDENCE = 0.50
@@ -777,14 +777,38 @@ def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
         info = id_crops[index]
         ident = identifications[index]
         if info.get("box_original") is None:
-            info["stud"] = {"count": None, "action": "no-geometry"}
+            info["stud"] = {
+                "count": None,
+                "reliability": "unavailable",
+                "visibility": "not_visible",
+                "action": "no-geometry",
+                "reason": "identification crop has no original-frame geometry",
+            }
             continue
-        observation, _ = _identification_observation(instance, views)
+        matches = [
+            observation for observation in instance.observations
+            if observation.frame_id == info.get("frame_id")
+            and (
+                info.get("source_instance_id") is None
+                or observation.source_instance_id == info["source_instance_id"]
+            )
+        ]
+        observation = (
+            matches[0] if matches
+            else _identification_observation(instance, views)[0]
+        )
         radius = stud_radius_px(observation.box, info["box_original"], px_per_m)
-        count = count_studs(crops[index], radius)
-        adjusted, action = advise(ident, count)
-        info["stud"] = {"count": count, "radius_px": round(radius, 1),
-                        "action": action}
+        local_mask = None
+        if observation.mask_original is not None:
+            x0, y0, x1, y1 = info["box_original"]
+            local_mask = observation.mask_original[y0:y1, x0:x1]
+        evidence = analyze_studs(crops[index], radius, mask=local_mask)
+        adjusted, action = advise(ident, evidence)
+        info["stud"] = evidence.to_dict()
+        info["stud"].update({
+            "radius_px": round(radius, 1),
+            "action": action,
+        })
         if adjusted is not ident:
             info["stud"]["was"] = f"{ident.name} ({ident.score:.2f})"
             identifications[index] = adjusted
@@ -830,6 +854,14 @@ def scan_manifest(
         instances, views, session_dir, identifications, crops, id_crops,
         cache_dir,
     )
+    for crop_info, identification in zip(id_crops, identifications):
+        crop_info["brickognize_raw"] = {
+            "part_id": identification.part_id,
+            "name": identification.name,
+            "score": identification.score,
+            "candidates": [dict(candidate)
+                           for candidate in identification.candidates],
+        }
     identified = time.perf_counter()
     identifications = _apply_stud_advisory(
         instances, views, identifications, crops, id_crops,
