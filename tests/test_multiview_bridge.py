@@ -101,6 +101,8 @@ def test_v2_identifies_from_original_pixels(tmp_path, monkeypatch):
     assert prov["brickognize_raw"]["part_id"] == "3001"
     assert prov["brickognize_views"][0]["frame_id"] == 1
     assert prov["identity_support"] == {"3001": 1}
+    assert prov["depth_height"]["action"] == "shadow_only"
+    assert prov["depth_height"]["reliability"] == "unavailable"
     assert prov["brickognize"]["part_id"] == "3001"
     assert prov["brickognize"]["score"] == pytest.approx(0.9)
 

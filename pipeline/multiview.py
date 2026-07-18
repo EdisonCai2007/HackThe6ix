@@ -18,6 +18,7 @@ from pipeline.color import (
     normalize_illumination,
 )
 from pipeline.detect import Box, crop_box, detect
+from pipeline.depth_height import measure_instance_height
 from pipeline.dimensions import parse_regular_dimensions, resolve_dimensions
 from pipeline.evidence import arbitrate_identification
 from pipeline.footprint import aggregate_measurements, measure_observation
@@ -1064,6 +1065,14 @@ def _attach_metric_silhouettes(instances, views, id_crops, px_per_m):
     return aggregates
 
 
+def _attach_depth_heights(instances, id_crops, manifest):
+    """Serialize confidence-filtered height without using it for identity."""
+    for instance, info in zip(instances, id_crops):
+        info["depth_height"] = measure_instance_height(
+            instance, manifest
+        ).to_dict()
+
+
 def _apply_dimension_consistency(
     identifications, metric_silhouettes, id_crops, manifest
 ):
@@ -1135,6 +1144,7 @@ def scan_manifest(
     metric_silhouettes = _attach_metric_silhouettes(
         instances, views, id_crops, manifest["px_per_m"]
     )
+    _attach_depth_heights(instances, id_crops, manifest)
     metric_flags = [
         resolve_dimensions(identification, metric).flag
         for identification, metric in zip(
