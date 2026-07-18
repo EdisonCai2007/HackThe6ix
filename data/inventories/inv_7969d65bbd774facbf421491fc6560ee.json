@@ -1,0 +1,66 @@
+{
+  "inventory_id": "inv_7969d65bbd774facbf421491fc6560ee",
+  "source_inventory_id": "horse-demo",
+  "created_at": "2026-07-18T02:07:14.460Z",
+  "inventory": {
+    "inventory_id": "horse-demo",
+    "source": "manual_test_fixture",
+    "items": [
+      {
+        "label": "2x4 brick",
+        "category": "brick",
+        "part_id": "3001",
+        "ldraw_id": "3001.dat",
+        "rebrickable_part_num": "3001",
+        "color_name": "brown",
+        "color_id": "6",
+        "count": 1,
+        "supported": true
+      },
+      {
+        "label": "1x2 brick",
+        "category": "brick",
+        "part_id": "3004",
+        "ldraw_id": "3004.dat",
+        "rebrickable_part_num": "3004",
+        "color_name": "brown",
+        "color_id": "6",
+        "count": 4,
+        "supported": true
+      },
+      {
+        "label": "1x1 brick",
+        "category": "brick",
+        "part_id": "3005",
+        "ldraw_id": "3005.dat",
+        "rebrickable_part_num": "3005",
+        "color_name": "brown",
+        "color_id": "6",
+        "count": 1,
+        "supported": true
+      },
+      {
+        "label": "1x2 brick",
+        "category": "brick",
+        "part_id": "3004",
+        "ldraw_id": "3004.dat",
+        "rebrickable_part_num": "3004",
+        "color_name": "black",
+        "color_id": "0",
+        "count": 1,
+        "supported": true
+      },
+      {
+        "label": "1x1 brick",
+        "category": "brick",
+        "part_id": "3005",
+        "ldraw_id": "3005.dat",
+        "rebrickable_part_num": "3005",
+        "color_name": "black",
+        "color_id": "0",
+        "count": 3,
+        "supported": true
+      }
+    ]
+  }
+}
