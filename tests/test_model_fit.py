@@ -82,3 +82,63 @@ def test_real_frame_projection_agrees_with_stored_plane_homography():
     ).reshape(-1, 2)
     np.testing.assert_array_equal(valid, [True, True, True])
     np.testing.assert_allclose(projected, expected, atol=1e-5, rtol=0.0)
+
+
+def test_regular_model_parses_brick_and_plate_dimensions():
+    from pipeline.model_fit import RegularModel
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    plate = RegularModel.from_identification("3020", "Plate 2 x 4")
+
+    assert brick is not None
+    assert brick.part_id == "3001"
+    np.testing.assert_allclose(brick.dimensions_xyz, (0.016, 0.032, 0.0096))
+    assert plate is not None
+    np.testing.assert_allclose(plate.dimensions_xyz, (0.016, 0.032, 0.0032))
+
+
+def test_regular_model_rejects_irregular_names():
+    from pipeline.model_fit import RegularModel
+
+    assert RegularModel.from_identification("2445", "Plate 2 x 12") is not None
+    assert RegularModel.from_identification("3040", "Slope 45 2 x 1") is None
+    assert RegularModel.from_identification("4073", "Plate, Round 1 x 1") is None
+    assert RegularModel.from_identification(None, "Brick 2 x 4") is None
+
+
+def test_resting_orientations_deduplicate_xy_yaw_symmetry():
+    from pipeline.model_fit import RegularModel, resting_orientations
+
+    rectangular = RegularModel.from_identification("3001", "Brick 2 x 4")
+    square = RegularModel.from_identification("3003", "Brick 2 x 2")
+
+    rectangular_orientations = resting_orientations(rectangular)
+    square_orientations = resting_orientations(square)
+
+    assert len(rectangular_orientations) == 3
+    assert len(square_orientations) == 2
+    assert {
+        round(orientation.dimensions_xyz[2], 4)
+        for orientation in rectangular_orientations
+    } == {0.0096, 0.016, 0.032}
+    assert len({
+        tuple(round(value, 6) for value in orientation.dimensions_xyz)
+        for orientation in rectangular_orientations
+    }) == 3
+
+
+def test_projected_cuboid_rasterizes_nonempty_boolean_mask():
+    from pipeline.model_fit import cuboid_vertices, render_cuboid
+
+    vertices = cuboid_vertices(
+        center_xy=(0.0, 0.0),
+        yaw_deg=30.0,
+        dimensions_xyz=(0.032, 0.016, 0.0096),
+    )
+    mask = render_cuboid((480, 640), _synthetic_calibration(), vertices)
+
+    assert mask.dtype == np.bool_
+    assert mask.shape == (480, 640)
+    assert int(mask.sum()) > 0
+    np.testing.assert_allclose(vertices[:, 2].min(), 0.0)
+    np.testing.assert_allclose(vertices[:, 2].max(), 0.0096)
