@@ -93,6 +93,10 @@ class RectifiedView:
     rgb: str | None = None
     rgb_size: tuple[int, int] | None = None
     raise_uv_per_cm: tuple[float, float] = (0.0, 0.0)
+    topdownness: float | None = None
+    sharpness_score: float | None = None
+    camera_position_table_xyz: tuple[float, float, float] | None = None
+    camera_bearing_deg: float | None = None
 
 
 @dataclass
@@ -341,6 +345,7 @@ def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
         if image is None or valid_mask is None:
             raise ValueError(f"missing multiview image or mask for frame {view['frame_id']}")
         homography = view.get("homography")
+        camera_position = view.get("camera_position_table_xyz")
         views.append(RectifiedView(
             frame_id=int(view["frame_id"]),
             view_index=view_index,
@@ -351,6 +356,22 @@ def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
             rgb=view.get("rgb"),
             rgb_size=tuple(view["rgb_size"]) if view.get("rgb_size") else None,
             raise_uv_per_cm=tuple(view.get("raise_uv_per_cm", (0.0, 0.0))),
+            topdownness=(
+                None if view.get("topdownness") is None
+                else float(view["topdownness"])
+            ),
+            sharpness_score=(
+                None if view.get("sharpness") is None
+                else float(view["sharpness"])
+            ),
+            camera_position_table_xyz=(
+                None if camera_position is None
+                else tuple(float(value) for value in camera_position)
+            ),
+            camera_bearing_deg=(
+                None if view.get("camera_bearing_deg") is None
+                else float(view["camera_bearing_deg"])
+            ),
         ))
     return manifest, views
 

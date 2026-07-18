@@ -113,6 +113,44 @@ def test_v1_falls_back_to_rectified_crop(tmp_path, monkeypatch):
     assert result.id_crops[0]["rgb"] is None  # provenance marks the fallback
 
 
+def test_load_views_accepts_optional_camera_geometry(tmp_path):
+    from pipeline.multiview import load_views
+
+    manifest_path = _write_session(tmp_path / "session", with_bridge=True)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["version"] = 3
+    manifest["views"][0].update({
+        "topdownness": 0.93,
+        "sharpness": 117.5,
+        "camera_position_table_xyz": [0.1, -0.2, 0.4],
+        "camera_bearing_deg": 296.5,
+    })
+    manifest_path.write_text(json.dumps(manifest))
+
+    _, views = load_views(manifest_path)
+
+    assert views[0].topdownness == pytest.approx(0.93)
+    assert views[0].sharpness_score == pytest.approx(117.5)
+    assert views[0].camera_position_table_xyz == pytest.approx((0.1, -0.2, 0.4))
+    assert views[0].camera_bearing_deg == pytest.approx(296.5)
+
+
+def test_legacy_v3_view_geometry_defaults_to_unavailable(tmp_path):
+    from pipeline.multiview import load_views
+
+    manifest_path = _write_session(tmp_path / "session", with_bridge=True)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["version"] = 3
+    manifest_path.write_text(json.dumps(manifest))
+
+    _, views = load_views(manifest_path)
+
+    assert views[0].topdownness is None
+    assert views[0].sharpness_score is None
+    assert views[0].camera_position_table_xyz is None
+    assert views[0].camera_bearing_deg is None
+
+
 def _obs(view_index, box, complete, clearance=10.0):
     from pipeline.color import PALETTE
     from pipeline.multiview import Observation
