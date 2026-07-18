@@ -1,0 +1,169 @@
+export const MAX_MODEL_PIECES = 100;
+
+export const PART_HEIGHTS = {
+  brick: 3,
+  plate: 1,
+};
+
+export const SUPPORTED_PARTS = {
+  3005: {
+    label: "1x1 brick",
+    category: "brick",
+    part_id: "3005",
+    ldraw_id: "3005.dat",
+    width: 1,
+    depth: 1,
+  },
+  3004: {
+    label: "1x2 brick",
+    category: "brick",
+    part_id: "3004",
+    ldraw_id: "3004.dat",
+    width: 1,
+    depth: 2,
+  },
+  3622: {
+    label: "1x3 brick",
+    category: "brick",
+    part_id: "3622",
+    ldraw_id: "3622.dat",
+    width: 1,
+    depth: 3,
+  },
+  3010: {
+    label: "1x4 brick",
+    category: "brick",
+    part_id: "3010",
+    ldraw_id: "3010.dat",
+    width: 1,
+    depth: 4,
+  },
+  3009: {
+    label: "1x6 brick",
+    category: "brick",
+    part_id: "3009",
+    ldraw_id: "3009.dat",
+    width: 1,
+    depth: 6,
+  },
+  3008: {
+    label: "1x8 brick",
+    category: "brick",
+    part_id: "3008",
+    ldraw_id: "3008.dat",
+    width: 1,
+    depth: 8,
+  },
+  3003: {
+    label: "2x2 brick",
+    category: "brick",
+    part_id: "3003",
+    ldraw_id: "3003.dat",
+    width: 2,
+    depth: 2,
+  },
+  3002: {
+    label: "2x3 brick",
+    category: "brick",
+    part_id: "3002",
+    ldraw_id: "3002.dat",
+    width: 2,
+    depth: 3,
+  },
+  3001: {
+    label: "2x4 brick",
+    category: "brick",
+    part_id: "3001",
+    ldraw_id: "3001.dat",
+    width: 2,
+    depth: 4,
+  },
+  3023: {
+    label: "1x2 plate",
+    category: "plate",
+    part_id: "3023",
+    ldraw_id: "3023.dat",
+    width: 1,
+    depth: 2,
+  },
+  3710: {
+    label: "1x4 plate",
+    category: "plate",
+    part_id: "3710",
+    ldraw_id: "3710.dat",
+    width: 1,
+    depth: 4,
+  },
+  3666: {
+    label: "1x6 plate",
+    category: "plate",
+    part_id: "3666",
+    ldraw_id: "3666.dat",
+    width: 1,
+    depth: 6,
+  },
+  3022: {
+    label: "2x2 plate",
+    category: "plate",
+    part_id: "3022",
+    ldraw_id: "3022.dat",
+    width: 2,
+    depth: 2,
+  },
+  3020: {
+    label: "2x4 plate",
+    category: "plate",
+    part_id: "3020",
+    ldraw_id: "3020.dat",
+    width: 2,
+    depth: 4,
+  },
+  3031: {
+    label: "4x4 plate",
+    category: "plate",
+    part_id: "3031",
+    ldraw_id: "3031.dat",
+    width: 4,
+    depth: 4,
+  },
+  3032: {
+    label: "4x6 plate",
+    category: "plate",
+    part_id: "3032",
+    ldraw_id: "3032.dat",
+    width: 4,
+    depth: 6,
+  },
+  3035: {
+    label: "4x8 plate",
+    category: "plate",
+    part_id: "3035",
+    ldraw_id: "3035.dat",
+    width: 4,
+    depth: 8,
+  },
+};
+
+export function getPartDimensions(partId, rotation = 0) {
+  const part = SUPPORTED_PARTS[partId];
+
+  if (!part) {
+    return null;
+  }
+
+  const normalizedRotation = ((rotation % 360) + 360) % 360;
+
+  if (normalizedRotation === 90 || normalizedRotation === 270) {
+    return {
+      width: part.depth,
+      depth: part.width,
+      height: PART_HEIGHTS[part.category] ?? PART_HEIGHTS.brick,
+    };
+  }
+
+  return {
+    width: part.width,
+    depth: part.depth,
+    height: PART_HEIGHTS[part.category] ?? PART_HEIGHTS.brick,
+  };
+}

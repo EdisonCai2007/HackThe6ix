@@ -1,0 +1,132 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  getPartDimensions,
+  MAX_MODEL_PIECES,
+  SUPPORTED_PARTS,
+} from "../../src/generation/partCatalog.js";
+
+describe("supported part catalog", () => {
+  it("uses the documented MVP max model piece count", () => {
+    assert.equal(MAX_MODEL_PIECES, 100);
+  });
+
+  it("includes longer 1-wide bricks with brick-height dimensions", () => {
+    assert.deepEqual(SUPPORTED_PARTS["3010"], {
+      label: "1x4 brick",
+      category: "brick",
+      part_id: "3010",
+      ldraw_id: "3010.dat",
+      width: 1,
+      depth: 4,
+    });
+    assert.deepEqual(getPartDimensions("3010", 90), {
+      width: 4,
+      depth: 1,
+      height: 3,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3009"], {
+      label: "1x6 brick",
+      category: "brick",
+      part_id: "3009",
+      ldraw_id: "3009.dat",
+      width: 1,
+      depth: 6,
+    });
+    assert.deepEqual(getPartDimensions("3009"), {
+      width: 1,
+      depth: 6,
+      height: 3,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3008"], {
+      label: "1x8 brick",
+      category: "brick",
+      part_id: "3008",
+      ldraw_id: "3008.dat",
+      width: 1,
+      depth: 8,
+    });
+    assert.deepEqual(getPartDimensions("3008", 270), {
+      width: 8,
+      depth: 1,
+      height: 3,
+    });
+  });
+
+  it("includes longer 1-wide plates with plate-height dimensions", () => {
+    assert.deepEqual(SUPPORTED_PARTS["3710"], {
+      label: "1x4 plate",
+      category: "plate",
+      part_id: "3710",
+      ldraw_id: "3710.dat",
+      width: 1,
+      depth: 4,
+    });
+    assert.deepEqual(getPartDimensions("3710"), {
+      width: 1,
+      depth: 4,
+      height: 1,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3666"], {
+      label: "1x6 plate",
+      category: "plate",
+      part_id: "3666",
+      ldraw_id: "3666.dat",
+      width: 1,
+      depth: 6,
+    });
+    assert.deepEqual(getPartDimensions("3666", 90), {
+      width: 6,
+      depth: 1,
+      height: 1,
+    });
+  });
+
+  it("includes larger 4-wide plates with plate-height dimensions", () => {
+    assert.deepEqual(SUPPORTED_PARTS["3031"], {
+      label: "4x4 plate",
+      category: "plate",
+      part_id: "3031",
+      ldraw_id: "3031.dat",
+      width: 4,
+      depth: 4,
+    });
+    assert.deepEqual(getPartDimensions("3031"), {
+      width: 4,
+      depth: 4,
+      height: 1,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3032"], {
+      label: "4x6 plate",
+      category: "plate",
+      part_id: "3032",
+      ldraw_id: "3032.dat",
+      width: 4,
+      depth: 6,
+    });
+    assert.deepEqual(getPartDimensions("3032", 90), {
+      width: 6,
+      depth: 4,
+      height: 1,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3035"], {
+      label: "4x8 plate",
+      category: "plate",
+      part_id: "3035",
+      ldraw_id: "3035.dat",
+      width: 4,
+      depth: 8,
+    });
+    assert.deepEqual(getPartDimensions("3035", 90), {
+      width: 8,
+      depth: 4,
+      height: 1,
+    });
+  });
+});
