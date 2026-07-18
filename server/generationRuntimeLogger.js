@@ -13,6 +13,39 @@ function serializeError(error) {
   };
 }
 
+export function redactInlineImagesForLogging(value) {
+  if (Array.isArray(value)) {
+    return value.map(redactInlineImagesForLogging);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const redacted = {};
+
+  for (const [key, child] of Object.entries(value)) {
+    if (
+      key === "inlineData" &&
+      child &&
+      typeof child === "object" &&
+      typeof child.data === "string"
+    ) {
+      redacted[key] = {
+        ...child,
+        data: "[base64 image omitted from JSONL]",
+        encodedBytes: Buffer.byteLength(child.data, "utf8"),
+        decodedBytes: Buffer.from(child.data, "base64").length,
+      };
+      continue;
+    }
+
+    redacted[key] = redactInlineImagesForLogging(child);
+  }
+
+  return redacted;
+}
+
 export function createGenerationRuntimeLogger({
   rootDir = process.env.GENERATION_LOG_DIR ?? "logs/generation",
   now = () => new Date(),
@@ -55,7 +88,63 @@ export function createGenerationRuntimeLogger({
 export function createLoggedGenerationClient({ client, logger, now = () => new Date() }) {
   let callSequence = 0;
 
+  async function* loggedStream(request, metadata = {}) {
+    callSequence += 1;
+    const callId = `${logger.runId}-call-${callSequence}`;
+    const startedAt = now();
+    const common = {
+      callId,
+      phase: metadata.phase ?? "unknown",
+      stage: metadata.stage ?? "unknown",
+      label: metadata.label ?? metadata.stage ?? "AI call",
+      model: request?.model,
+    };
+    logger.write({
+      type: "ai_request",
+      ...common,
+      request: redactInlineImagesForLogging(request),
+      streaming: true,
+    });
+    let responseText = "";
+    let responseMetadata;
+    try {
+      const source = typeof client.streamWithMetadata === "function"
+        ? client.streamWithMetadata(request, metadata)
+        : client.stream(request, metadata);
+      for await (const item of source) {
+        const normalized = typeof item === "string" ? { text: item } : item;
+        const text = normalized?.text ?? "";
+        responseText += text;
+        responseMetadata = normalized?.metadata ?? responseMetadata;
+        logger.write({ type: "ai_stream_chunk", ...common, text, ...(normalized?.metadata ? { metadata: normalized.metadata } : {}) });
+        yield normalized;
+      }
+      logger.write({
+        type: "ai_response",
+        ...common,
+        durationMs: now().getTime() - startedAt.getTime(),
+        responseText,
+        ...(responseMetadata ? { responseMetadata } : {}),
+        streaming: true,
+      });
+    } catch (error) {
+      logger.write({
+        type: "ai_error",
+        ...common,
+        durationMs: now().getTime() - startedAt.getTime(),
+        error: serializeError(error),
+        responseText,
+        streaming: true,
+      });
+      throw error;
+    }
+  }
+
   return {
+    streamWithMetadata: loggedStream,
+    async *stream(request, metadata = {}) {
+      for await (const item of loggedStream(request, metadata)) yield item.text ?? item;
+    },
     async complete(request, metadata = {}) {
       callSequence += 1;
       const callId = `${logger.runId}-call-${callSequence}`;
@@ -71,7 +160,7 @@ export function createLoggedGenerationClient({ client, logger, now = () => new D
       logger.write({
         type: "ai_request",
         ...common,
-        request,
+        request: redactInlineImagesForLogging(request),
       });
 
       try {

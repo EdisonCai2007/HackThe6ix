@@ -170,4 +170,29 @@ describe("generation runtime logger", () => {
       await rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it("logs streaming chunks and a terminal completion event", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "generation-runtime-logger-"));
+    try {
+      const logger = createGenerationRuntimeLogger({ rootDir, pid: 1234 });
+      const rawClient = {
+        async *streamWithMetadata() {
+          yield { text: "{\"bricks\":[", metadata: {} };
+          yield { text: "]}", metadata: { finishReason: "STOP" } };
+        },
+      };
+      const client = createLoggedGenerationClient({ client: rawClient, logger });
+      const output = [];
+      for await (const item of client.streamWithMetadata({ model: "gemini-test-model" }, { phase: "placing", stage: "placement_generate" })) {
+        output.push(item.text);
+      }
+      assert.deepEqual(output, ['{"bricks":[', "]}"]);
+      const events = await readJsonLines(logger.filePath);
+      assert.deepEqual(events.map((event) => event.type), ["runtime_start", "ai_request", "ai_stream_chunk", "ai_stream_chunk", "ai_response"]);
+      assert.equal(events.at(-1).responseText, '{"bricks":[]}');
+      assert.equal(events.at(-1).responseMetadata.finishReason, "STOP");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });
