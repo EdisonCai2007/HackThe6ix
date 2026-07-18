@@ -350,7 +350,7 @@ Commit in CV: `git commit -m "feat: load capture view geometry"`
 - Produces `RegularDimensions(kind, studs_short, studs_long, short_mm, long_mm)` from `parse_regular_dimensions(name)`.
 - Produces `DimensionDecision(identification, action, flag, candidate_scores, proposed_family, reason)` with `to_dict()`.
 - Produces `resolve_dimensions(identification, metric: MetricSilhouette) -> DimensionDecision`.
-- Initial conservative compatibility tolerance is `max(6.0 mm, 0.20 * expected_dimension_mm)` per dimension; it is recorded in provenance and not represented as LEGO manufacturing tolerance.
+- Initial conservative compatibility tolerance is `max(8.0 mm, 0.35 * expected_dimension_mm)` per dimension; it is recorded in provenance and not represented as LEGO manufacturing tolerance. The wider projection bound was frozen after shadow mode showed a known 4×12 plate at 42.3 mm across its nominal 31.8 mm side, while the side-lying 1×3-versus-2×3 conflict still exceeded the 8 mm small-side allowance.
 
 - [ ] **Step 1: Write failing parser and resolver tests**
 
@@ -380,7 +380,7 @@ Expected: collection fails because `pipeline.dimensions` does not exist.
 
 - [ ] **Step 3: Implement parsing, errors, and conservative resolver**
 
-Use exact regex `^(Brick|Plate) (\d+) x (\d+)$`; expected millimetres are sorted `(n * 8 - 0.2, m * 8 - 0.2)`. Calculate normalized excess beyond the recorded per-side tolerance. Low/unavailable evidence only records `insufficient_metric_evidence`. Medium evidence can soft-rank/flag but cannot change IDs. High evidence may select an existing candidate with score at least `0.50` only when it fits and the raw candidate exceeds tolerance by a clear uncertainty margin. If all modeled candidates mismatch, preserve raw and flag; derive a size-family proposal by rounding `(measured_mm + 0.2) / 8` but never assign a new part ID or Brick/Plate kind.
+Use exact regex `^(Brick|Plate) (\d+) x (\d+)$`; expected millimetres are sorted `(n * 8 - 0.2, m * 8 - 0.2)`. Calculate normalized excess beyond the recorded per-side tolerance. Low/unavailable evidence only records `insufficient_metric_evidence`. Medium evidence can soft-rank/flag but cannot change IDs. High evidence may select an existing candidate with score at least `0.50` only when it fits and the raw candidate exceeds tolerance. If all modeled candidates mismatch, preserve raw and flag. Build the proposed family by retaining each raw stud dimension already inside tolerance and rounding only conflicting dimensions; this produces the inspectable `2 x 3` proposal for the side-lying raw `1 x 3` without inventing a part ID or Brick/Plate kind.
 
 - [ ] **Step 4: Integrate the ordered evidence chain**
 

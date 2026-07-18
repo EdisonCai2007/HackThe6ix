@@ -18,6 +18,7 @@ from pipeline.color import (
     normalize_illumination,
 )
 from pipeline.detect import Box, crop_box, detect
+from pipeline.dimensions import resolve_dimensions
 from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
@@ -840,6 +841,7 @@ def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
 def _attach_metric_silhouettes(instances, views, id_crops, px_per_m):
     """Serialize polygon measurements without changing identification."""
     by_index = {view.view_index: view for view in views}
+    aggregates = []
     for instance, info in zip(instances, id_crops):
         measurements = [
             measure_observation(
@@ -850,10 +852,35 @@ def _attach_metric_silhouettes(instances, views, id_crops, px_per_m):
             for observation in instance.observations
         ]
         aggregate = aggregate_measurements(measurements)
+        aggregates.append(aggregate)
         info["metric_silhouette"] = {
             "action": "shadow_only",
             "evidence": aggregate.to_dict(),
         }
+    return aggregates
+
+
+def _apply_dimension_consistency(
+    identifications, metric_silhouettes, id_crops, manifest
+):
+    selection = manifest.get("selection") or {}
+    angle_diverse = selection.get("angle_diverse")
+    for index, (identification, metric, info) in enumerate(zip(
+        identifications, metric_silhouettes, id_crops
+    )):
+        decision = resolve_dimensions(identification, metric)
+        info["metric_silhouette"]["action"] = decision.action
+        info["metric_silhouette"]["decision"] = decision.to_dict()
+        flags = []
+        if decision.flag is not None:
+            flags.append(decision.flag)
+        if angle_diverse is False:
+            flags.append("insufficient_view_diversity")
+        elif angle_diverse is None:
+            flags.append("view_diversity_unknown")
+        info["flags"] = flags
+        identifications[index] = decision.identification
+    return identifications
 
 
 def scan_manifest(
@@ -904,8 +931,11 @@ def scan_manifest(
                            for candidate in identification.candidates],
         }
     identified = time.perf_counter()
-    _attach_metric_silhouettes(
+    metric_silhouettes = _attach_metric_silhouettes(
         instances, views, id_crops, manifest["px_per_m"]
+    )
+    identifications = _apply_dimension_consistency(
+        identifications, metric_silhouettes, id_crops, manifest
     )
     identifications = _apply_stud_advisory(
         instances, views, identifications, crops, id_crops,

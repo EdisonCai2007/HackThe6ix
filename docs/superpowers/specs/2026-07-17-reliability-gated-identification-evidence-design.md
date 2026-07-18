@@ -288,6 +288,14 @@ Metric evidence runs before the stud advisory. The final decision record
 contains raw candidate ranking, metric action, stud action, and final choice so
 no sequential heuristic erases the reason for a change.
 
+The initial implementation freezes a conservative projection tolerance of
+`max(8 mm, 35% of the nominal side)`. This is explicitly a silhouette
+projection bound, not LEGO manufacturing tolerance. Shadow output required
+the wider bound because the known 4 x 12 plate measured about 42.3 mm on its
+nominal 31.8 mm side; the side-lying raw 1 x 3 still conflicts on its nominal
+7.8 mm side at about 17 mm. Any later tightening requires verified calibration
+and cannot use held-out output.
+
 Unknown-size rescue is conservative: high-reliability dimensions may expose a
 regular dimension family such as `2 x 12`, but without appearance evidence the
 system emits candidates requiring confirmation rather than inventing a final

@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,6 +8,8 @@ from training.acceptance import (
     acceptance_report,
     load_acceptance,
     match_acceptance,
+    predictions_from_result,
+    worksheet_from_result,
     worksheet_from_predictions,
 )
 
@@ -103,3 +106,41 @@ def test_worksheet_marks_every_generated_row_unverified():
     assert worksheet["session_id"] == "20260717-202103"
     assert worksheet["pieces"][0]["user_verified"] is False
     assert worksheet["pieces"][0]["expected_part_id"] == "3001"
+
+
+def test_result_predictions_preserve_raw_to_final_evidence_chain():
+    best = SimpleNamespace(
+        box=(10, 20, 30, 40),
+        color=SimpleNamespace(name="blue"),
+    )
+    instance = SimpleNamespace(
+        best=best,
+        observations=[SimpleNamespace(frame_id=7), SimpleNamespace(frame_id=9)],
+    )
+    id_crop = {
+        "brickognize_raw": {
+            "part_id": "3622", "name": "Brick 1 x 3", "score": 0.77,
+        },
+        "metric_silhouette": {
+            "action": "flagged", "decision": {"flag": "possible_non_canonical_pose"},
+        },
+        "stud": {"count": 0, "action": "unreliable"},
+        "brickognize": {
+            "part_id": "3622", "name": "Brick 1 x 3", "score": 0.77,
+        },
+        "flags": ["possible_non_canonical_pose"],
+    }
+    result = SimpleNamespace(
+        manifest={"origin_xy": [1.0, 2.0], "px_per_m": 100.0},
+        instances=[instance],
+        id_crops=[id_crop],
+    )
+
+    predictions = predictions_from_result(result)
+    worksheet = worksheet_from_result("session", result)
+
+    assert predictions[0]["anchor_table_xy_m"] == pytest.approx([1.2, 2.3])
+    assert predictions[0]["raw_part_id"] == "3622"
+    assert predictions[0]["metric_action"] == "flagged"
+    assert predictions[0]["observation_frames"] == [7, 9]
+    assert worksheet["pieces"][0]["user_verified"] is False

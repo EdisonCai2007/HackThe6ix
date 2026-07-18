@@ -168,6 +168,27 @@ def acceptance_report(
             "predicted_id": match.predicted_id,
             "distance_m": match.distance_m,
             "part_correct": part_correct,
+            "expected": {
+                "part_id": truth.expected_part_id,
+                "name": truth.expected_name,
+                "color": truth.expected_color,
+                "pose": truth.pose,
+            },
+            "brickognize_raw": {
+                "part_id": result.get("raw_part_id"),
+                "name": result.get("raw_name"),
+                "score": result.get("raw_score"),
+            },
+            "final": {
+                "part_id": result.get("part_id"),
+                "name": result.get("name"),
+                "score": result.get("score"),
+                "color": result.get("color"),
+            },
+            "stud": result.get("stud"),
+            "metric_silhouette": result.get("metric_silhouette"),
+            "observation_frames": result.get("observation_frames", []),
+            "flags": result.get("flags", []),
         })
     return {
         "verified_piece_count": len(verified),
@@ -204,6 +225,48 @@ def worksheet_from_predictions(session_id: str, predicted: list[dict]) -> dict:
         "ground_truth_status": "unverified_review_worksheet",
         "pieces": pieces,
     }
+
+
+def predictions_from_result(result) -> list[dict]:
+    """Convert a scan result into stable table-anchor acceptance rows."""
+    origin_x, origin_y = result.manifest["origin_xy"]
+    px_per_m = float(result.manifest["px_per_m"])
+    predictions = []
+    for index, (instance, info) in enumerate(zip(
+        result.instances, result.id_crops
+    )):
+        x0, y0, x1, y1 = instance.best.box
+        raw = info.get("brickognize_raw") or {}
+        final = info.get("brickognize") or {}
+        metric = info.get("metric_silhouette") or {}
+        predictions.append({
+            "instance_id": f"piece-{index:03d}",
+            "anchor_table_xy_m": [
+                origin_x + (x0 + x1) / (2.0 * px_per_m),
+                origin_y + (y0 + y1) / (2.0 * px_per_m),
+            ],
+            "raw_part_id": raw.get("part_id"),
+            "raw_name": raw.get("name"),
+            "raw_score": raw.get("score"),
+            "part_id": final.get("part_id"),
+            "name": final.get("name"),
+            "score": final.get("score"),
+            "color": instance.best.color.name,
+            "stud": info.get("stud"),
+            "metric_silhouette": metric,
+            "metric_action": metric.get("action"),
+            "observation_frames": [
+                observation.frame_id for observation in instance.observations
+            ],
+            "flags": list(info.get("flags", [])),
+        })
+    return predictions
+
+
+def worksheet_from_result(session_id: str, result) -> dict:
+    return worksheet_from_predictions(
+        session_id, predictions_from_result(result)
+    )
 
 
 def dump_acceptance(payload: dict, path: str | Path) -> Path:

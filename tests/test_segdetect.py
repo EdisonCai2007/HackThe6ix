@@ -230,6 +230,55 @@ def test_segmented_scan_uses_true_instance_mask_for_original_crop(
     assert result.id_crops[0]["source_instance_id"] == "fake-0"
     assert result.id_crops[0]["segmentation_confidence"] == pytest.approx(0.92)
     metric = result.id_crops[0]["metric_silhouette"]
-    assert metric["action"] == "shadow_only"
+    assert metric["action"] == "insufficient_metric_evidence"
     assert metric["evidence"]["reliability"] == "low"
     assert metric["evidence"]["used_frame_ids"] == [1]
+
+
+def test_scan_orders_raw_id_then_metric_decision_then_final_id(
+    tmp_path, monkeypatch
+):
+    import pipeline.multiview
+    from pipeline.footprint import MetricSilhouette
+    from pipeline.identify import Identification
+    from pipeline.studs import StudEvidence
+
+    manifest = _write_v3_fixture(tmp_path)
+    manifest["selection"] = {"angle_diverse": True}
+    path = tmp_path / "session/multiview/manifest.json"
+    path.write_text(json.dumps(manifest))
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_all",
+        lambda crops, **kwargs: [Identification(
+            "3622", "Brick 1 x 3", None, 0.78, candidates=(
+                {"part_id": "3622", "name": "Brick 1 x 3", "score": 0.78},
+                {"part_id": "3002", "name": "Brick 2 x 3", "score": 0.60},
+            )
+        ) for _ in crops],
+    )
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "aggregate_measurements",
+        lambda measurements: MetricSilhouette(
+            17.5, 24.0, "high", tuple(measurements), (1, 2), (),
+            (1.0, 1.0), "fixture",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "analyze_studs",
+        lambda *args, **kwargs: StudEvidence(
+            0, "low", "not_visible", False, 100.0, (), "fixture"
+        ),
+    )
+
+    result = pipeline.multiview.scan_manifest(
+        path, detector="seg", seg_model=_FakeModel()
+    )
+
+    evidence = result.id_crops[0]
+    assert evidence["brickognize_raw"]["part_id"] == "3622"
+    assert evidence["metric_silhouette"]["action"] == "corrected"
+    assert evidence["stud"]["action"] == "unreliable"
+    assert evidence["brickognize"]["part_id"] == "3002"
