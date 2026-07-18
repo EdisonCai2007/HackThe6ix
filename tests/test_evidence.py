@@ -57,6 +57,36 @@ def test_stud_and_two_view_identity_support_can_correct_unprotected_raw():
     )
 
 
+def test_high_reliability_metric_rejection_protects_current_identity():
+    from pipeline.evidence import arbitrate_identification
+
+    current = _ident("3008", "Brick 1 x 8", 0.79)
+    outcome = arbitrate_identification(
+        current=current,
+        dimension_action="flagged",
+        dimension_evidence={
+            "evidence": {"reliability": "high"},
+            "decision": {
+                "candidate_scores": [{
+                    "part_id": "3028",
+                    "name": "Plate 6 x 12",
+                    "modeled": True,
+                    "fits": False,
+                }],
+            },
+        },
+        stud_proposal=_ident("3028", "Plate 6 x 12", 0.75),
+        stud_action="corrected",
+        identity_support={"3028": 2},
+    )
+
+    assert outcome.identification is current
+    assert outcome.action == "conflict_preserved"
+    assert outcome.reason == (
+        "high-reliability metric evidence rejects the proposed identity"
+    )
+
+
 def test_compatible_stud_evidence_leaves_identity_unchanged():
     from pipeline.evidence import arbitrate_identification
 

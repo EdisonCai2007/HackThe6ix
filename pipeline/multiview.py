@@ -34,6 +34,7 @@ from pipeline.studs import (
 SECOND_CHANCE_MAX_ALTERNATES = 3
 SEG_SINGLETON_MIN_CONFIDENCE = 0.50
 SEG_ID_REVIEW_SCORE = 0.85
+CONFIRMATION_REASSIGN_MAX_SCORE = 0.15
 
 
 _COLOR_FAMILY = {
@@ -298,7 +299,7 @@ def reassign_confirmation_only_instances(
     ]
     confirmation_only = [
         instance for instance in working
-        if instance.observations
+        if len(instance.observations) >= 2
         and all(
             roles.get(observation.view_index) == "confirmation"
             for observation in instance.observations
@@ -317,6 +318,9 @@ def reassign_confirmation_only_instances(
         assignments: list[tuple[Observation, FusedInstance]] = []
         for observation in orphan.observations:
             candidates: list[tuple[float, FusedInstance]] = []
+            observation_family = _COLOR_FAMILY.get(
+                observation.color.name, observation.color.name
+            )
             for anchor in anchors:
                 if any(
                     existing.view_index == observation.view_index
@@ -326,6 +330,9 @@ def reassign_confirmation_only_instances(
                 scores = [
                     score
                     for existing in anchor.observations
+                    if _COLOR_FAMILY.get(
+                        existing.color.name, existing.color.name
+                    ) == observation_family
                     if (
                         score := _compatibility(
                             observation, existing, min_area_ratio=0.20
@@ -338,6 +345,9 @@ def reassign_confirmation_only_instances(
             if not candidates:
                 assignments = []
                 break
+            if candidates[0][0] > CONFIRMATION_REASSIGN_MAX_SCORE:
+                assignments = []
+                break
             # A very small score gap means geometry does not identify a
             # unique physical anchor. Keep the orphan intact in that case.
             if (
@@ -348,7 +358,11 @@ def reassign_confirmation_only_instances(
                 break
             assignments.append((observation, candidates[0][1]))
 
-        if len(assignments) != len(orphan.observations):
+        if (
+            len(assignments) != len(orphan.observations)
+            or len({id(anchor) for _, anchor in assignments})
+            != len(assignments)
+        ):
             continue
         for observation, anchor in assignments:
             anchor.observations.append(observation)
@@ -1116,6 +1130,7 @@ def _apply_stud_advisory(
         outcome = arbitrate_identification(
             current=ident,
             dimension_action=dimension_action,
+            dimension_evidence=info.get("metric_silhouette", {}),
             stud_proposal=proposal,
             stud_action=proposal_action,
             identity_support=info.get("identity_support", {}),

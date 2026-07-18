@@ -53,4 +53,3 @@ def test_zero_confidence_pixels_are_rejected():
 
     assert evidence.usable_pixels == 4
     assert evidence.confidence_counts == {"2": 4}
-

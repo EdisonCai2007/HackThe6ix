@@ -29,6 +29,7 @@ def arbitrate_identification(
     stud_proposal: Identification,
     stud_action: str,
     identity_support: dict[str, int],
+    dimension_evidence: dict | None = None,
 ) -> ArbitrationOutcome:
     """Require two evidence categories before accepting a stud proposal."""
     if (
@@ -55,6 +56,34 @@ def arbitrate_identification(
             "conflict_preserved",
             tuple(supports),
             "stud evidence cannot demote an identity by itself",
+        )
+    metric_rejects_proposal = False
+    if (
+        dimension_evidence
+        and dimension_evidence.get("evidence", {}).get("reliability")
+        == "high"
+    ):
+        for candidate in dimension_evidence.get(
+            "decision", {}
+        ).get("candidate_scores", []):
+            same_candidate = (
+                candidate.get("part_id") == stud_proposal.part_id
+                if stud_proposal.part_id is not None
+                else candidate.get("name") == stud_proposal.name
+            )
+            if (
+                same_candidate
+                and candidate.get("modeled") is True
+                and candidate.get("fits") is False
+            ):
+                metric_rejects_proposal = True
+                break
+    if metric_rejects_proposal:
+        return ArbitrationOutcome(
+            current,
+            "conflict_preserved",
+            tuple(supports),
+            "high-reliability metric evidence rejects the proposed identity",
         )
     if dimension_action in {"compatible", "corrected"}:
         return ArbitrationOutcome(

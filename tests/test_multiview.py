@@ -284,6 +284,77 @@ def test_confirmation_only_cross_match_is_reassigned_to_coverage_anchors():
     assert len({obs.view_index for obs in white_result.observations}) == 4
 
 
+def test_confirmation_only_piece_is_not_collapsed_into_one_coverage_anchor():
+    image = np.full((100, 120, 3), 220, dtype=np.uint8)
+    valid = np.full((100, 120), 255, dtype=np.uint8)
+    views = [
+        RectifiedView(
+            frame_id=index,
+            view_index=index,
+            image=image,
+            valid_mask=valid,
+            quality=1.0,
+            selection_role=("coverage" if index == 0 else "confirmation"),
+        )
+        for index in (0, 3, 4)
+    ]
+    anchor_obs = _obs(0, (40, 40, 70, 70), color="blue")
+    anchor_obs.view_index = 0
+    orphan_first = _obs(3, (41, 41, 71, 71), color="blue")
+    orphan_first.view_index = 3
+    orphan_second = _obs(4, (42, 42, 72, 72), color="blue")
+    orphan_second.view_index = 4
+    anchor = FusedInstance([anchor_obs], anchor_obs)
+    genuine_piece = FusedInstance(
+        [orphan_first, orphan_second], orphan_first
+    )
+
+    reassigned = reassign_confirmation_only_instances(
+        [anchor, genuine_piece], views
+    )
+
+    assert len(reassigned) == 2
+    assert any(
+        instance.observations == [orphan_first, orphan_second]
+        for instance in reassigned
+    )
+
+
+def test_confirmation_only_reassignment_requires_strong_geometry():
+    image = np.full((120, 220, 3), 220, dtype=np.uint8)
+    valid = np.full((120, 220), 255, dtype=np.uint8)
+    views = [
+        RectifiedView(
+            frame_id=index,
+            view_index=index,
+            image=image,
+            valid_mask=valid,
+            quality=1.0,
+            selection_role=("coverage" if index == 0 else "confirmation"),
+        )
+        for index in (0, 3, 4)
+    ]
+    blue_anchor_obs = _obs(0, (10, 20, 50, 60), color="blue")
+    blue_anchor_obs.view_index = 0
+    white_anchor_obs = _obs(0, (130, 20, 170, 60), color="white")
+    white_anchor_obs.view_index = 0
+    weak_blue = _obs(3, (35, 20, 75, 60), color="blue")
+    weak_blue.view_index = 3
+    weak_white = _obs(4, (155, 20, 195, 60), color="light gray")
+    weak_white.view_index = 4
+    blue_anchor = FusedInstance([blue_anchor_obs], blue_anchor_obs)
+    white_anchor = FusedInstance([white_anchor_obs], white_anchor_obs)
+    crossed = FusedInstance([weak_blue, weak_white], weak_blue)
+
+    reassigned = reassign_confirmation_only_instances(
+        [blue_anchor, white_anchor, crossed], views
+    )
+
+    assert len(reassigned) == 3
+    assert any(instance.observations == [weak_blue, weak_white]
+               for instance in reassigned)
+
+
 def test_mosaic_contains_one_intact_selected_object_without_source_ghost():
     first = np.full((100, 120, 3), 220, dtype=np.uint8)
     second = np.full((100, 120, 3), 235, dtype=np.uint8)
