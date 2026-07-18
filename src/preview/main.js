@@ -29,7 +29,9 @@ import {
 } from "./editorDeletion.js";
 import { STUD_LDU } from "./editorGeometry.js";
 import { createEditorHistory } from "./editorHistory.js";
+import { createIsometricSnapshotRenderer } from "./isometricSnapshotRenderer.js";
 import { nextToolAfterSelectionChange } from "./editorToolState.js";
+import { countInventoryBricks } from "./inventoryPieceCount.js";
 import { getInventorySessionId } from "./inventorySessions.js";
 import { createLeftPanelResizer } from "./leftPanelResize.js";
 import { placementOffsetForBox } from "./modelPlacement.js";
@@ -45,7 +47,6 @@ const validationStatus = document.querySelector("#validation-status");
 const form = document.querySelector("#generation-form");
 const promptInput = document.querySelector("#prompt-input");
 const inventorySelect = document.querySelector("#inventory-select");
-const targetPiecesInput = document.querySelector("#target-pieces");
 const generateButton = document.querySelector("#generate-button");
 const notesList = document.querySelector("#generation-notes");
 const validationErrors = document.querySelector("#validation-errors");
@@ -82,12 +83,10 @@ const rightDrawerToggle = document.querySelector("#right-drawer-toggle");
 const timelineStages = [
   { id: "structure_generate", label: "Structure generation" },
   { id: "structure_parse", label: "Structure JSON parse" },
-  { id: "structure_repair", label: "Structure JSON repair" },
   { id: "placement_generate", label: "Placement generation" },
   { id: "placement_parse", label: "Placement JSON parse" },
-  { id: "placement_repair", label: "Placement JSON repair" },
   { id: "validation", label: "Validation" },
-  { id: "validation_repair", label: "Validation repair" },
+  { id: "refinement", label: "Isometric refinement" },
 ];
 
 const timelineStatusLabels = {
@@ -99,12 +98,11 @@ const timelineStatusLabels = {
 };
 
 const resultStageTimelineMap = {
-  structure_parse: "structure_repair",
-  placement_parse: "placement_repair",
+  structure_parse: "structure_parse",
+  placement_parse: "placement_parse",
   placement_shape: "validation",
   validation: "validation",
-  validation_repair_parse: "validation_repair",
-  validation_repair_shape: "validation_repair",
+  refinement_context: "refinement",
 };
 
 const inventories = [
@@ -311,6 +309,7 @@ controls.dampingFactor = 0.08;
 controls.target.set(20, 40, 35);
 controls.minDistance = 90;
 controls.maxDistance = 650;
+const modelViewDirection = new THREE.Vector3(1.1, 0.75, 1.35).normalize();
 
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x252a32, 1.8);
 scene.add(hemiLight);
@@ -340,6 +339,7 @@ let selectedBrickId = null;
 let activeEditorTool = "hand";
 let catalogueRenderEpoch = 0;
 const catalogueThumbnailRenderer = createCatalogueThumbnailRenderer();
+const isometricSnapshotRenderer = createIsometricSnapshotRenderer();
 const editorHistory = createEditorHistory({ limit: 10 });
 const dropRaycaster = new THREE.Raycaster();
 const dropPointer = new THREE.Vector2();
@@ -366,6 +366,177 @@ function clearCurrentModel() {
   scene.remove(currentModelGroup);
   disposeModelGroup(currentModelGroup);
   currentModelGroup = null;
+}
+
+function zoomCameraOutToMaxDistance() {
+  const viewDirection = camera.position.clone().sub(controls.target);
+
+  if (!Number.isFinite(viewDirection.lengthSq()) || viewDirection.lengthSq() === 0) {
+    viewDirection.copy(modelViewDirection);
+  } else {
+    viewDirection.normalize();
+  }
+
+  camera.position.copy(controls.target).add(
+    viewDirection.multiplyScalar(controls.maxDistance),
+  );
+  controls.update();
+}
+
+function frameCameraForBox(box, { distanceMode = "initial" } = {}) {
+  if (box.isEmpty()) {
+    return false;
+  }
+
+  const size = box.getSize(new THREE.Vector3());
+  const target = box.getCenter(new THREE.Vector3());
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const frame = cameraFrameForModelSize(size, fov, { distanceMode });
+
+  controls.target.copy(target);
+  camera.position.copy(target).add(
+    modelViewDirection.clone().multiplyScalar(frame.distance),
+  );
+  camera.near = frame.near;
+  camera.far = frame.far;
+  camera.updateProjectionMatrix();
+  controls.minDistance = frame.minDistance;
+  controls.maxDistance = frame.maxDistance;
+  controls.update();
+  return true;
+}
+
+function frameBrickSceneCameraForGeneration() {
+  if (!brickScene) {
+    return false;
+  }
+
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(brickScene.root);
+  return frameCameraForBox(box, { distanceMode: "max" });
+}
+
+function isActiveStreamingRequest(generationRequest) {
+  return (
+    generationRequest === activeGenerationRequest &&
+    generationRequest?.streamEventsOpen !== false
+  );
+}
+
+function setCanvasGenerationLocked(locked) {
+  const generationLocked = Boolean(locked);
+
+  if (generationLocked) {
+    cancelCatalogueDrag();
+  }
+
+  editorControls?.setLocked?.(generationLocked);
+  controls.enabled = !generationLocked;
+  updateToolButtons();
+}
+
+function activateStreamingBrickScene(generationRequest) {
+  if (!isActiveStreamingRequest(generationRequest)) {
+    return false;
+  }
+
+  if (!brickScene) {
+    brickScene = createBrickScene(scene);
+  }
+
+  if (!generationRequest.streamingSceneActive || currentModelGroup) {
+    invalidateCurrentRender();
+    clearCurrentModel();
+    generationRequest.streamingSceneActive = true;
+  }
+
+  return true;
+}
+
+function modelFromBrickMap(model, bricksById) {
+  const bricks = [...bricksById.values()];
+  return {
+    ...model,
+    bricks,
+    piece_count: bricks.length,
+  };
+}
+
+function defaultStreamingModel(generationRequest) {
+  return {
+    model_name: "Streaming draft",
+    prompt: generationRequest.userPrompt,
+    piece_count: 0,
+    dimensions: { width_studs: 1, depth_studs: 1, height_layers: 1 },
+    created_from_inventory_id: generationRequest.inventory?.inventory_id ?? "streaming",
+    generator_version: "streaming",
+    bricks: [],
+    notes: ["Generation is still in progress."],
+  };
+}
+
+function replaceProvisionalModel(generationRequest, model) {
+  const bricksById = new Map();
+
+  for (const brick of model.bricks ?? []) {
+    if (brick?.id) {
+      bricksById.set(brick.id, brick);
+    }
+  }
+
+  generationRequest.provisionalBricks = bricksById;
+  generationRequest.provisionalModel = modelFromBrickMap(model, bricksById);
+  return generationRequest.provisionalModel;
+}
+
+function updateProvisionalBrick(generationRequest, brick) {
+  const bricksById = generationRequest.provisionalBricks ?? new Map(
+    (generationRequest.provisionalModel?.bricks ?? [])
+      .filter((candidate) => candidate?.id)
+      .map((candidate) => [candidate.id, candidate]),
+  );
+  generationRequest.provisionalBricks = bricksById;
+  bricksById.set(brick.id, brick);
+
+  const baseModel = generationRequest.provisionalModel ?? defaultStreamingModel(generationRequest);
+  generationRequest.provisionalModel = modelFromBrickMap(baseModel, bricksById);
+  return generationRequest.provisionalModel;
+}
+
+function showStreamingModel(
+  model,
+  validation,
+  generationRequest,
+  { statusText, statusLine, updateErrors = false } = {},
+) {
+  if (!activateStreamingBrickScene(generationRequest)) {
+    return false;
+  }
+
+  brickScene.setModel(model, { preserveRootPlacement: true });
+  brickScene.setInvalidBrickIds(brickIdsFromValidation(validation));
+  frameBrickSceneCameraForGeneration();
+  modelName.textContent = model.model_name;
+  pieceCount.textContent = String(model.piece_count);
+  validationStatus.textContent = statusText ?? (
+    validation.valid ? "Streaming preview (locked)" : "Streaming preview: invalid piece(s)"
+  );
+  setNotes(model.notes);
+
+  if (updateErrors) {
+    if (validation.valid) {
+      hideErrors();
+    } else {
+      showErrors(validation.errors);
+    }
+  }
+
+  if (statusLine) {
+    setStatusLine(statusLine, { loading: true });
+  }
+
+  generationRequest.hasRenderedDraft = true;
+  return true;
 }
 
 function hasBrick(model, brickId) {
@@ -451,6 +622,7 @@ function ensureEditorControls() {
     brickScene,
     getModel: () => currentEditorModel,
     setModel: setEditorModel,
+    isLocked: () => Boolean(activeGenerationRequest?.streamingLocked),
     onSelectionChange: (brickId) => {
       selectedBrickId = brickId;
       closeBrickContextMenu();
@@ -782,24 +954,12 @@ function renderModel(
       });
 
       const box = new THREE.Box3().setFromObject(group);
-      const size = box.getSize(new THREE.Vector3());
       group.position.add(placementOffsetForBox(box));
 
       scene.add(group);
       currentModelGroup = group;
-      controls.target.set(0, size.y / 2, 0);
-
-      const fov = THREE.MathUtils.degToRad(camera.fov);
-      const frame = cameraFrameForModelSize(size, fov);
-      const viewDirection = new THREE.Vector3(1.1, 0.75, 1.35).normalize();
-
-      camera.position.copy(viewDirection.multiplyScalar(frame.distance));
-      camera.near = frame.near;
-      camera.far = frame.far;
-      camera.updateProjectionMatrix();
-      controls.minDistance = frame.minDistance;
-      controls.maxDistance = frame.maxDistance;
-      controls.update();
+      scene.updateMatrixWorld(true);
+      frameCameraForBox(new THREE.Box3().setFromObject(group));
       onRendered?.();
     },
     (error) => {
@@ -855,6 +1015,9 @@ function showModel(model, validation, options = {}) {
   if (options.editorMode) {
     invalidateCurrentRender();
     enterEditorScene(model, options.editorInventory ?? selectedInventory());
+    if (options.generationRequest) {
+      frameBrickSceneCameraForGeneration();
+    }
     renderCatalogue();
     setStatusLine("Editing");
     options.onRendered?.();
@@ -883,17 +1046,18 @@ function setActiveTool(tool) {
 
 function updateToolButtons() {
   const availability = editorToolAvailability(selectedBrickId);
+  const generationLocked = Boolean(activeGenerationRequest?.streamingLocked);
 
-  undoTool.disabled = !currentEditorModel || !editorHistory.canUndo();
-  redoTool.disabled = !currentEditorModel || !editorHistory.canRedo();
+  undoTool.disabled = generationLocked || !currentEditorModel || !editorHistory.canUndo();
+  redoTool.disabled = generationLocked || !currentEditorModel || !editorHistory.canRedo();
 
   for (const [name, button] of Object.entries(toolButtons)) {
-    button.disabled = !availability[name];
+    button.disabled = generationLocked || !availability[name];
     button.classList.toggle("is-active", name === activeEditorTool);
     button.setAttribute("aria-pressed", String(name === activeEditorTool));
   }
 
-  deleteTool.disabled = !selectedBrickId;
+  deleteTool.disabled = generationLocked || !selectedBrickId;
 }
 
 function applyHistoryModel(model) {
@@ -1050,16 +1214,18 @@ instructionsButton.addEventListener("click", () => {
   showErrors(validation.errors);
 });
 
-async function requestGeneration(generationRequest) {
+async function requestInitialGeneration(generationRequest) {
   const inventoryId = await getInventorySessionId(generationRequest.inventory);
+  generationRequest.inventoryId = inventoryId;
   const response = await fetch("http://127.0.0.1:8787/api/generate/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userPrompt: promptInput.value,
+      userPrompt: generationRequest.userPrompt,
       inventory_id: inventoryId,
-      targetPieceCount: Number(targetPiecesInput.value),
+      targetPieceCount: generationRequest.targetPieceCount,
     }),
+    signal: generationRequest.controller.signal,
   });
 
   const result = await readGenerationStream(response, generationRequest);
@@ -1068,6 +1234,48 @@ async function requestGeneration(generationRequest) {
     throw result;
   }
 
+  generationRequest.initialResult = result;
+  return result;
+}
+
+async function requestRefinement(generationRequest, initialResult, image) {
+  const response = await fetch("http://127.0.0.1:8787/api/generate/refine", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({
+      refinementId: initialResult.refinementId,
+      image,
+    }),
+    signal: generationRequest.controller.signal,
+  });
+  const result = await readGenerationStream(response, generationRequest);
+
+  if (!response.ok || !result.ok) {
+    throw result;
+  }
+
+  return result;
+}
+
+async function requestGeneration(generationRequest) {
+  const initialResult = await requestInitialGeneration(generationRequest);
+
+  if (!isActiveStreamingRequest(generationRequest)) {
+    throw new DOMException("Generation request was superseded.", "AbortError");
+  }
+
+  setStatusLine("Rendering isometric refinement view", { loading: true });
+  const image = await isometricSnapshotRenderer.capture(
+    initialResult.cleanedModel ?? initialResult.model,
+  );
+
+  if (!isActiveStreamingRequest(generationRequest)) {
+    throw new DOMException("Generation request was superseded.", "AbortError");
+  }
+
+  updateTimelineStage("refinement", "running");
+  const result = await requestRefinement(generationRequest, initialResult, image);
+  updateTimelineStage("refinement", "complete");
   return result;
 }
 
@@ -1105,7 +1313,7 @@ function handleSseBlock(block, generationRequest) {
     return undefined;
   }
 
-  if (generationRequest !== activeGenerationRequest) {
+  if (!isActiveStreamingRequest(generationRequest)) {
     return undefined;
   }
 
@@ -1119,6 +1327,16 @@ function handleSseBlock(block, generationRequest) {
     return undefined;
   }
 
+  if (event.eventName === "brick") {
+    handleBrickEvent(event.payload, generationRequest);
+    return undefined;
+  }
+
+  if (event.eventName === "warning") {
+    generationRequest.streamWarnings = [...(generationRequest.streamWarnings ?? []), event.payload.warning];
+    return undefined;
+  }
+
   if (event.eventName === "result") {
     return event.payload;
   }
@@ -1126,8 +1344,20 @@ function handleSseBlock(block, generationRequest) {
   return undefined;
 }
 
+function handleBrickEvent(payload, generationRequest) {
+  if (!isActiveStreamingRequest(generationRequest) || !payload?.brick?.id) {
+    return;
+  }
+
+  const model = updateProvisionalBrick(generationRequest, payload.brick);
+  const validation = validateModel(model, generationRequest.inventory);
+  showStreamingModel(model, validation, generationRequest, {
+    statusLine: `${payload.phase === "repair" ? "Repair" : "Placement"}: ${model.piece_count} brick(s)`,
+  });
+}
+
 function handleDraftEvent(payload, generationRequest) {
-  if (generationRequest !== activeGenerationRequest) {
+  if (!isActiveStreamingRequest(generationRequest)) {
     return;
   }
 
@@ -1147,23 +1377,15 @@ function handleDraftEvent(payload, generationRequest) {
   };
 
   try {
-    showModel(payload.model, validation, {
-      statusText: payload.stage === "pruned_draft" ? "Repairing pruned draft" : "Repairing draft",
-      hideErrors: payload.stage === "placement_draft",
-      generationRequest,
-      onRendered: () => {
-        if (generationRequest === activeGenerationRequest) {
-          generationRequest.hasRenderedDraft = true;
-        }
-      },
-      onRenderError: (error) => {
-        if (generationRequest !== activeGenerationRequest) {
-          return;
-        }
+    const model = replaceProvisionalModel(generationRequest, payload.model);
+    const statusText = payload.stage === "cleaned_placement_draft"
+      ? "Refining cleaned draft"
+      : "Generating draft";
 
-        validationStatus.textContent = "Draft render error";
-        showErrors([error?.message ?? "Unknown draft render error"]);
-      },
+    showStreamingModel(model, validation, generationRequest, {
+      statusText,
+      statusLine: statusText,
+      updateErrors: true,
     });
   } catch (error) {
     validationStatus.textContent = "Draft render error";
@@ -1229,12 +1451,21 @@ window.addEventListener("resize", resize);
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  activeGenerationRequest?.controller.abort();
+  const inventory = selectedInventory();
   const generationRequest = {
     hasRenderedDraft: false,
-    inventory: selectedInventory(),
+    streamingLocked: true,
+    streamEventsOpen: true,
+    inventory,
+    userPrompt: promptInput.value.trim(),
+    targetPieceCount: countInventoryBricks(inventory),
+    controller: new AbortController(),
   };
   invalidateCurrentRender();
   activeGenerationRequest = generationRequest;
+  setCanvasGenerationLocked(true);
+  zoomCameraOutToMaxDistance();
   generateButton.disabled = true;
   validationStatus.textContent = "Generating";
   modelName.textContent = "Calling Backboard";
@@ -1249,6 +1480,9 @@ form.addEventListener("submit", async (event) => {
       return;
     }
 
+    generationRequest.streamingLocked = false;
+    generationRequest.streamEventsOpen = false;
+    setCanvasGenerationLocked(false);
     showModel(result.model, result.validation, {
       generationRequest,
       editorMode: true,
@@ -1256,6 +1490,51 @@ form.addEventListener("submit", async (event) => {
     });
   } catch (error) {
     if (activeGenerationRequest !== generationRequest) {
+      return;
+    }
+
+    generationRequest.streamEventsOpen = false;
+    generationRequest.recoveryAvailable = true;
+
+    if (generationRequest.provisionalModel?.bricks?.length) {
+      generationRequest.streamingLocked = false;
+      setCanvasGenerationLocked(false);
+      invalidateCurrentRender();
+      const partial = generationRequest.provisionalModel;
+      const partialValidation = {
+        valid: false,
+        errors: [{ field: "stream", message: "Generation did not complete; review this partial draft." }],
+        warnings: generationRequest.streamWarnings ?? [],
+      };
+      showModel(partial, partialValidation, {
+        statusText: "Incomplete streamed draft",
+        generationRequest,
+        editorMode: true,
+        editorInventory: generationRequest.inventory,
+      });
+      setStatusLine(error?.name === "AbortError"
+        ? "Generation canceled; partial draft preserved — retry available"
+        : "Generation failed; partial draft preserved — retry available");
+      return;
+    }
+
+    if (generationRequest.initialResult) {
+      generationRequest.streamingLocked = false;
+      setCanvasGenerationLocked(false);
+      const initialResult = generationRequest.initialResult;
+      updateTimelineStage("refinement", "failed");
+      showModel(initialResult.cleanedModel ?? initialResult.model, initialResult.validation, {
+        statusText: initialResult.validation.valid ? "Valid initial draft" : "Invalid initial draft",
+        generationRequest,
+        editorMode: true,
+        editorInventory: generationRequest.inventory,
+      });
+      setStatusLine("Editing initial draft (refinement unavailable) — retry available");
+      return;
+    }
+
+    if (error?.name === "AbortError") {
+      setStatusLine("Generation canceled");
       return;
     }
 
@@ -1273,7 +1552,10 @@ form.addEventListener("submit", async (event) => {
     showErrors(error.errors ?? [error.message ?? "Unknown generation error"]);
   } finally {
     if (activeGenerationRequest === generationRequest) {
+      generationRequest.streamEventsOpen = false;
+      generationRequest.streamingLocked = false;
       activeGenerationRequest = null;
+      setCanvasGenerationLocked(false);
       generateButton.disabled = false;
     }
   }
