@@ -1,0 +1,154 @@
+{
+  "inventory_id": "inv_2069a4c38bd04d6792d09b998ae2b1cc",
+  "source_inventory_id": "hot-red-car-demo",
+  "created_at": "2026-07-18T04:29:45.315Z",
+  "inventory": {
+    "inventory_id": "hot-red-car-demo",
+    "source": "manual_test_fixture",
+    "items": [
+      {
+        "label": "2x4 brick",
+        "category": "brick",
+        "part_id": "3001",
+        "ldraw_id": "3001.dat",
+        "rebrickable_part_num": "3001",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 34,
+        "supported": true
+      },
+      {
+        "label": "1x2 brick",
+        "category": "brick",
+        "part_id": "3004",
+        "ldraw_id": "3004.dat",
+        "rebrickable_part_num": "3004",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 16,
+        "supported": true
+      },
+      {
+        "label": "2x2 brick",
+        "category": "brick",
+        "part_id": "3003",
+        "ldraw_id": "3003.dat",
+        "rebrickable_part_num": "3003",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 0,
+        "supported": true
+      },
+      {
+        "label": "1x1 brick",
+        "category": "brick",
+        "part_id": "3005",
+        "ldraw_id": "3005.dat",
+        "rebrickable_part_num": "3005",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 16,
+        "supported": true
+      },
+      {
+        "label": "1x4 brick",
+        "category": "brick",
+        "part_id": "3010",
+        "ldraw_id": "3010.dat",
+        "rebrickable_part_num": "3010",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 10,
+        "supported": true
+      },
+      {
+        "label": "1x6 plate",
+        "category": "plate",
+        "part_id": "3666",
+        "ldraw_id": "3666.dat",
+        "rebrickable_part_num": "3666",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 1,
+        "supported": true
+      },
+      {
+        "label": "4x8 plate",
+        "category": "plate",
+        "part_id": "3035",
+        "ldraw_id": "3035.dat",
+        "rebrickable_part_num": "3035",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 6,
+        "supported": true
+      },
+      {
+        "label": "4x6 plate",
+        "category": "plate",
+        "part_id": "3032",
+        "ldraw_id": "3032.dat",
+        "rebrickable_part_num": "3032",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 1,
+        "supported": true
+      },
+      {
+        "label": "4x4 plate",
+        "category": "plate",
+        "part_id": "3031",
+        "ldraw_id": "3031.dat",
+        "rebrickable_part_num": "3031",
+        "color_name": "red",
+        "color_id": "4",
+        "count": 2,
+        "supported": true
+      },
+      {
+        "label": "2x2 brick",
+        "category": "brick",
+        "part_id": "3003",
+        "ldraw_id": "3003.dat",
+        "rebrickable_part_num": "3003",
+        "color_name": "black",
+        "color_id": "0",
+        "count": 4,
+        "supported": true
+      },
+      {
+        "label": "1x1 brick",
+        "category": "brick",
+        "part_id": "3005",
+        "ldraw_id": "3005.dat",
+        "rebrickable_part_num": "3005",
+        "color_name": "black",
+        "color_id": "0",
+        "count": 2,
+        "supported": true
+      },
+      {
+        "label": "1x2 brick",
+        "category": "brick",
+        "part_id": "3004",
+        "ldraw_id": "3004.dat",
+        "rebrickable_part_num": "3004",
+        "color_name": "translucent light blue",
+        "color_id": "43",
+        "count": 5,
+        "supported": true
+      },
+      {
+        "label": "1x1 brick",
+        "category": "brick",
+        "part_id": "3005",
+        "ldraw_id": "3005.dat",
+        "rebrickable_part_num": "3005",
+        "color_name": "yellow",
+        "color_id": "14",
+        "count": 2,
+        "supported": true
+      }
+    ]
+  }
+}
