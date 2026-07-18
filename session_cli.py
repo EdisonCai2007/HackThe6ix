@@ -17,8 +17,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from pipeline.multiview import consensus_color, scan_manifest
+from pipeline.multiview import color_provenance, consensus_color, scan_manifest
 from pipeline.original_crop import original_box
+from training.color_acceptance import write_color_worksheet
 
 GALLERY_TILE_H = 180
 GALLERY_PAD = 8
@@ -224,7 +225,16 @@ def main(argv: list[str] | None = None) -> None:
         "--analysis-dir", type=Path,
         help="write opt-in diagnostic model-fit evidence beneath this directory",
     )
+    parser.add_argument(
+        "--color-worksheet", action="store_true",
+        help=(
+            "write run-scoped color evidence and a blank labeling worksheet; "
+            "requires --analysis-dir and skips model-fit diagnostics"
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.color_worksheet and args.analysis_dir is None:
+        parser.error("--color-worksheet requires --analysis-dir")
     try:
         detector = resolve_detector(args.detector, args.seg_model)
     except FileNotFoundError as error:
@@ -246,7 +256,7 @@ def main(argv: list[str] | None = None) -> None:
         detector=detector,
         cache_dir=Path(".cache"),
         seg_model=seg_model,
-        analysis_dir=args.analysis_dir,
+        analysis_dir=None if args.color_worksheet else args.analysis_dir,
     )
     output_dir = args.analysis_dir if args.analysis_dir is not None else session_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -282,6 +292,7 @@ def main(argv: list[str] | None = None) -> None:
                 "complete": instance.best.complete,
                 "observation_frames": [observation.frame_id
                                        for observation in instance.observations],
+                "color_evidence": color_provenance(instance),
                 "id_crop": id_crop,
             }
             for instance, id_crop in zip(result.instances, result.id_crops)
@@ -292,6 +303,16 @@ def main(argv: list[str] | None = None) -> None:
     (output_dir / "multiview_result.json").write_text(
         json.dumps(details, indent=2) + "\n"
     )
+    worksheet_paths = None
+    if args.color_worksheet:
+        worksheet_paths = write_color_worksheet(
+            result,
+            output_dir,
+            session_id=session_dir.name,
+            predicted_colors=[
+                consensus_color(instance).name for instance in result.instances
+            ],
+        )
     print(
         f"{len(result.instances)} fused pieces ({detector}) from "
         f"{len(result.manifest['views'])} views -> {output_dir}"
@@ -303,6 +324,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"debug: {debug_dir / 'crop_gallery.jpg'} + "
           f"{len(overlays)} frame overlay(s) + "
           f"{len(gate_overlays)} gate overlay(s)")
+    if worksheet_paths is not None:
+        print(f"color worksheet: {worksheet_paths.csv}")
     if details["partial_count"]:
         print(f"warning: {details['partial_count']} piece(s) only partially observed")
 

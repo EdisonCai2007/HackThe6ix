@@ -12,6 +12,7 @@ import numpy as np
 from pipeline.color import (
     PALETTE,
     LegoColor,
+    color_evidence,
     dominant_rgb,
     dominant_rgb_masked,
     match_color,
@@ -91,6 +92,9 @@ class Observation:
         default=None, repr=False, compare=False
     )
     gate_provenance: dict | None = field(
+        default=None, repr=False, compare=False
+    )
+    color_evidence: dict | None = field(
         default=None, repr=False, compare=False
     )
 
@@ -244,6 +248,26 @@ def consensus_color(instance: FusedInstance) -> LegoColor:
     best_name = instance.best.color.name
     winner = max(votes, key=lambda name: (votes[name], name == best_name))
     return next(color for color in PALETTE if color.name == winner)
+
+
+def color_provenance(instance: FusedInstance) -> dict:
+    """Serialize the exact per-view evidence behind the current color vote."""
+    votes: dict[str, int] = {}
+    rows = []
+    for observation in instance.observations:
+        votes[observation.color.name] = votes.get(observation.color.name, 0) + 1
+        row = {
+            "frame_id": observation.frame_id,
+            "predicted_color": observation.color.name,
+            **(observation.color_evidence or {}),
+        }
+        rows.append(row)
+    return {
+        "strategy": "unweighted_name_vote",
+        "predicted_color": consensus_color(instance).name,
+        "vote_counts": votes,
+        "observations": rows,
+    }
 
 
 def fuse_observations(observations: list[Observation]) -> list[FusedInstance]:
@@ -525,9 +549,21 @@ def observations_from_views(
         detections = detect(image, method=detector)
         for box in detections.boxes:
             crop = crop_box(image, box)
-            color = match_color(normalize_illumination(
-                dominant_rgb(crop), background_rgb, neutral_tolerance=45
-            ))
+            raw_rgb = dominant_rgb(crop)
+            corrected_rgb = normalize_illumination(
+                raw_rgb, background_rgb, neutral_tolerance=45
+            )
+            color = match_color(corrected_rgb)
+            crop_mask = np.ones(crop.shape[:2], dtype=bool)
+            evidence = color_evidence(
+                crop,
+                crop_mask,
+                bg_rgb=background_rgb,
+                sampled_rgb=raw_rgb,
+                neutral_tolerance=45,
+                view_tilt_deg=view.view_tilt_deg,
+                boundary_zone=not box_is_complete(box, valid_mask),
+            )
             observations.append(Observation(
                 frame_id=view.frame_id,
                 view_index=view.view_index,
@@ -538,6 +574,7 @@ def observations_from_views(
                 quality=view.quality,
                 image=image,
                 valid_mask=valid_mask,
+                color_evidence=evidence,
             ))
     return observations
 
@@ -554,12 +591,22 @@ def observations_from_segmentations(
         view = by_index[detection.view_index]
         original = detection.image_original
         background_rgb = _background_rgb(original)
-        color = match_color(normalize_illumination(
-            dominant_rgb_masked(original, detection.mask_original),
-            background_rgb,
-            neutral_tolerance=45,
-        ))
+        raw_rgb = dominant_rgb_masked(original, detection.mask_original)
+        corrected_rgb = normalize_illumination(
+            raw_rgb, background_rgb, neutral_tolerance=45
+        )
+        color = match_color(corrected_rgb)
         gate = detection.gate
+        evidence = color_evidence(
+            original,
+            detection.mask_original,
+            bg_rgb=background_rgb,
+            sampled_rgb=raw_rgb,
+            neutral_tolerance=45,
+            view_tilt_deg=view.view_tilt_deg,
+            segmentation_confidence=detection.confidence,
+            boundary_zone=gate.boundary_zone,
+        )
         observations.append(Observation(
             frame_id=detection.frame_id,
             view_index=detection.view_index,
@@ -589,6 +636,7 @@ def observations_from_segmentations(
                 "centroid_inside": gate.centroid_inside,
                 "boundary_zone": gate.boundary_zone,
             },
+            color_evidence=evidence,
         ))
     return observations
 

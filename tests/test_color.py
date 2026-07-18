@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from skimage.color import deltaE_ciede2000, rgb2lab
 
+import pipeline.color as color_module
 from pipeline.color import (
     PALETTE,
     dominant_rgb,
@@ -114,3 +115,38 @@ def test_masked_dominant_color_ignores_touching_neighbor_and_background():
     rgb = dominant_rgb_masked(image, mask)
 
     assert match_color(rgb).name in {"red", "dark red"}
+
+
+def test_color_evidence_records_sample_correction_palette_and_quality():
+    image = np.full((80, 100, 3), (200, 215, 225), np.uint8)
+    image[20:60, 25:75] = (10, 30, 180)
+    image[20:24, 25:75] = 255
+    mask = np.zeros(image.shape[:2], dtype=bool)
+    mask[20:60, 25:75] = True
+
+    evidence = color_module.color_evidence(
+        image,
+        mask,
+        bg_rgb=(225, 215, 200),
+        neutral_tolerance=45,
+        view_tilt_deg=38.0,
+        segmentation_confidence=0.92,
+        boundary_zone=False,
+    )
+
+    assert set(evidence) >= {
+        "raw_rgb", "corrected_rgb", "lab", "top_palette_matches",
+        "delta_e_margin", "luminance", "background", "view_quality",
+        "flags",
+    }
+    assert len(evidence["lab"]) == 3
+    assert len(evidence["top_palette_matches"]) == 3
+    assert all("delta_e" in match for match in evidence["top_palette_matches"])
+    assert evidence["delta_e_margin"] == pytest.approx(
+        evidence["top_palette_matches"][1]["delta_e"]
+        - evidence["top_palette_matches"][0]["delta_e"]
+    )
+    assert evidence["luminance"]["pixel_count"] > 0
+    assert evidence["background"]["rgb"] == [225, 215, 200]
+    assert evidence["view_quality"]["tilt_deg"] == 38.0
+    assert "oblique_view" in evidence["flags"]

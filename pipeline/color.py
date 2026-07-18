@@ -151,6 +151,129 @@ def normalize_illumination(
 _lab_cache: dict[int, np.ndarray] = {}
 
 
+def _rgb_lab(rgb: tuple[int, int, int]) -> np.ndarray:
+    return rgb2lab(
+        np.array(rgb, dtype=float).reshape(1, 1, 3) / 255.0
+    ).reshape(3)
+
+
+def palette_matches(
+    rgb: tuple[int, int, int],
+    colors: list[LegoColor] | None = None,
+    limit: int = 3,
+) -> list[dict]:
+    """Rank palette candidates while preserving inspectable delta-E values."""
+    if colors is None:
+        colors = PALETTE
+    key = id(colors)
+    if key not in _lab_cache:
+        arr = np.array([color.rgb for color in colors], dtype=float) / 255.0
+        _lab_cache[key] = rgb2lab(arr.reshape(-1, 1, 3)).reshape(-1, 3)
+    distances = deltaE_ciede2000(_rgb_lab(rgb)[None, :], _lab_cache[key])
+    order = np.argsort(distances)[:max(0, int(limit))]
+    return [
+        {
+            "color_id": colors[int(index)].id,
+            "name": colors[int(index)].name,
+            "rgb": list(colors[int(index)].rgb),
+            "delta_e": float(distances[int(index)]),
+        }
+        for index in order
+    ]
+
+
+def _masked_interior_pixels(
+    image_bgr: np.ndarray, mask: np.ndarray
+) -> np.ndarray:
+    mask = np.asarray(mask, dtype=bool)
+    if mask.shape != image_bgr.shape[:2]:
+        raise ValueError("color mask must match image dimensions")
+    if not mask.any():
+        raise ValueError("color mask is empty")
+    interior = cv2.erode(
+        mask.astype(np.uint8), np.ones((3, 3), np.uint8)
+    ).astype(bool)
+    if interior.sum() < max(9, 0.25 * mask.sum()):
+        interior = mask
+    return image_bgr[interior].reshape(-1, 3)
+
+
+def color_evidence(
+    image_bgr: np.ndarray,
+    mask: np.ndarray,
+    *,
+    bg_rgb: tuple[int, int, int],
+    sampled_rgb: tuple[int, int, int] | None = None,
+    neutral_tolerance: int = 30,
+    view_tilt_deg: float | None = None,
+    segmentation_confidence: float | None = None,
+    boundary_zone: bool = False,
+) -> dict:
+    """Describe the existing color decision without changing that decision."""
+    raw_rgb = (
+        dominant_rgb_masked(image_bgr, mask)
+        if sampled_rgb is None else sampled_rgb
+    )
+    corrected_rgb = normalize_illumination(
+        raw_rgb, bg_rgb, neutral_tolerance=neutral_tolerance
+    )
+    matches = palette_matches(corrected_rgb, limit=3)
+    pixels = _masked_interior_pixels(image_bgr, mask)
+    gray = cv2.cvtColor(
+        pixels.reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_BGR2GRAY
+    ).reshape(-1).astype(float)
+    p10, median, p90 = np.quantile(gray, [0.10, 0.50, 0.90])
+    low_fraction = float(np.mean(gray <= 25))
+    high_fraction = float(np.mean(gray >= 245))
+    spread = float(p90 - p10)
+    background_neutral = max(bg_rgb) - min(bg_rgb) <= neutral_tolerance
+    flags = []
+    if raw_rgb != corrected_rgb:
+        flags.append("white_patch_applied")
+    if not background_neutral:
+        flags.append("background_not_neutral")
+    if low_fraction >= 0.10 and spread >= 40.0:
+        flags.append("possible_shadow")
+    if high_fraction >= 0.02 and spread >= 40.0:
+        flags.append("possible_specular")
+    if view_tilt_deg is not None and view_tilt_deg >= 30.0:
+        flags.append("oblique_view")
+    if segmentation_confidence is not None and segmentation_confidence < 0.70:
+        flags.append("low_segmentation_confidence")
+    if boundary_zone:
+        flags.append("boundary_view")
+    return {
+        "raw_rgb": list(raw_rgb),
+        "corrected_rgb": list(corrected_rgb),
+        "lab": [float(value) for value in _rgb_lab(corrected_rgb)],
+        "top_palette_matches": matches,
+        "delta_e_margin": (
+            float(matches[1]["delta_e"] - matches[0]["delta_e"])
+            if len(matches) >= 2 else None
+        ),
+        "luminance": {
+            "pixel_count": int(gray.size),
+            "p10": float(p10),
+            "median": float(median),
+            "p90": float(p90),
+            "p90_minus_p10": spread,
+            "shadow_clip_fraction": low_fraction,
+            "highlight_clip_fraction": high_fraction,
+        },
+        "background": {
+            "rgb": list(bg_rgb),
+            "neutral_tolerance": int(neutral_tolerance),
+            "is_neutral": background_neutral,
+        },
+        "view_quality": {
+            "tilt_deg": view_tilt_deg,
+            "segmentation_confidence": segmentation_confidence,
+            "boundary_zone": bool(boundary_zone),
+        },
+        "flags": flags,
+    }
+
+
 def match_color(
     rgb: tuple[int, int, int], colors: list[LegoColor] | None = None
 ) -> LegoColor:
@@ -160,7 +283,7 @@ def match_color(
     if key not in _lab_cache:
         arr = np.array([c.rgb for c in colors], dtype=float) / 255.0
         _lab_cache[key] = rgb2lab(arr.reshape(-1, 1, 3)).reshape(-1, 3)
-    target = rgb2lab(np.array(rgb, dtype=float).reshape(1, 1, 3) / 255.0).reshape(3)
+    target = _rgb_lab(rgb)
     dists = deltaE_ciede2000(target[None, :], _lab_cache[key])
     return colors[int(np.argmin(dists))]
 

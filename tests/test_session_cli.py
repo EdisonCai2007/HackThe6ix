@@ -84,6 +84,15 @@ def test_session_cli_identifies_one_best_crop_and_writes_outputs(
     result = json.loads((session / "multiview_result.json").read_text())
     assert result["instance_count"] == 1
     assert result["instances"][0]["id_crop"]["source"] == "rectified-fallback"
+    color_evidence = result["instances"][0]["color_evidence"]
+    assert color_evidence["strategy"] == "unweighted_name_vote"
+    assert color_evidence["predicted_color"] == "red"
+    assert color_evidence["vote_counts"] == {"red": 2}
+    assert [row["frame_id"] for row in color_evidence["observations"]] == [1, 2]
+    assert all(
+        len(row["top_palette_matches"]) == 3
+        for row in color_evidence["observations"]
+    )
     assert set(result["timings_s"]) == {
         "load", "detect", "fuse", "identify", "evidence",
         "color_inventory", "total",
@@ -140,6 +149,35 @@ def test_analysis_dir_keeps_model_fit_outputs_run_scoped(tmp_path, monkeypatch):
     assert (analysis / "debug" / "crop_gallery.jpg").exists()
     assert (session / "inventory.json").read_text() == "preserved-session-output\n"
     assert not (session / "analysis" / "model_fit.json").exists()
+
+
+def test_color_worksheet_is_run_scoped_without_running_model_fit(
+    tmp_path, monkeypatch
+):
+    session = tmp_path / "session"
+    manifest = _write_manifest(session)
+    analysis = tmp_path / "color-evidence-run"
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_all",
+        lambda crops, **kwargs: [
+            Identification("3003", "Brick 2 x 2", "Bricks", 0.9)
+            for _ in crops
+        ],
+    )
+
+    session_cli.main([
+        str(manifest), "--detector", "cv", "--analysis-dir", str(analysis),
+        "--color-worksheet",
+    ])
+
+    worksheet = analysis / "color-labels" / "color_worksheet.csv"
+    assert worksheet.exists()
+    assert "truth_color" in worksheet.read_text().splitlines()[0]
+    assert (analysis / "color-labels" / "color_worksheet.md").exists()
+    assert (analysis / "color-labels" / "thumbnails" / "piece-000.jpg").exists()
+    assert not (analysis / "model_fit.json").exists()
+    assert not (session / "color-labels").exists()
 
 
 def test_seg_debug_writes_workspace_and_gate_overlays(tmp_path, monkeypatch):
