@@ -64,6 +64,15 @@ class RestingOrientation:
     dimensions_xyz: tuple[float, float, float]
 
 
+@dataclass(frozen=True)
+class ViewFitLoss:
+    iou: float
+    boundary_error: float
+    under_coverage: float
+    spill: float
+    total: float
+
+
 def resting_orientations(model: RegularModel):
     """Enumerate physical vertical axes, deduplicating x/y yaw symmetry."""
     dimensions = model.dimensions_xyz
@@ -113,6 +122,68 @@ def render_cuboid(mask_shape, calibration, vertices):
     if hull is not None and len(hull) >= 3:
         cv2.fillConvexPoly(mask, hull, 1)
     return mask.astype(bool)
+
+
+def _mask_boundary(mask):
+    binary = np.asarray(mask, dtype=np.uint8)
+    eroded = cv2.erode(binary, np.ones((3, 3), dtype=np.uint8))
+    return (binary > 0) & (eroded == 0)
+
+
+def _symmetric_boundary_error(observed, predicted):
+    observed_boundary = _mask_boundary(observed)
+    predicted_boundary = _mask_boundary(predicted)
+    if not np.any(observed_boundary) and not np.any(predicted_boundary):
+        return 0.0
+    if not np.any(observed_boundary) or not np.any(predicted_boundary):
+        return 1.0
+    distance_to_observed = cv2.distanceTransform(
+        (~observed_boundary).astype(np.uint8), cv2.DIST_L2, 5
+    )
+    distance_to_predicted = cv2.distanceTransform(
+        (~predicted_boundary).astype(np.uint8), cv2.DIST_L2, 5
+    )
+    symmetric_pixels = 0.5 * (
+        float(distance_to_observed[predicted_boundary].mean())
+        + float(distance_to_predicted[observed_boundary].mean())
+    )
+    diagonal = float(np.hypot(*observed.shape[:2]))
+    return symmetric_pixels / max(diagonal, 1.0)
+
+
+def score_silhouettes(observed, predicted):
+    """Return transparent mask-fit terms and a diagnostic-only total."""
+    observed = np.asarray(observed, dtype=bool)
+    predicted = np.asarray(predicted, dtype=bool)
+    if observed.shape != predicted.shape or observed.ndim != 2:
+        raise ValueError("silhouette masks must have the same two-dimensional shape")
+    intersection = int(np.count_nonzero(observed & predicted))
+    union = int(np.count_nonzero(observed | predicted))
+    observed_area = int(np.count_nonzero(observed))
+    predicted_area = int(np.count_nonzero(predicted))
+    iou = intersection / union if union else 1.0
+    under = (
+        int(np.count_nonzero(observed & ~predicted)) / observed_area
+        if observed_area else 0.0
+    )
+    spill = (
+        int(np.count_nonzero(predicted & ~observed)) / predicted_area
+        if predicted_area else 0.0
+    )
+    boundary = _symmetric_boundary_error(observed, predicted)
+    total = (
+        0.35 * (1.0 - iou)
+        + 0.20 * boundary
+        + 0.25 * under
+        + 0.20 * spill
+    )
+    return ViewFitLoss(
+        iou=float(iou),
+        boundary_error=float(boundary),
+        under_coverage=float(under),
+        spill=float(spill),
+        total=float(total),
+    )
 
 
 def _view_value(view, name):

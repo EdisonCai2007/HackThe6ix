@@ -142,3 +142,59 @@ def test_projected_cuboid_rasterizes_nonempty_boolean_mask():
     assert int(mask.sum()) > 0
     np.testing.assert_allclose(vertices[:, 2].min(), 0.0)
     np.testing.assert_allclose(vertices[:, 2].max(), 0.0096)
+
+
+def _rectangle_mask(box, shape=(80, 100)):
+    x0, y0, x1, y1 = box
+    mask = np.zeros(shape, dtype=bool)
+    mask[y0:y1, x0:x1] = True
+    return mask
+
+
+def test_equal_silhouettes_have_perfect_terms_and_zero_loss():
+    from pipeline.model_fit import score_silhouettes
+
+    mask = _rectangle_mask((25, 20, 70, 60))
+    loss = score_silhouettes(mask, mask.copy())
+
+    assert loss.iou == 1.0
+    assert loss.boundary_error == 0.0
+    assert loss.under_coverage == 0.0
+    assert loss.spill == 0.0
+    assert loss.total == 0.0
+
+
+def test_contained_prediction_reports_undercoverage_not_spill():
+    from pipeline.model_fit import score_silhouettes
+
+    observed = _rectangle_mask((20, 15, 80, 65))
+    predicted = _rectangle_mask((30, 25, 70, 55))
+    loss = score_silhouettes(observed, predicted)
+
+    assert loss.under_coverage > 0.0
+    assert loss.spill == 0.0
+
+
+def test_oversized_prediction_reports_spill_not_undercoverage():
+    from pipeline.model_fit import score_silhouettes
+
+    observed = _rectangle_mask((30, 25, 70, 55))
+    predicted = _rectangle_mask((20, 15, 80, 65))
+    loss = score_silhouettes(observed, predicted)
+
+    assert loss.spill > 0.0
+    assert loss.under_coverage == 0.0
+
+
+def test_boundary_error_is_symmetric_for_opposite_translations():
+    from pipeline.model_fit import score_silhouettes
+
+    observed = _rectangle_mask((35, 25, 65, 55))
+    shifted_left = _rectangle_mask((30, 25, 60, 55))
+    shifted_right = _rectangle_mask((40, 25, 70, 55))
+
+    left = score_silhouettes(observed, shifted_left)
+    right = score_silhouettes(observed, shifted_right)
+
+    assert left.boundary_error == right.boundary_error
+    assert left.total == right.total
