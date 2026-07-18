@@ -1,0 +1,444 @@
+import { MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
+
+const GENERATION_MAX_TOKENS = 10000;
+const PLACEMENT_GENERATION_MAX_TOKENS = 30000;
+const JSON_GENERATION_CONFIG = {
+  maxOutputTokens: GENERATION_MAX_TOKENS,
+  responseMimeType: "application/json",
+};
+
+export const STRUCTURE_PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    model_name: { type: "string" },
+    primary_object: { type: "string" },
+    target_piece_count: { type: "integer" },
+    overall_shape: { type: "string" },
+    required_features: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          visual_goal: { type: "string" },
+          priority: { type: "string", enum: ["required", "optional"] },
+          preferred_colors: { type: "array", items: { type: "string" } },
+          approximate_piece_budget: { type: "integer" },
+        },
+        required: [
+          "name",
+          "visual_goal",
+          "priority",
+          "preferred_colors",
+          "approximate_piece_budget",
+        ],
+      },
+    },
+    part_usage_plan: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          feature: { type: "string" },
+          allowed_part_ids: { type: "array", items: { type: "string" } },
+          allowed_color_ids: { type: "array", items: { type: "string" } },
+          max_pieces: { type: "integer" },
+          notes: { type: "string" },
+        },
+        required: [
+          "feature",
+          "allowed_part_ids",
+          "allowed_color_ids",
+          "max_pieces",
+          "notes",
+        ],
+      },
+    },
+    build_strategy: {
+      type: "object",
+      properties: {
+        base: { type: "string" },
+        body: { type: "string" },
+        raised_details: { type: "string" },
+        stability_notes: { type: "string" },
+      },
+      required: ["base", "body", "raised_details", "stability_notes"],
+    },
+    fallback_priorities: { type: "array", items: { type: "string" } },
+    user_facing_summary: { type: "string" },
+  },
+  required: [
+    "model_name",
+    "primary_object",
+    "target_piece_count",
+    "overall_shape",
+    "required_features",
+    "part_usage_plan",
+    "build_strategy",
+    "fallback_priorities",
+    "user_facing_summary",
+  ],
+};
+
+export const GENERATED_MODEL_SCHEMA = {
+  type: "object",
+  properties: {
+    model_name: { type: "string" },
+    prompt: { type: "string" },
+    piece_count: { type: "integer" },
+    dimensions: {
+      type: "object",
+      properties: {
+        width_studs: { type: "number" },
+        depth_studs: { type: "number" },
+        height_layers: { type: "number" },
+      },
+      required: ["width_studs", "depth_studs", "height_layers"],
+    },
+    created_from_inventory_id: { type: "string" },
+    generator_version: { type: "string" },
+    bricks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          part_id: { type: "string" },
+          ldraw_id: { type: "string" },
+          label: { type: "string" },
+          color_id: { type: "string" },
+          color_name: { type: "string" },
+          position: {
+            type: "object",
+            properties: {
+              x: { type: "number" },
+              y: { type: "number" },
+              z: { type: "number" },
+            },
+            required: ["x", "y", "z"],
+          },
+          rotation: { type: "integer" },
+          feature: { type: "string" },
+          step: { type: "integer" },
+        },
+        required: [
+          "id",
+          "part_id",
+          "ldraw_id",
+          "label",
+          "color_id",
+          "color_name",
+          "position",
+          "rotation",
+          "feature",
+          "step",
+        ],
+      },
+    },
+    notes: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "model_name",
+    "prompt",
+    "piece_count",
+    "dimensions",
+    "created_from_inventory_id",
+    "generator_version",
+    "bricks",
+    "notes",
+  ],
+};
+
+export const BUILD_SUGGESTIONS_SCHEMA = {
+  type: "object",
+  properties: {
+    suggestions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          prompt_metadata: { type: "string" },
+          inventory_reasoning: { type: "string" },
+        },
+        required: ["label", "prompt_metadata", "inventory_reasoning"],
+      },
+    },
+  },
+  required: ["suggestions"],
+};
+
+function clampTargetPieceCount(targetPieceCount) {
+  if (!Number.isFinite(targetPieceCount)) {
+    return Math.min(40, MAX_MODEL_PIECES);
+  }
+
+  return Math.max(1, Math.min(Math.floor(targetPieceCount), MAX_MODEL_PIECES));
+}
+
+export function summarizeSupportedInventory(inventory) {
+  return {
+    inventory_id: inventory.inventory_id,
+    source: inventory.source,
+    items: inventory.items
+      .filter((item) => item.supported && SUPPORTED_PARTS[item.part_id])
+      .map((item) => ({
+        part_id: item.part_id,
+        ldraw_id: item.ldraw_id,
+        color_name: item.color_name,
+        color_id: item.color_id,
+        count: item.count,
+        dimensions: {
+          width: SUPPORTED_PARTS[item.part_id].width,
+          depth: SUPPORTED_PARTS[item.part_id].depth,
+          height_layers: SUPPORTED_PARTS[item.part_id].category === "plate" ? 1 : 3,
+        },
+      })),
+  };
+}
+
+function textPart(text) {
+  return { text };
+}
+
+function buildGeminiJsonRequest({
+  model,
+  systemText,
+  userPayload,
+  responseSchema,
+  maxOutputTokens = GENERATION_MAX_TOKENS,
+}) {
+  return {
+    model,
+    systemInstruction: {
+      parts: [textPart(systemText)],
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [textPart(JSON.stringify(userPayload, null, 2))],
+      },
+    ],
+    generationConfig: {
+      ...JSON_GENERATION_CONFIG,
+      maxOutputTokens,
+      ...(responseSchema ? { responseSchema } : {}),
+    },
+  };
+}
+
+export function buildStructurePrompt({
+  userPrompt,
+  inventory,
+  targetPieceCount,
+  model,
+}) {
+  const cappedTarget = clampTargetPieceCount(targetPieceCount);
+  const inventorySummary = summarizeSupportedInventory(inventory);
+
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You are a LEGO model planning agent for a local LEGO generation app.",
+      "Your job is to convert a user's request and confirmed LEGO inventory into a high-level build plan.",
+      "Return exactly one JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "Do not output exact brick coordinates.",
+      "Do not output LDraw.",
+      "Do not output meshes, vertices, or arbitrary 3D geometry.",
+      "Do not invent parts, colors, or quantities outside the provided inventory.",
+      "The generated model must be one small free-standing connected LEGO object, not a scene.",
+      `Prefer 10-40 pieces and never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
+      "Prioritize recognizable silhouette, required object features, inventory availability, stable construction, and color match in that order.",
+    ].join("\n"),
+    userPayload: {
+      user_prompt: userPrompt,
+      target_piece_count: cappedTarget,
+      inventory: inventorySummary,
+    },
+    responseSchema: STRUCTURE_PLAN_SCHEMA,
+  });
+}
+
+export function buildBuildSuggestionsPrompt({ inventory, model }) {
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You suggest build ideas for a local LEGO generation app from the confirmed inventory.",
+      "Return exactly one JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "Return at most 5 suggestions.",
+      "Each suggestion must describe one free-standing connected LEGO object, never a scene, diorama, landscape, or multi-object set.",
+      "Favor distinctive realistic everyday objects: household items, tools, food, furniture, signs, simple animals, basic vehicles, or common fixtures.",
+      "Avoid generic cargo blocks, cubes, columns, towers, slabs, abstract structures, and speculative add-ons like boosters, propellers, glowing engines, weapons, or impossible moving parts.",
+      "Each label must be short and specific; prefer Mailbox, Coffee Mug, Fire Hydrant, or Snack Cart over generic labels.",
+      "Each prompt_metadata value must be a concise user-ready generation prompt that names concrete features, silhouette, and color accents for that one object.",
+      "For prompt_metadata, avoid size adjectives.",
+      "For prompt_metadata, Do not mention specific bricks, part IDs, dimensions, piece counts, or construction instructions; the planner decides exact LEGO parts and layout.",
+      "Each inventory_reasoning value must explain how the available parts, colors, quantities, and dimensions support the object.",
+      "Use only capabilities supported by the provided inventory; do not claim unavailable parts or colors.",
+      "Use inventory shape and color heuristics: taller-piece inventory should favor chunkier silhouettes, while flatter-piece inventory should favor flatter silhouettes.",
+      "In the inventory summary, height_layers 3 means a brick and height_layers 1 means a plate.",
+    ].join("\n"),
+    userPayload: {
+      inventory: summarizeSupportedInventory(inventory),
+    },
+    responseSchema: BUILD_SUGGESTIONS_SCHEMA,
+  });
+}
+
+export function buildPlacementPrompt({
+  userPrompt,
+  inventory,
+  structurePlan,
+  targetPieceCount,
+  model,
+}) {
+  const cappedTarget = clampTargetPieceCount(targetPieceCount ?? structurePlan.target_piece_count);
+  const inventorySummary = summarizeSupportedInventory(inventory);
+
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You are a LEGO placement planner for a local LEGO generation app.",
+      "Convert a high-level LEGO structure plan into exact internal GeneratedModel JSON.",
+      "Return exactly one JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "Do not output raw LDraw.",
+      "Do not output meshes, vertices, or arbitrary 3D geometry.",
+      "Use only parts and colors present in the inventory.",
+      "Do not exceed inventory quantities.",
+      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      "piece_count must be a non-negative integer.",
+      "step must be a positive integer.",
+      "Use x and y as stud-grid positions.",
+      "Use z as layer height; plates are 1 layer tall and bricks are 3 layers tall.",
+      "Every brick must use numeric rotation 0, 90, 180, or 270, never a string.",
+      "Avoid overlapping bricks, floating bricks, disconnected components, and models without ground contact.",
+    ].join("\n"),
+    userPayload: {
+      user_prompt: userPrompt,
+      target_piece_count: cappedTarget,
+      inventory: inventorySummary,
+      structure_plan: structurePlan,
+    },
+    responseSchema: GENERATED_MODEL_SCHEMA,
+    maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
+  });
+}
+
+export function buildJsonRepairPrompt({
+  label,
+  malformedText,
+  errorMessage,
+  model,
+  responseSchema = STRUCTURE_PLAN_SCHEMA,
+}) {
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You repair malformed JSON for a local LEGO generation app.",
+      "Return exactly one valid JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "Preserve the intended fields and values from the malformed input.",
+      "Fix syntax errors, remove stray prose, and do not invent extra wrapper keys.",
+    ].join("\n"),
+    userPayload: {
+      label,
+      parse_error: errorMessage,
+      malformed_json_text: malformedText,
+    },
+    responseSchema,
+  });
+}
+
+export function buildPlacementValidationRepairPrompt({
+  userPrompt,
+  inventory,
+  structurePlan,
+  invalidModel,
+  originalFailedModel,
+  prunedModel,
+  removedBricks = [],
+  validationErrors,
+  targetPieceCount,
+  model,
+}) {
+  const cappedTarget = clampTargetPieceCount(targetPieceCount ?? structurePlan.target_piece_count);
+  const inventorySummary = summarizeSupportedInventory(inventory);
+
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You repair a LEGO GeneratedModel that failed deterministic buildability validation.",
+      "Return exactly one full valid GeneratedModel JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "The pruned model is the starting point.",
+      "Do not rebuild from scratch.",
+      "Preserve the requested object, major features, and recognizable silhouette.",
+      "Prefer the smallest set of changes that can pass validation.",
+      "You may modify any remaining brick if needed.",
+      "You may add legal supported inventory pieces if available.",
+      "Do not re-add removed illegal bricks.",
+      "Use only supported parts and part/color combinations present in inventory.",
+      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      "Ground rule: at least one brick must have position.z === 0.",
+      "Support rule: every brick with position.z > 0 must have at least one occupied stud cell directly below it at z - 1 from a different brick.",
+      "Connection rule: all bricks must form one connected component through vertical stud overlap.",
+      "Overlap rule: no two bricks may occupy the same x, y, z grid cell.",
+      "Layer rule: plates are 1 layer tall and bricks are 3 layers tall.",
+      "If needed, simplify the model by moving pieces down to z 0 or stacking pieces directly on supported studs.",
+    ].join("\n"),
+    userPayload: {
+      user_prompt: userPrompt,
+      target_piece_count: cappedTarget,
+      inventory: inventorySummary,
+      structure_plan: structurePlan,
+      validation_errors: validationErrors,
+      original_failed_generated_model: originalFailedModel ?? invalidModel,
+      pruned_generated_model: prunedModel ?? invalidModel,
+      removed_bricks: removedBricks,
+      invalid_generated_model: invalidModel,
+    },
+    responseSchema: GENERATED_MODEL_SCHEMA,
+    maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
+  });
+}
+
+export function buildPlacementInventoryRepairPrompt({
+  userPrompt,
+  inventory,
+  structurePlan,
+  invalidModel,
+  validationErrors,
+  targetPieceCount,
+  model,
+}) {
+  const cappedTarget = clampTargetPieceCount(targetPieceCount ?? structurePlan.target_piece_count);
+  const inventorySummary = summarizeSupportedInventory(inventory);
+
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You repair LEGO inventory validation errors in a GeneratedModel.",
+      "Return exactly one full valid GeneratedModel JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, and no text before or after the JSON object.",
+      "Fix only invalid part/color choices and inventory overuse.",
+      "Use only parts and colors present in the inventory. Do not exceed inventory quantities.",
+      "Do not use part/color combinations that are absent from the inventory, even if the part id exists in another color.",
+      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      "Preserve the requested object and recognizable features.",
+      "Preserve brick positions, rotations, features, and steps where possible.",
+      "If a missing part/color has no direct substitute, replace it with the closest available supported inventory item.",
+    ].join("\n"),
+    userPayload: {
+      user_prompt: userPrompt,
+      target_piece_count: cappedTarget,
+      inventory: inventorySummary,
+      structure_plan: structurePlan,
+      validation_errors: validationErrors,
+      invalid_generated_model: invalidModel,
+    },
+    responseSchema: GENERATED_MODEL_SCHEMA,
+  });
+}
