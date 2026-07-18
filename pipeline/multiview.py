@@ -23,6 +23,7 @@ from pipeline.studs import advise, count_studs, stud_radius_px
 
 SECOND_CHANCE_MAX_ALTERNATES = 3
 SEG_SINGLETON_MIN_CONFIDENCE = 0.50
+SEG_ID_REVIEW_SCORE = 0.85
 
 
 _COLOR_FAMILY = {
@@ -662,6 +663,24 @@ def _identification_crops(
     return crops, provenance
 
 
+def _isolated_context_crop(
+    instance, observation, instances, original, box
+):
+    """Return real padded context only when no other instance enters it."""
+    x0, y0, x1, y1 = box
+    for other in instances:
+        if other is instance:
+            continue
+        for candidate in other.observations:
+            if (
+                candidate.view_index == observation.view_index
+                and candidate.mask_original is not None
+                and np.any(candidate.mask_original[y0:y1, x0:x1])
+            ):
+                return None
+    return original[y0:y1, x0:x1].copy()
+
+
 def _second_chance(
     instances, views, session_dir, identifications, crops, id_crops, cache_dir
 ):
@@ -674,14 +693,27 @@ def _second_chance(
 
     originals: dict[int, np.ndarray] = {}
     for index, instance in enumerate(instances):
-        if identifications[index].score >= MIN_SCORE:
+        segmentation_review = (
+            instance.best.detector == "seg"
+            and identifications[index].score < SEG_ID_REVIEW_SCORE
+        )
+        if (
+            identifications[index].score >= MIN_SCORE
+            and not segmentation_review
+        ):
             continue
         ranked = _ranked_id_observations(instance, views)
         # Evaluate ALL alternates and keep the highest-scoring acceptance:
         # a canvas-clipped alternate can produce a confident-but-wrong ID
         # (a cut-off beam reads as a wedge), so first-accept is unsafe.
         best = None
-        for observation, _ in ranked[1:1 + SECOND_CHANCE_MAX_ALTERNATES]:
+        best_score = identifications[index].score
+        candidates = (
+            ranked[:SECOND_CHANCE_MAX_ALTERNATES]
+            if segmentation_review
+            else ranked[1:1 + SECOND_CHANCE_MAX_ALTERNATES]
+        )
+        for observation, _ in candidates:
             view = views[observation.view_index]
             if observation.original_image is not None:
                 original = observation.original_image
@@ -697,24 +729,31 @@ def _second_chance(
                 box, crop = masked_instance_crop(
                     original, observation.mask_original
                 )
+                variants = [(crop, "yolo-instance-mask-second-chance")]
+                context = _isolated_context_crop(
+                    instance, observation, instances, original, box
+                )
+                if context is not None:
+                    variants.append((
+                        context, "yolo-instance-context-second-chance"
+                    ))
             else:
                 box, crop = masked_crop(
                     original, observation.box, view.homography,
                     original.shape[:2], view.raise_uv_per_cm,
                 )
-            candidate = identify_crop(crop, cache_dir=cache_dir)
-            if candidate.score >= MIN_SCORE and (
-                    best is None or candidate.score > best[0].score):
-                best = (candidate, observation, view, box, crop)
+                variants = [(crop, "original-masked-second-chance")]
+            for variant, source in variants:
+                candidate = identify_crop(variant, cache_dir=cache_dir)
+                if candidate.score >= MIN_SCORE and candidate.score > best_score:
+                    best_score = candidate.score
+                    best = (
+                        candidate, observation, view, box, variant, source
+                    )
         if best is not None:
-            candidate, observation, view, box, crop = best
+            candidate, observation, view, box, crop, source = best
             identifications[index] = candidate
             crops[index] = crop
-            source = (
-                "yolo-instance-mask-second-chance"
-                if observation.mask_original is not None
-                else "original-masked-second-chance"
-            )
             update = {
                 "frame_id": observation.frame_id, "rgb": view.rgb,
                 "box_original": list(box),

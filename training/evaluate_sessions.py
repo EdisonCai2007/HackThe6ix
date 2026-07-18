@@ -68,6 +68,7 @@ class SessionEvaluation:
     expected_count_source: str | None = None
     geometry_risk: str | None = None
     failure_categories: tuple[str, ...] = field(default_factory=tuple)
+    inventory_items: list[dict] = field(default_factory=list)
 
     @property
     def exact_count(self) -> bool | None:
@@ -159,6 +160,7 @@ def evaluation_from_result(
         union_coverage=float(result.manifest["union_coverage"]),
         geometry_risk=geometry_risk,
         failure_categories=failure_categories,
+        inventory_items=result.inventory,
     )
 
 

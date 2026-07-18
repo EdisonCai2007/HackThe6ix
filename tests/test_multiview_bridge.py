@@ -264,3 +264,53 @@ def test_second_chance_picks_best_alternate_not_first(tmp_path, monkeypatch):
     assert identifications[0].part_id == "3008"
     assert identifications[0].score == 0.84
     assert id_crops[0]["source"] == "original-masked-second-chance"
+
+
+def test_segmentation_reviews_safe_context_crop_for_moderate_id(
+    tmp_path, monkeypatch
+):
+    """A moderate masked ID can hide a brick's side; when no neighboring
+    instance enters the padding, retain real context and use stronger ID."""
+    from pipeline.multiview import FusedInstance, _second_chance
+
+    original = np.full((120, 160, 3), 225, dtype=np.uint8)
+    original[40:80, 40:120] = (0, 80, 240)
+    mask = np.zeros((120, 160), dtype=bool)
+    mask[40:80, 40:120] = True
+    observation = _obs(0, (40, 40, 120, 80), complete=True)
+    observation.detector = "seg"
+    observation.mask_original = mask
+    observation.original_image = original
+    observation.box_original = (40, 40, 120, 80)
+    observation.source_instance_id = "piece-0"
+    observation.confidence = 0.95
+    instance = FusedInstance([observation], observation)
+    view = _view(0, quality=2.0, rgb_size=(160, 120))
+    view.rgb = "frames/00001.rgb.jpg"
+    calls = []
+
+    def fake_identify_crop(crop, **kwargs):
+        calls.append(crop.copy())
+        if len(calls) == 1:
+            return Identification("3460", "Plate 1 x 8", None, 0.80)
+        return Identification("3008", "Brick 1 x 8", None, 0.91)
+
+    monkeypatch.setattr(
+        pipeline.multiview, "identify_crop", fake_identify_crop
+    )
+    identifications, crops, id_crops = _second_chance(
+        [instance], [view], tmp_path,
+        [Identification("3460", "Plate 1 x 8", None, 0.79)],
+        [np.zeros((8, 8, 3), np.uint8)],
+        [{
+            "frame_id": 1,
+            "rgb": view.rgb,
+            "box_original": [0, 0, 8, 8],
+            "source": "yolo-instance-mask",
+        }],
+        cache_dir=tmp_path,
+    )
+
+    assert len(calls) == 2
+    assert identifications[0].part_id == "3008"
+    assert id_crops[0]["source"] == "yolo-instance-context-second-chance"

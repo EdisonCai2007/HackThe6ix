@@ -22,8 +22,13 @@
   `c792bdad...` is installed as `models/lego_seg.pt`. Frame-level mask mAP50-95
   is 0.847 train-seen, 0.837 whole-session validation, and 0.877 on the held-out
   white-table environment. These are not yet product-level inventory results.
-- Tasks 7 onward (runtime detector, fusion/crop integration, and product
-  evaluation) remain unverified.
+- Tasks 7–10 are complete. Runtime inference uses original RGB workspace crops,
+  mask-aware table fusion, isolated/context-safe identification crops, and
+  inspectable gate overlays. Historical/train-seen counts are 7/7, 8/8, 8/8,
+  and 8/8; all five whole-session validation references are exact. Held-out
+  `white_round` is reported separately: `153942` is 11/11 and weak-geometry
+  `155228` is 17/19 with one unknown. The held-out failure was classified and
+  documented without tuning against it.
 
 ## Global Constraints
 

@@ -1,73 +1,134 @@
-# Phase 3 Capture Quality + User Guidance
+# Phase 3 capture quality and operating guidance
 
-Status: preliminary report after capture/session audit and SAM-assisted label
-bootstrap. It must be updated after the first trained YOLO model is evaluated.
+This guidance is tied to the July 17 audit, human label review, and product
+evaluation. It is not a universal camera specification. The current runtime
+uses original RGB frames for instance segmentation, Record3D depth only for
+table/workspace geometry, and table-coordinate projection only for cross-view
+fusion.
 
-## Evidence inspected
+## What the evidence says
 
-- 20 listed new sessions: 19 usable and one zero-frame capture
-  (`20260717-153911`).
-- 71 selected original RGB frames: 48 train, 15 validation, and 8 test.
-- Whole-session split with no session leakage.
-- Three new surfaces: wood, gray, and white round table. Both white-table
-  sessions are held out as an environment test.
-- SAM2 annotation bootstrap: 1,299 raw proposals, 1,173 filtered proposals;
-  all remain unverified. QA found no malformed polygon files and prioritized 56
-  of 71 images because proposed instances touch or overlap.
+- The audit listed 20 Phase 3 sessions: 19 were usable and
+  `20260717-153911` contained zero frames. A foregrounded Record3D stream and
+  nonzero frame counter remain the first capture gate.
+- Two wood validation bursts were only 3.9–4.0 seconds long. They still reached
+  their 7/7 and 14/14 reference counts, but they offer little redundancy. The
+  exporter now retains at least three time-diverse views whenever three frames
+  exist, even if a single view already covers the dense canvas.
+- Raw Laplacian sharpness is surface-dependent. The gray captures had median
+  values around 131, while wood and white-table sessions were much lower; this
+  does not mean gray is intrinsically a better capture environment. Use
+  within-session sharpness ranking, visible stud edges, and motion-blur checks.
+  Do not impose one raw sharpness cutoff across environments.
+- The held-out round white table was the weakest geometry group. Plane inlier
+  fractions were 0.587 (`153942`) and 0.705 (`155228`), versus roughly
+  0.94–1.00 for the other audited surfaces. Product results were 11/11 and
+  17/19 respectively. The latter failure is classified as weak geometry plus
+  fusion/count mismatch: individual views contained 24, 19, and 18 accepted
+  masks, but unstable table projection and edge-only observations produced 17
+  fused records. The test set was not retuned after this result.
+- The train-seen touching-white target `005145` now returns eight separate
+  pieces, including both white pieces. This demonstrates the intended fix but
+  is not generalization evidence. Five untouched whole-session validation
+  layouts were all exact on the available human-frame count references.
+- All 71 selected training images and 1,157 instance polygons were manually
+  reviewed. Dense touching layouts were intentionally prioritized, but the
+  set does not establish robustness for every LEGO geometry, severe stacking,
+  transparent pieces, or arbitrary household clutter.
 
-Sharpness values below are only meaningful within a session or surface. The
-gray surface has far more high-frequency texture, so its absolute Laplacian
-scores cannot be compared directly with the wood/white scores.
+## Observed issues and their responsible stage
 
-## Observed capture issues and actions
+| Evidence | Primary stage | What to do |
+|---|---|---|
+| `153911` connected but saved zero frames. | Capture | Wait for an increasing frame counter. Keep Record3D foregrounded, run one client, and relaunch/toggle streaming if it remains zero. |
+| `150212` and `150350` lasted 4.0 and 3.9 seconds. | Capture/multiview | Continue long enough for an overview and meaningfully different positions; the runtime can retain diverse views only if they were recorded. |
+| White-round plane inliers were 0.587 and 0.705. | Geometry/fusion | Begin with visible bare tabletop around the batch and make a slow perimeter pass before close views. |
+| Several wood sessions had within-session median sharpness near 17–23, while clean alternatives still existed. | Capture/identification | Slow down and briefly dwell over dense groups; training cannot recover detail absent from every frame. |
+| Same-color contacts were the original `005145` failure. | Segmentation | Do not separate pieces for the demo; provide sharp overlapping views from more than one direction. |
+| A cable, clothing, chair/table edges, and a laptop generated model proposals. | Geometry gate/multiview | Keep loose objects off the active tabletop. Outside clutter can be gated or contradicted, but in-workspace clutter is inherently harder. |
+| Small real edge pieces and small false masks coexist. | Gate/fusion | Include a closer overlapping pass; do not solve this with one global small-box or confidence cutoff. |
 
-| Observation | Stage at risk | Training likely to help? | Capture likely to help? | User action |
-|---|---|---:|---:|---|
-| `153911` connected but saved zero frames. | Capture | No | Yes | Wait for the live frame counter to increase before beginning the sweep. Keep Record3D foregrounded and run only one client. If it stays at zero, toggle/relaunch Record3D before scanning. |
-| `150212` and `150350` last only 4.04 s and 3.88 s. Their camera-height ranges are only 2.2 cm and 2.1 cm. | Capture / multiview | Only partly | Yes | Continue long enough to obtain an overview plus meaningfully different angles. A stationary burst is not multiview evidence. |
-| White-round sessions have weak plane inlier fractions: 0.587 and 0.705, versus at least 0.943 for the usable wood/gray sessions. The tabletop edge and background are prominent. | Geometry / workspace ROI | No, if the ROI is wrong | Yes | Begin with a slow overview that shows bare tabletop around the entire LEGO region. Keep the round tabletop visible from several positions before moving close. Avoid filling the frame with pieces/background before the plane is established. |
-| Several longer wood sessions have low within-session median sharpness (about 17–23), although sharp frames were still recoverable. | Capture / segmentation / identification | Some robustness, not lost detail | Yes | Move more slowly, especially when changing direction or height. Briefly dwell over dense groups so at least one sharp view exists. |
-| Most selected frames are near top-down: median topdownness 0.995; the selected set still includes some oblique views down to 0.869. | Identification / multiview | No substitute for visibility | Yes | Keep the top-down sweep, then add a moderate oblique pass. Oblique views reveal sides, separation seams, and details needed by Brickognize. Do not make every view steeply oblique. |
-| Dense same-color contacts remain the core instance-separation risk. SAM proposals can merge pieces or isolate studs instead of pieces. | Model/data separation | Yes, after correct instance labels | Yes | Include at least one sharp close-enough view of each dense group and sweep it from two directions. Do not physically separate pieces during the demo; provide complementary views instead. |
-| Pieces clipped by a frame or visible only in a single view weaken inventory evidence. | Capture / fusion | Limited | Yes | Make the first overview contain every piece, then use overlapping passes. When moving close, overlap the previous region and return to any edge piece. |
-| Cables, floor, chair/table edges, and marks outside the table produced proposal false positives; clutter can also exist on the active tabletop. | Workspace gate / model | Yes for general LEGO-vs-clutter objectness | Yes | Keep the scan area clear when possible. Outside clutter will be geometry-gated, but remove pens, hands, and cables lying inside the LEGO workspace because geometry cannot distinguish them from in-workspace objects. |
-| Very small/partial real pieces and real edge pieces coexist with small false proposals. | Segmentation / workspace gate | Yes | Yes | Do not rely on distance alone. Include one closer overlapping pass while keeping an overview. The runtime must retain small/edge candidates and seek multiview support instead of globally suppressing them. |
+## Recommended capture pass
 
-## A. Best demo scanning protocol
+1. Put Record3D in the foreground, start USB streaming, and confirm the frame
+   count increases. Only one Record3D client can receive frames at a time.
+2. Spread pieces in one layer. Touching is allowed, including same-color
+   contact, but avoid one piece fully hiding another. Stacked or flipped pieces
+   were not validated as a complete inventory case.
+3. Leave visible table around the batch, especially near the table edge. Depth
+   needs repeated bare-plane observations to estimate a stable physical
+   workspace. A circular edge, chair, clothing, cable, or laptop immediately
+   beyond the surface increases the cost of a weak plane fit.
+4. Sweep smoothly rather than holding one fixed view. Keep each piece fully in
+   frame in at least two views and preferably three. The audited wood/gray
+   sessions commonly reached about 0.14–0.39 m camera height; the weak white
+   sessions dipped to 0.06–0.29 m. These ranges are observations, not hard
+   limits. In practice, stay high enough to preserve context and low enough for
+   clear studs, with mostly top-down views plus modest angle variation.
+5. Move slowly enough that stud edges remain crisp. Avoid harsh glare on white,
+   black, and glossy pieces and avoid phone shadows crossing the batch. The
+   selector can discard poorer views only when cleaner alternatives exist.
+6. Sweep the perimeter after the center. A real piece seen only at an image or
+   workspace boundary is intentionally treated as weak evidence unless other
+   views confirm it. This is how the runtime rejects cropped clothing, cables,
+   and table-edge clutter without globally deleting low-confidence real LEGO.
+7. End only after every piece has at least one clean, fully visible view and
+   the batch has repeated coverage. Coverage percentage describes the observed
+   table canvas; it does not prove that an occluded piece was visible.
 
-1. Confirm the live frame counter is increasing before moving the phone.
-2. Start high enough for one slow near-top-down overview containing every piece
-   plus a visible border of bare tabletop around the group.
-3. Make a slow overlapping top-down sweep. Pause briefly above dense,
-   same-color, small, or edge groups; avoid abrupt direction changes.
-4. Make one moderate oblique sweep from a different side, keeping all regions
-   overlapped with the overview. This supplies side/detail evidence without
-   replacing the geometrically strongest top-down views.
-5. Make a closer overlapping pass only over difficult/dense regions. Never let
-   the closer pass be the only view of an edge piece.
-6. End only after every physical piece has appeared sharply in an overview and
-   from at least one complementary angle. Keep hands and loose objects out of
-   the active tabletop during the scan.
+## Larger batches and multiple environments
 
-## B. Best future training-capture protocol
+The runtime no longer chooses one best photograph. It segments up to five
+selected original frames independently and fuses observations in table
+coordinates, so a batch may extend beyond one fixed camera view. For a larger
+layout, sweep overlapping regions with stable table visibility; ensure pieces
+near each transition appear in multiple frames. If the full layout cannot be
+covered while preserving clear studs and repeated geometry, use multiple
+capture sessions and combine their inventories at the application level.
 
-The present dataset is dominated by wood (51 of 71 selected images), contains
-8 gray images, and reserves 8 white-round images for an honest environment
-test. The next captures with the highest expected value are:
+Different surfaces are supported by evidence from wood, gray, and a held-out
+white round table, but only the first white session was count-exact. For a new
+surface or lighting setup, inspect the generated `debug/frame_*_seg_gate.jpg`
+files before trusting a large batch. Cyan is the physical workspace, magenta is
+the inference crop, green is accepted segmentation, and red is rejected
+evidence with its reason.
 
-1. Multiple genuinely new surfaces and lighting conditions, each with several
-   independent arrangements—not more near-duplicate frames of one arrangement.
-2. Same-color touching pairs and triples with varied edge, corner, and partial
-   overlaps. Preserve separate physical instances in every manual mask.
-3. Dense scenes containing small, flipped, upright, and partially occluded
-   pieces, with both sharp overviews and complementary oblique views.
-4. General negative clutter on the tabletop (different cables, pens, hands),
-   deliberately left unlabeled as LEGO. Diversity matters more than repeated
-   examples of one cable.
-5. More round/small-table captures with strong plane visibility to separate
-   geometry failure from segmentation domain shift.
+## Best next training captures
 
-Do not fold the current white-round test sessions into training until their
-held-out evaluation has been recorded. If they are later used for training,
-they no longer provide unseen-environment evidence.
+The current selected set is dominated by wood (51 of 71 images), with 8 gray
+and 8 held-out white-round images. The highest-value next data is:
 
+1. Several genuinely new surfaces and lighting conditions, each with multiple
+   independent layouts rather than many adjacent frames of one layout.
+2. Same-color touching pairs/triples with edge, corner, and partial overlap;
+   every physical piece must retain its own verified polygon.
+3. Dense scenes containing small, upright, flipped, partially occluded, and
+   unusual non-rectangular parts, recorded with overview and oblique evidence.
+4. Negative tabletop clutter—pens, hands, cables, tools—left unlabeled as LEGO.
+   Diverse negative objects matter more than repeats of one cable.
+5. More round/small-table sessions with strong bare-plane visibility, reserved
+   as a new validation group so geometry improvements can be separated from
+   segmentation improvements.
+
+The current white-round test has now been evaluated. If those exact images are
+used for future training, their existing numbers must remain labeled as the
+old held-out result; they cannot be presented as unseen-environment evidence
+for the retrained model.
+
+## Known limits and next data
+
+- `155228` remains two pieces short and has one unidentified piece. Add a new
+  round-table capture to a future validation set; do not train on the held-out
+  failure and then continue calling it held-out evidence.
+- `152458` is count-exact at 23 but one item remains `unknown brick`; this is an
+  identification failure, not a segmentation miss.
+- Bare-table zero-LEGO behavior and severe clutter inside the valid table
+  polygon need explicit negative product tests. The current geometry gate is
+  strongest for clutter outside the physical workspace.
+- Transparent, highly reflective, stacked, mostly occluded, and unusual
+  non-rectangular parts need targeted captures and verified masks before any
+  robustness claim.
+- Color is sampled inside the predicted mask and voted across views, but no
+  per-piece color ground-truth benchmark was collected. Inspect color output in
+  new lighting rather than treating the current count benchmark as color
+  accuracy evidence.
