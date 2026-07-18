@@ -74,6 +74,27 @@ function extractGeminiMetadata(body) {
   };
 }
 
+async function* responseChunks(body) {
+  if (body?.[Symbol.asyncIterator]) {
+    yield* body;
+    return;
+  }
+  if (typeof body?.getReader === "function") {
+    const reader = body.getReader();
+    try {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        yield next.value;
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    return;
+  }
+  throw new Error("Gemini streaming response body is missing or unreadable.");
+}
+
 export function createGeminiClient({
   apiKey,
   fetchImpl = fetch,
@@ -85,6 +106,65 @@ export function createGeminiClient({
   }
 
   return {
+    async *streamWithMetadata(request) {
+      if (typeof request.model !== "string" || request.model.trim() === "") {
+        throw new Error("Gemini request model is required.");
+      }
+
+      const model = request.model.trim();
+      const response = await fetchImpl(
+        `${trimTrailingSlash(baseUrl)}/models/${model}:streamGenerateContent?alt=sse`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify(toGeminiRequestBody(request, storeRequests)),
+        },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const message = body?.error?.message ?? `Gemini request failed with ${response.status}`;
+        throw new Error(message);
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for await (const chunk of responseChunks(response.body)) {
+        buffer += decoder.decode(chunk, { stream: true });
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const data = block.split(/\r?\n/)
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .join("\n");
+          if (!data || data === "[DONE]") continue;
+          const payload = JSON.parse(data);
+          const text = extractGeminiText(payload);
+          const metadata = extractGeminiMetadata(payload);
+          if (text || Object.keys(metadata).length > 0) yield { text, metadata };
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const data = buffer.split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+        if (data && data !== "[DONE]") {
+          const payload = JSON.parse(data);
+          yield { text: extractGeminiText(payload), metadata: extractGeminiMetadata(payload) };
+        }
+      }
+    },
+
+    async *stream(request) {
+      for await (const item of this.streamWithMetadata(request)) yield item.text;
+    },
+
     async completeWithMetadata(request) {
       if (typeof request.model !== "string" || request.model.trim() === "") {
         throw new Error("Gemini request model is required.");
