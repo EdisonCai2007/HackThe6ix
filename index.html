@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HackThe6ix LEGO Preview</title>
+    <link rel="stylesheet" href="/src/preview/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="viewer-panel" aria-label="LEGO model preview">
+        <canvas id="preview-canvas"></canvas>
+        <nav class="app-menu-bar" aria-label="Application menu">
+          <span>File</span>
+          <span>Window</span>
+          <span>Help</span>
+        </nav>
+        <div class="editor-toolbar" aria-label="Build editor tools">
+          <button class="tool-button" id="undo-tool" type="button" aria-label="Undo" title="Undo" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 7H5l4-4 4 4H9v2h5.5a5.5 5.5 0 010 11H8v-2h6.5a3.5 3.5 0 000-7H9V7z" />
+            </svg>
+          </button>
+          <button class="tool-button" id="redo-tool" type="button" aria-label="Redo" title="Redo" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 7h4l-4-4-4 4h4v2H9.5a5.5 5.5 0 000 11H16v-2H9.5a3.5 3.5 0 010-7H15V7z" />
+            </svg>
+          </button>
+          <button class="tool-button is-active" id="hand-tool" type="button" aria-label="Cursor tool" aria-pressed="true" title="Cursor">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 3l13 9-6 1.1 3.5 6.1-2.7 1.5-3.5-6.1L5 18V3z" />
+            </svg>
+          </button>
+          <button class="tool-button" id="axis-tool" type="button" aria-label="Move tool" aria-pressed="false" title="Move">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2l3.2 3.2h-2V11h5.6v-2L22 12l-3.2 3.2v-2h-5.6v5.6h2L12 22l-3.2-3.2h2v-5.6H5.2v2L2 12l3.2-3.2v2h5.6V5.2h-2L12 2z" />
+            </svg>
+          </button>
+          <button class="tool-button" id="rotate-tool" type="button" aria-label="Rotate tool" aria-pressed="false" title="Rotate">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7.1 7.5A7 7 0 0118 8.9l-1.8 1A4.9 4.9 0 008.5 9L11 11.5H4.5V5l2.6 2.5zM16.9 16.5A7 7 0 016 15.1l1.8-1a4.9 4.9 0 007.7.9L13 12.5h6.5V19l-2.6-2.5z" />
+            </svg>
+          </button>
+          <button class="tool-button tool-button--danger" id="delete-tool" type="button" aria-label="Delete selected brick" title="Delete selected brick" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm-2 6h10l-.7 11H7.7L7 9zm3 2v7h1.5v-7H10zm2.5 0v7H14v-7h-1.5z" />
+            </svg>
+          </button>
+          <button class="instructions-button" id="instructions-button" type="button">Instructions</button>
+        </div>
+        <aside class="left-panel-column" id="left-panel-column" aria-label="Generation controls and status">
+          <button
+            class="left-panel-column__toggle"
+            id="left-panel-toggle"
+            type="button"
+            aria-controls="left-panel-content"
+            aria-expanded="true"
+            aria-label="Collapse left panels"
+          >
+            <span aria-hidden="true">›</span>
+          </button>
+          <div class="left-panel-column__content" id="left-panel-content">
+            <div class="model-card" id="status-panel">
+              <button
+                class="left-panel-close"
+                id="status-panel-close"
+                type="button"
+                aria-label="Close status panel"
+              >
+                x
+              </button>
+              <p id="model-name">Ready to generate</p>
+              <dl>
+                <div>
+                  <dt>Pieces</dt>
+                  <dd id="piece-count">-</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd id="validation-status">Idle</dd>
+                </div>
+              </dl>
+              <div id="generation-status-line" class="generation-status-line" aria-live="polite">
+                <span id="generation-spinner" class="generation-spinner" hidden></span>
+                <span id="generation-status-text">Idle</span>
+              </div>
+              <ul id="generation-notes" class="generation-notes"></ul>
+              <pre id="validation-errors" class="validation-errors" hidden></pre>
+            </div>
+            <button
+              class="left-panel-resize-handle"
+              id="status-build-resize-handle"
+              type="button"
+              aria-label="Resize status and build ideas panels"
+              title="Resize panels"
+            ></button>
+            <section class="build-suggestions-panel" id="build-suggestions-panel" aria-labelledby="build-suggestions-title">
+              <div class="build-suggestions-panel__header">
+                <p id="build-suggestions-title">Build ideas</p>
+                <div class="build-suggestions-panel__actions">
+                  <button
+                    class="build-suggestions-panel__refresh"
+                    id="build-suggestions-refresh"
+                    type="button"
+                    aria-label="Refresh build ideas"
+                    title="Refresh build ideas"
+                  >
+                    &#8635;
+                  </button>
+                  <button
+                    class="left-panel-close"
+                    id="build-suggestions-panel-close"
+                    type="button"
+                    aria-label="Close build ideas panel"
+                  >
+                    x
+                  </button>
+                </div>
+              </div>
+              <p class="build-suggestions-panel__status" id="build-suggestions-status" aria-live="polite">Loading ideas...</p>
+              <div class="build-suggestions-panel__list" id="build-suggestions-list"></div>
+            </section>
+            <button
+              class="left-panel-resize-handle"
+              id="build-prompt-resize-handle"
+              type="button"
+              aria-label="Resize build ideas and prompt panels"
+              title="Resize panels"
+            ></button>
+            <form class="control-panel" id="generation-form">
+              <button
+                class="left-panel-close"
+                id="prompt-panel-close"
+                type="button"
+                aria-label="Close input prompting panel"
+              >
+                x
+              </button>
+              <label>
+                Prompt
+                <input id="prompt-input" name="prompt" value="build a red sports car v2" autocomplete="off" />
+              </label>
+              <label>
+                Inventory
+                <select id="inventory-select" name="inventory"></select>
+              </label>
+              <label>
+                Target pieces
+                <input id="target-pieces" name="targetPieces" type="number" min="1" max="100" value="70" />
+              </label>
+              <button id="generate-button" type="submit">Generate</button>
+            </form>
+          </div>
+        </aside>
+        <div class="brick-context-menu" id="brick-context-menu" role="menu" hidden>
+          <button id="brick-context-delete" type="button" role="menuitem">Delete</button>
+        </div>
+        <aside class="right-drawer" id="right-drawer" aria-label="Brick inventory">
+          <button
+            class="right-drawer__toggle"
+            id="right-drawer-toggle"
+            type="button"
+            aria-controls="right-drawer-content"
+            aria-expanded="true"
+            aria-label="Collapse build controls"
+          >
+            <span aria-hidden="true">›</span>
+          </button>
+          <div class="right-drawer__content" id="right-drawer-content">
+            <aside class="brick-catalogue" id="brick-catalogue-panel" aria-label="Available bricks">
+              <div class="brick-catalogue__header">
+                <p>Bricks</p>
+                <button
+                  class="left-panel-close"
+                  id="brick-catalogue-close"
+                  type="button"
+                  aria-label="Close brick catalogue panel"
+                >
+                  x
+                </button>
+              </div>
+              <div id="brick-catalogue-list" class="brick-catalogue__list"></div>
+            </aside>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/preview/main.js"></script>
+  </body>
+</html>

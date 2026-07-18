@@ -1,0 +1,16 @@
+{
+  "name": "hackthe6ix-lego-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:preview": "vite --host 127.0.0.1",
+    "serve:generation": "node --env-file=.env server/generationServer.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "three": "^0.185.1",
+    "vite": "^8.1.4"
+  }
+}
