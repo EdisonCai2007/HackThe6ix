@@ -190,3 +190,107 @@ def test_appearance_support_tie_has_no_unique_top_candidate():
 
     assert result["unique_top_candidate"] is None
     assert result["unique_top_count"] == 1
+
+
+def test_unknown_is_rescued_by_unique_weak_leader_metric_and_studs():
+    from pipeline.evidence import arbitrate_identification
+
+    unknown = Identification(
+        None, "unknown brick", None, 0.615,
+        candidates=(
+            {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.615},
+            {"part_id": "39789", "name": "Technic, Brick 2 x 4 with 3 Axle Holes", "score": 0.600},
+        ),
+    )
+    proposal = Identification(
+        "3001", "Brick 2 x 4", None, 0.615,
+        candidates=unknown.candidates,
+    )
+    outcome = arbitrate_identification(
+        current=unknown,
+        dimension_action="unmodeled_candidate",
+        dimension_evidence={
+            "evidence": {"reliability": "high"},
+            "decision": {"candidate_scores": [{
+                "part_id": "3001", "name": "Brick 2 x 4",
+                "modeled": True, "fits": True,
+            }]},
+        },
+        stud_proposal=proposal,
+        stud_action="rescued",
+        identity_support={},
+        appearance_evidence={
+            "unique_top_candidate": "3001",
+            "unique_top_count": 2,
+            "candidate_support": {
+                "3001": {"top_frame_ids": [35, 54]},
+                "39789": {"top_frame_ids": [263]},
+            },
+        },
+    )
+
+    assert outcome.identification.part_id == "3001"
+    assert outcome.action == "rescued"
+    assert outcome.supporting_categories == (
+        "weak_multi_view_appearance", "metric", "stud"
+    )
+
+
+def _weak_rescue_outcome(appearance_evidence, fits=True):
+    from pipeline.evidence import arbitrate_identification
+
+    unknown = Identification(
+        None, "unknown brick", None, 0.62,
+        candidates=(
+            {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.62},
+        ),
+    )
+    proposal = Identification(
+        "3001", "Brick 2 x 4", None, 0.62,
+        candidates=unknown.candidates,
+    )
+    return arbitrate_identification(
+        current=unknown,
+        dimension_action="unmodeled_candidate",
+        dimension_evidence={
+            "evidence": {"reliability": "high"},
+            "decision": {"candidate_scores": [{
+                "part_id": "3001", "name": "Brick 2 x 4",
+                "modeled": True, "fits": fits,
+            }]},
+        },
+        stud_proposal=proposal,
+        stud_action="rescued",
+        identity_support={},
+        appearance_evidence=appearance_evidence,
+    )
+
+
+def test_weak_rescue_is_blocked_by_high_reliability_metric_rejection():
+    outcome = _weak_rescue_outcome({
+        "unique_top_candidate": "3001", "unique_top_count": 2,
+        "candidate_support": {"3001": {"top_frame_ids": [1, 2]}},
+    }, fits=False)
+    assert outcome.identification.part_id is None
+    assert outcome.action == "conflict_preserved"
+
+
+def test_weak_rescue_is_blocked_by_tied_top_support():
+    outcome = _weak_rescue_outcome({
+        "unique_top_candidate": None, "unique_top_count": 2,
+        "candidate_support": {
+            "3001": {"top_frame_ids": [1, 2]},
+            "39789": {"top_frame_ids": [3, 4]},
+        },
+    })
+    assert outcome.identification.part_id is None
+    assert outcome.action == "conflict_preserved"
+
+
+def test_weak_rescue_requires_two_distinct_top_frames():
+    outcome = _weak_rescue_outcome({
+        "unique_top_candidate": "3001", "unique_top_count": 1,
+        "candidate_support": {"3001": {"top_frame_ids": [1]}},
+    })
+    assert outcome.identification.part_id is None
+    assert outcome.action == "conflict_preserved"

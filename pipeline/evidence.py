@@ -119,6 +119,25 @@ class ArbitrationOutcome:
         return payload
 
 
+def _candidate_metric_state(dimension_evidence, part_id):
+    if not dimension_evidence:
+        return "unavailable"
+    if dimension_evidence.get("evidence", {}).get("reliability") != "high":
+        return "unavailable"
+    for candidate in dimension_evidence.get("decision", {}).get(
+        "candidate_scores", ()
+    ):
+        if candidate.get("part_id") != part_id:
+            continue
+        if candidate.get("modeled") is not True:
+            return "unavailable"
+        if candidate.get("fits") is True:
+            return "supports"
+        if candidate.get("fits") is False:
+            return "rejects"
+    return "unavailable"
+
+
 def arbitrate_identification(
     current: Identification,
     dimension_action: str,
@@ -126,6 +145,7 @@ def arbitrate_identification(
     stud_action: str,
     identity_support: dict[str, int],
     dimension_evidence: dict | None = None,
+    appearance_evidence: dict | None = None,
 ) -> ArbitrationOutcome:
     """Require two evidence categories before accepting a stud proposal."""
     if (
@@ -153,33 +173,37 @@ def arbitrate_identification(
             tuple(supports),
             "stud evidence cannot demote an identity by itself",
         )
-    metric_rejects_proposal = False
-    if (
-        dimension_evidence
-        and dimension_evidence.get("evidence", {}).get("reliability")
-        == "high"
-    ):
-        for candidate in dimension_evidence.get(
-            "decision", {}
-        ).get("candidate_scores", []):
-            same_candidate = (
-                candidate.get("part_id") == stud_proposal.part_id
-                if stud_proposal.part_id is not None
-                else candidate.get("name") == stud_proposal.name
-            )
-            if (
-                same_candidate
-                and candidate.get("modeled") is True
-                and candidate.get("fits") is False
-            ):
-                metric_rejects_proposal = True
-                break
-    if metric_rejects_proposal:
+    metric_state = _candidate_metric_state(
+        dimension_evidence, stud_proposal.part_id
+    )
+    if metric_state == "rejects":
         return ArbitrationOutcome(
             current,
             "conflict_preserved",
             tuple(supports),
             "high-reliability metric evidence rejects the proposed identity",
+        )
+    if current.part_id is None:
+        appearance = appearance_evidence or {}
+        unique_candidate = appearance.get("unique_top_candidate")
+        unique_count = int(appearance.get("unique_top_count", 0))
+        if (
+            stud_action == "rescued"
+            and stud_proposal.part_id == unique_candidate
+            and unique_count >= 2
+            and metric_state == "supports"
+        ):
+            return ArbitrationOutcome(
+                stud_proposal,
+                "rescued",
+                ("weak_multi_view_appearance", "metric", "stud"),
+                "unique weak appearance leader agrees with metric and stud evidence",
+            )
+        return ArbitrationOutcome(
+            current,
+            "conflict_preserved",
+            tuple(supports),
+            "weak rescue requires a two-view unique leader plus metric and stud support",
         )
     if dimension_action in {"compatible", "corrected"}:
         return ArbitrationOutcome(
