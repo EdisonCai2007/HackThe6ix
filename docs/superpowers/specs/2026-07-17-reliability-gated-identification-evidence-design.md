@@ -53,14 +53,26 @@ small, or large pieces. The classical detector remains a fallback.
 
 ## Evidence That Corrects the Initial Proposal
 
-### The black 2 x 12 is an advisory failure, not an API failure
+### The black 2 x 12 needs a dark-specific stud detector, not an API retry
 
 In `20260717-202103`, Brickognize returned `Plate 2 x 12` at approximately
 `0.8905`. The stud advisory counted four circles, treated that count as
 reliable, and demoted the correct result because four is less than one third of
-the expected 24 studs. The advisory already applies CLAHE before Hough circle
-detection. A Brickognize enhancement retry is therefore not the first fix for
-this case.
+the expected 24 studs.
+
+The selected crop's masked piece pixels have median luminance around 34/255.
+The current CLAHE preprocessing followed by the fixed Hough accumulator
+threshold (`param2=22`) finds only four circles. On the same saved crop, a
+dark-case threshold finds about 22 circles, while a gamma-lifted CLAHE variant
+finds about 25. Across the three selected views, the dark variants find about
+17–26 rather than 1–13. The same dark-case threshold raises a dark-blue crop
+currently identified as Plate 4 x 12 from 44 to a candidate-compatible 48 in
+its chosen view.
+
+The immediate cause is therefore a Hough threshold calibrated for stronger
+bright-piece edges, not an absence of stud structure. Dark pieces require
+their own enhanced detection branch. A Brickognize enhancement retry remains
+out of scope because Brickognize itself was correct in this case.
 
 ### Table-projected masks are not literal contact footprints
 
@@ -127,25 +139,51 @@ Unverified acceptance entries may be generated as a review worksheet, but
 they may not be counted as ground truth or used to tune thresholds until Emily
 marks them `user_verified: true`.
 
-### 2. Stud-advisory safety repair
+### 2. Dark-aware, reliability-gated stud evidence
 
-Stud evidence becomes explicitly asymmetric:
+Stud counting remains a bidirectional advisory, including undercount evidence,
+but a count must carry an explicit reliability assessment before it can alter
+an identification.
 
-- A plausible count can support or rerank a candidate.
-- A substantial **overcount** can contradict a candidate because the crop
-  contains more stud-like structure than that candidate can explain. This
-  preserves the earlier protection against merged crops such as the gray
-  6 x 12 case.
-- A substantial **undercount** is treated as `not_fully_visible`, not as a
-  contradiction. Shadows, black plastic, oblique views, masks, and side pose
-  all cause missed circles.
-- A high-confidence result remains protected by the existing policy.
-- No stud action discards the raw Brickognize result from provenance.
+Dark-case activation uses median luminance from the instance mask, not the
+predicted LEGO color. This matters because the current black plate is itself
+classified as dark gray. The luminance boundary is calibrated on verified
+crops and recorded in provenance rather than hidden as an unexplained magic
+number.
 
-The immediate black Plate 2 x 12 case must therefore retain its correct raw
-identification. A retry using an enhanced crop is deferred unless a later
-verified case shows Brickognize itself returning an unknown or incorrect raw
-candidate.
+For a dark instance, the detector evaluates at least two luminance variants:
+
+1. the current grayscale CLAHE path; and
+2. a gamma-lifted luminance image followed by CLAHE.
+
+The dark branch uses a separately calibrated Hough accumulator threshold.
+Detected circle centers must fall inside the local instance mask, and the
+detector preserves each variant's circle positions and count. It also records
+whether the circles have plausible radius, spacing, and grid regularity for a
+stud face.
+
+The advisory consumes a structured stud-evidence record rather than a bare
+integer:
+
+- `count`: the robust count selected from the preprocessing variants;
+- `reliability`: `high`, `medium`, `low`, or `unavailable`;
+- `visibility`: `stud_face`, `partial`, or `not_visible`;
+- per-variant counts and parameters; and
+- the reason the evidence received its reliability level.
+
+A plausible reliable count can support or rerank a candidate. A substantial
+overcount or undercount can contradict a candidate only when reliability is
+high. Low or unavailable evidence is recorded but cannot demote or correct an
+identification. This keeps undercount evidence valid when the enhanced detector
+actually sees a stud grid while preventing side views, occlusion, or weak masks
+from treating missed circles as physical absence. The existing protection for
+very high-confidence Brickognize results remains.
+
+The immediate black Plate 2 x 12 gate requires the enhanced branch to recover
+non-contradictory, stud-face evidence and retain the correct raw identification.
+The earlier gray 6 x 12 merged-crop regression must still be caught by reliable
+overcount evidence. No stud action discards the raw Brickognize result from
+provenance.
 
 ### 3. Metric silhouette evidence in shadow mode
 
@@ -265,7 +303,7 @@ For each fused instance:
 3. Produce per-view metric silhouette measurements and an aggregate with
    reliability.
 4. Resolve dimension evidence against supported regular candidates.
-5. Apply the asymmetric stud advisory as supporting evidence.
+5. Apply reliability-gated standard or dark-aware stud evidence.
 6. Preserve the raw and adjusted identification decision chain.
 7. Preserve the existing color result without changing color behavior.
 8. Serialize all identification evidence and flags before building aggregate
@@ -291,8 +329,16 @@ For each fused instance:
 
 ### Unit tests
 
-- Stud undercount preserves a moderate correct candidate.
-- Stud overcount can still contradict an implausibly small candidate.
+- The exact black 2 x 12 fixture activates the dark branch and recovers a
+  non-contradictory count from the visible stud face.
+- The dark-blue 4 x 12 fixture preserves or improves its candidate-compatible
+  stud count.
+- A dark 2 x 2 fixture does not hallucinate an implausible grid.
+- A side-view crop with no visible stud face remains low/unavailable and cannot
+  demote a candidate.
+- A high-reliability undercount or overcount can still contradict an
+  incompatible candidate.
+- Bright-piece behavior remains unchanged by the dark branch.
 - Unclipped rotated polygons convert to correct millimetre dimensions.
 - Clipped raster masks are not used for metric measurement.
 - Robust aggregation rejects a single distorted view and reports its reason.
@@ -326,8 +372,8 @@ Evaluate:
 
 Required outcomes through this scope:
 
-1. The black Plate 2 x 12 retains its correct raw identification instead of
-   being demoted by an undercount.
+1. The black Plate 2 x 12's enhanced stud evidence becomes compatible with its
+   expected stud grid, and it retains the correct raw identification.
 2. The side-lying blue 2 x 3 is either corrected by reliable dimension evidence
    or explicitly marked ambiguous/non-canonical; it is never silently accepted
    as 1 x 3 without the evidence conflict being visible.
@@ -341,7 +387,7 @@ Required outcomes through this scope:
 Implementation is divided into independently reviewable commits:
 
 1. acceptance schema, worksheet/reporting, and baseline evidence;
-2. asymmetric stud advisory and black-plate regression;
+2. dark-aware, reliability-gated stud evidence and black-plate regression;
 3. shadow-mode metric silhouette measurement and provenance;
 4. angle metadata and angle-diverse confirmation selection;
 5. calibrated dimension resolver and ambiguity flags.
