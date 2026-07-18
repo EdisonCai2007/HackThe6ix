@@ -231,6 +231,9 @@ def write_review_bundle(
     )
     document["run_dir"] = str(output_dir.resolve())
     document["overview_images"] = _write_overview(result, output_dir)
+    document["overview_size_wh"] = [
+        int(result.mosaic.shape[1]), int(result.mosaic.shape[0])
+    ]
     document["draft_component_count"] = len(components)
     path = output_dir / "review.json"
     atomic_write_json(path, document)

@@ -143,3 +143,16 @@ def test_asset_route_rejects_path_traversal(tmp_path):
         "/assets/s1/review-assets/components/piece-000/crop.jpg"
     ).status_code == 200
     assert client.get("/assets/s1/../../workspace.json").status_code in {404, 422}
+
+
+def test_browser_client_is_served(tmp_path):
+    workspace, _ = _workspace(tmp_path)
+    client = TestClient(create_app(workspace))
+
+    assert 'id="segmentation-stage"' in client.get("/").text
+    assert client.get("/app.js").headers["content-type"].startswith(
+        "text/javascript"
+    )
+    assert client.get("/styles.css").headers["content-type"].startswith(
+        "text/css"
+    )

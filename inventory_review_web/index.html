@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LEGO inventory annotation</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>LEGO inventory annotation</h1>
+      <p id="counts">Loading batches…</p>
+    </div>
+    <div class="header-actions">
+      <select id="session-select" aria-label="Session"></select>
+      <button id="add-missed" class="secondary">Add missed piece</button>
+      <button id="lock-session" class="secondary">Lock batch</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="canvas-panel">
+      <div id="segmentation-stage" aria-label="Numbered segmentation overview">
+        <img id="overview" alt="Numbered detected LEGO pieces">
+        <div id="shape-buttons"></div>
+      </div>
+      <p class="hint">Click a numbered shape to label it.</p>
+    </section>
+
+    <aside id="inspector">
+      <div class="piece-heading">
+        <button id="previous" class="icon" aria-label="Previous piece">←</button>
+        <div>
+          <span class="eyebrow">Selected shape</span>
+          <h2 id="piece-title">—</h2>
+        </div>
+        <button id="next" class="icon" aria-label="Next piece">→</button>
+      </div>
+
+      <img id="selected-crop" class="selected-crop" alt="Selected LEGO crop">
+      <div id="view-thumbnails" class="view-thumbnails"></div>
+
+      <span class="eyebrow">Suggested shapes</span>
+      <div id="candidate-renders" class="candidate-renders"></div>
+
+      <label>Part ID
+        <input id="part-id" autocomplete="off" placeholder="e.g. 3001">
+      </label>
+      <label>Block type
+        <input id="part-name" autocomplete="off" placeholder="e.g. Brick 2 x 4">
+      </label>
+      <label>Color
+        <select id="color"></select>
+      </label>
+      <label>Segmentation
+        <select id="segmentation">
+          <option value="unreviewed">Not checked</option>
+          <option value="correct">Correct</option>
+          <option value="duplicate">Duplicate detection</option>
+          <option value="merged">Merged pieces</option>
+          <option value="incomplete">Incomplete mask</option>
+        </select>
+      </label>
+
+      <label class="include-row">
+        <input id="included" type="checkbox" checked>
+        Include this block in final inventory
+      </label>
+      <label id="exclusion-wrap" class="hidden">Why exclude it?
+        <input id="exclusion-reason" placeholder="e.g. accidental piece">
+      </label>
+
+      <button id="confirm" class="primary">Confirm + next</button>
+      <p id="save-status" class="hint"></p>
+    </aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -66,6 +66,7 @@ def test_write_review_bundle_writes_component_assets_and_document(tmp_path):
     assert (output / component["candidates"][0]["render_path"]).read_bytes() \
         == b"render-bytes"
     assert (output / document["overview_images"][0]).exists()
+    assert document["overview_size_wh"] == [100, 80]
 
 
 def test_render_failure_does_not_abort_bundle(tmp_path):
