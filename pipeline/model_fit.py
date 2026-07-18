@@ -73,6 +73,38 @@ class ViewFitLoss:
     total: float
 
 
+@dataclass(frozen=True)
+class FitObservation:
+    frame_id: int
+    mask_original: np.ndarray
+    calibration: FrameCalibration
+    confidence: float = 1.0
+    boundary_zone: bool = False
+    sharpness: float = 1.0
+
+
+@dataclass(frozen=True)
+class CandidateFit:
+    model: RegularModel
+    total: float
+    orientation: RestingOrientation | None
+    center_xy: tuple[float, float] | None
+    yaw_deg: float | None
+    view_losses: tuple[dict, ...]
+    trimmed_frame_id: int | None
+    reliability: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ModelFitEvidence:
+    candidates: tuple[CandidateFit, ...]
+    best_part_id: str | None
+    runner_up_margin: float | None
+    reliability: str
+    reason: str
+
+
 def resting_orientations(model: RegularModel):
     """Enumerate physical vertical axes, deduplicating x/y yaw symmetry."""
     dimensions = model.dimensions_xyz
@@ -157,6 +189,15 @@ def score_silhouettes(observed, predicted):
     predicted = np.asarray(predicted, dtype=bool)
     if observed.shape != predicted.shape or observed.ndim != 2:
         raise ValueError("silhouette masks must have the same two-dimensional shape")
+    full_diagonal = float(np.hypot(*observed.shape))
+    union_pixels = np.argwhere(observed | predicted)
+    if len(union_pixels):
+        y0, x0 = np.maximum(union_pixels.min(axis=0) - 2, 0)
+        y1, x1 = np.minimum(
+            union_pixels.max(axis=0) + 3, np.asarray(observed.shape)
+        )
+        observed = observed[y0:y1, x0:x1]
+        predicted = predicted[y0:y1, x0:x1]
     intersection = int(np.count_nonzero(observed & predicted))
     union = int(np.count_nonzero(observed | predicted))
     observed_area = int(np.count_nonzero(observed))
@@ -171,6 +212,9 @@ def score_silhouettes(observed, predicted):
         if predicted_area else 0.0
     )
     boundary = _symmetric_boundary_error(observed, predicted)
+    cropped_diagonal = float(np.hypot(*observed.shape))
+    if cropped_diagonal:
+        boundary *= cropped_diagonal / max(full_diagonal, 1.0)
     total = (
         0.35 * (1.0 - iou)
         + 0.20 * boundary
@@ -183,6 +227,215 @@ def score_silhouettes(observed, predicted):
         under_coverage=float(under),
         spill=float(spill),
         total=float(total),
+    )
+
+
+def _observation_weight(observation, max_area):
+    area = int(np.count_nonzero(observation.mask_original))
+    area_weight = np.sqrt(area / max(1, max_area))
+    boundary_weight = 0.5 if observation.boundary_zone else 1.0
+    return max(0.0, float(observation.confidence)) * boundary_weight * area_weight
+
+
+def _evaluate_hypothesis(
+    orientation, center_xy, yaw_deg, observations, weights, allow_trim=True,
+):
+    vertices = cuboid_vertices(center_xy, yaw_deg, orientation.dimensions_xyz)
+    losses = []
+    for observation in observations:
+        predicted = render_cuboid(
+            observation.mask_original.shape,
+            observation.calibration,
+            vertices,
+        )
+        losses.append(score_silhouettes(observation.mask_original, predicted))
+    included = list(range(len(observations)))
+    trimmed = None
+    if allow_trim and len(observations) >= 4:
+        oblique = [
+            index for index, observation in enumerate(observations)
+            if (
+                observation.calibration.view_tilt_deg is not None
+                and observation.calibration.view_tilt_deg >= 30.0
+            )
+        ]
+        only_oblique = oblique[0] if len(oblique) == 1 else None
+        eligible = [
+            index for index in included if index != only_oblique
+        ]
+        if eligible:
+            worst = max(eligible, key=lambda index: losses[index].total)
+            peers = [losses[index].total for index in eligible if index != worst]
+            peer_median = float(np.median(peers)) if peers else 0.0
+            if (
+                losses[worst].total > 0.05
+                and losses[worst].total > 1.5 * max(peer_median, 1e-9)
+            ):
+                included.remove(worst)
+                trimmed = worst
+    weight_sum = sum(weights[index] for index in included)
+    if weight_sum <= 0:
+        total = float("inf")
+    else:
+        total = sum(
+            weights[index] * losses[index].total for index in included
+        ) / weight_sum
+    return float(total), losses, trimmed
+
+
+def _fit_reliability(observations):
+    if not observations:
+        return "unavailable", "no original-mask observations are available"
+    oblique = [
+        observation for observation in observations
+        if (
+            observation.calibration.view_tilt_deg is not None
+            and observation.calibration.view_tilt_deg >= 30.0
+        )
+    ]
+    if not oblique:
+        return "low", "no usable oblique view is available"
+    if len(observations) < 2:
+        return "low", "fewer than two calibrated views are available"
+    return "diagnostic", "calibrated multi-view diagnostic only"
+
+
+def fit_regular_candidate(
+    model, observations, seed_xy, yaw_values=None,
+):
+    """Fit one regular cuboid deterministically without making an ID decision."""
+    observations = tuple(
+        observation for observation in observations
+        if observation.mask_original is not None
+    )
+    reliability, reason = _fit_reliability(observations)
+    if not observations:
+        return CandidateFit(
+            model=model,
+            total=float("inf"),
+            orientation=None,
+            center_xy=None,
+            yaw_deg=None,
+            view_losses=(),
+            trimmed_frame_id=None,
+            reliability=reliability,
+            reason=reason,
+        )
+    max_area = max(
+        int(np.count_nonzero(observation.mask_original))
+        for observation in observations
+    )
+    weights = tuple(
+        _observation_weight(observation, max_area)
+        for observation in observations
+    )
+    coarse_offsets = np.arange(-0.012, 0.0121, 0.004)
+    yaws = (
+        tuple(float(value) for value in yaw_values)
+        if yaw_values is not None
+        else tuple(float(value) for value in range(0, 180, 15))
+    )
+    coarse = []
+    for orientation in resting_orientations(model):
+        for dx in coarse_offsets:
+            for dy in coarse_offsets:
+                center = (float(seed_xy[0] + dx), float(seed_xy[1] + dy))
+                for yaw in yaws:
+                    total, _, _ = _evaluate_hypothesis(
+                        orientation, center, yaw, observations, weights
+                    )
+                    coarse.append((total, orientation, center, yaw))
+    coarse.sort(key=lambda value: (
+        value[0], value[1].label, value[2], value[3]
+    ))
+    seeds = coarse[:8]
+    refined = {}
+    refine_offsets = np.arange(-0.004, 0.0041, 0.001)
+    yaw_offsets = np.arange(-7.5, 7.51, 2.5)
+    for _, orientation, center, yaw in seeds:
+        for dx in refine_offsets:
+            for dy in refine_offsets:
+                refined_center = (
+                    float(center[0] + dx), float(center[1] + dy)
+                )
+                for yaw_offset in yaw_offsets:
+                    refined_yaw = float((yaw + yaw_offset) % 180.0)
+                    key = (
+                        orientation.label,
+                        round(refined_center[0], 6),
+                        round(refined_center[1], 6),
+                        round(refined_yaw, 6),
+                    )
+                    if key in refined:
+                        continue
+                    total, losses, trimmed = _evaluate_hypothesis(
+                        orientation,
+                        refined_center,
+                        refined_yaw,
+                        observations,
+                        weights,
+                    )
+                    refined[key] = (
+                        total, orientation, refined_center, refined_yaw,
+                        losses, trimmed,
+                    )
+    best = min(refined.values(), key=lambda value: (
+        value[0], value[1].label, value[2], value[3]
+    ))
+    total, orientation, center, yaw, losses, trimmed = best
+    view_losses = tuple({
+        "frame_id": observation.frame_id,
+        "weight": float(weights[index]),
+        "trimmed": index == trimmed,
+        "iou": loss.iou,
+        "boundary_error": loss.boundary_error,
+        "under_coverage": loss.under_coverage,
+        "spill": loss.spill,
+        "total": loss.total,
+    } for index, (observation, loss) in enumerate(zip(observations, losses)))
+    return CandidateFit(
+        model=model,
+        total=total,
+        orientation=orientation,
+        center_xy=center,
+        yaw_deg=yaw,
+        view_losses=view_losses,
+        trimmed_frame_id=(
+            None if trimmed is None else observations[trimmed].frame_id
+        ),
+        reliability=reliability,
+        reason=reason,
+    )
+
+
+def compare_regular_candidates(
+    models, observations, seed_xy, yaw_values=None,
+):
+    """Rank candidate cuboids while retaining diagnostic-only reliability."""
+    fits = tuple(sorted(
+        (
+            fit_regular_candidate(
+                model, observations, seed_xy, yaw_values=yaw_values
+            )
+            for model in models
+        ),
+        key=lambda fit: (fit.total, fit.model.part_id),
+    ))
+    if not fits:
+        return ModelFitEvidence(
+            candidates=(),
+            best_part_id=None,
+            runner_up_margin=None,
+            reliability="unavailable",
+            reason="no regular candidate models are available",
+        )
+    margin = fits[1].total - fits[0].total if len(fits) > 1 else None
+    return ModelFitEvidence(
+        candidates=fits,
+        best_part_id=fits[0].model.part_id,
+        runner_up_margin=(None if margin is None else float(margin)),
+        reliability=fits[0].reliability,
+        reason=fits[0].reason,
     )
 
 

@@ -198,3 +198,148 @@ def test_boundary_error_is_symmetric_for_opposite_translations():
 
     assert left.boundary_error == right.boundary_error
     assert left.total == right.total
+
+
+def _look_at_calibration(frame_id, position, tilt_deg):
+    from pipeline.model_fit import FrameCalibration
+
+    position = np.asarray(position, dtype=float)
+    forward = -position / np.linalg.norm(position)
+    right = np.cross(forward, np.array([0.0, 0.0, 1.0]))
+    right /= np.linalg.norm(right)
+    up = np.cross(right, forward)
+    camera_to_world = np.eye(4)
+    camera_to_world[:3, :3] = np.column_stack([right, up, -forward])
+    camera_to_world[:3, 3] = position
+    return FrameCalibration(
+        frame_id=frame_id,
+        intrinsics=(260.0, 260.0, 80.0, 80.0),
+        rgb_size=(160, 160),
+        camera_to_world=camera_to_world,
+        world_to_table=np.eye(4),
+        view_tilt_deg=tilt_deg,
+    )
+
+
+def _fit_observations(model, orientation_index=0, corrupt_frame=None,
+                      tilts=(40.0, 50.0, 55.0, 60.0)):
+    from pipeline.model_fit import (
+        FitObservation,
+        cuboid_vertices,
+        render_cuboid,
+        resting_orientations,
+    )
+
+    positions = (
+        (0.00, -0.12, 0.12),
+        (0.10, -0.08, 0.10),
+        (-0.10, -0.07, 0.11),
+        (0.02, 0.12, 0.09),
+    )
+    dimensions = resting_orientations(model)[orientation_index].dimensions_xyz
+    vertices = cuboid_vertices((0.0, 0.0), 30.0, dimensions)
+    observations = []
+    for frame_id, (position, tilt) in enumerate(zip(positions, tilts), 1):
+        calibration = _look_at_calibration(frame_id, position, tilt)
+        mask = render_cuboid((160, 160), calibration, vertices)
+        if frame_id == corrupt_frame:
+            mask = np.roll(mask, 35, axis=1)
+        observations.append(FitObservation(
+            frame_id=frame_id,
+            mask_original=mask,
+            calibration=calibration,
+            confidence=1.0,
+            boundary_zone=False,
+            sharpness=1.0,
+        ))
+    return observations
+
+
+def test_side_resting_brick_prefers_brick_over_plate():
+    from pipeline.model_fit import RegularModel, compare_regular_candidates
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    plate = RegularModel.from_identification("3020", "Plate 2 x 4")
+    observations = _fit_observations(brick, orientation_index=0)
+
+    evidence = compare_regular_candidates(
+        (brick, plate), observations, (0.0, 0.0), yaw_values=(30.0,)
+    )
+
+    assert evidence.best_part_id == "3001"
+    assert evidence.candidates[0].total < evidence.candidates[1].total
+    assert evidence.reliability == "diagnostic"
+
+
+def test_side_resting_plate_prefers_plate_over_brick():
+    from pipeline.model_fit import RegularModel, compare_regular_candidates
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    plate = RegularModel.from_identification("3020", "Plate 2 x 4")
+    observations = _fit_observations(plate, orientation_index=0)
+
+    evidence = compare_regular_candidates(
+        (brick, plate), observations, (0.0, 0.0), yaw_values=(30.0,)
+    )
+
+    assert evidence.best_part_id == "3020"
+
+
+def test_two_by_two_silhouette_prefers_two_by_two_over_one_by_two():
+    from pipeline.model_fit import RegularModel, compare_regular_candidates
+
+    two_by_two = RegularModel.from_identification("3003", "Brick 2 x 2")
+    one_by_two = RegularModel.from_identification("3004", "Brick 1 x 2")
+    observations = _fit_observations(two_by_two, orientation_index=1)
+
+    evidence = compare_regular_candidates(
+        (one_by_two, two_by_two), observations, (0.0, 0.0),
+        yaw_values=(30.0,),
+    )
+
+    assert evidence.best_part_id == "3003"
+
+
+def test_fit_may_trim_one_corrupted_nonessential_auxiliary_view():
+    from pipeline.model_fit import RegularModel, fit_regular_candidate
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    observations = _fit_observations(brick, corrupt_frame=4)
+
+    fit = fit_regular_candidate(
+        brick, observations, (0.0, 0.0), yaw_values=(30.0,)
+    )
+
+    assert fit.trimmed_frame_id == 4
+    assert len(fit.view_losses) == 4
+
+
+def test_fit_never_trims_the_only_oblique_view():
+    from pipeline.model_fit import RegularModel, fit_regular_candidate
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    observations = _fit_observations(
+        brick, corrupt_frame=4, tilts=(10.0, 10.0, 10.0, 45.0)
+    )
+
+    fit = fit_regular_candidate(
+        brick, observations, (0.0, 0.0), yaw_values=(30.0,)
+    )
+
+    assert fit.trimmed_frame_id != 4
+
+
+def test_fit_without_oblique_view_is_low_reliability():
+    from pipeline.model_fit import RegularModel, fit_regular_candidate
+
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+    observations = _fit_observations(
+        brick, tilts=(10.0, 12.0, 15.0, 20.0)
+    )
+
+    fit = fit_regular_candidate(
+        brick, observations, (0.0, 0.0), yaw_values=(30.0,)
+    )
+
+    assert fit.reliability == "low"
+    assert "oblique" in fit.reason
