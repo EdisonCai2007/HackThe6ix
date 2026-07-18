@@ -62,6 +62,19 @@ PALETTE: list[LegoColor] = [
     LegoColor(0, "black", _hx("05131D")),
 ]
 
+# Emily's physical demo inventory intentionally uses broad color buckets.
+# Keep PALETTE above for inspectable per-view evidence and association hints;
+# final inventory decisions are restricted to this separate profile.
+INVENTORY_COLOR_NAMES: tuple[str, ...] = (
+    "red", "orange", "yellow", "beige", "brown", "green",
+    "dark green", "blue", "white", "light gray", "dark gray", "black",
+)
+INVENTORY_PALETTE: list[LegoColor] = [
+    color for name in INVENTORY_COLOR_NAMES
+    for color in PALETTE
+    if color.name == name
+]
+
 NEUTRAL_COLOR_NAMES = frozenset(
     {"white", "light gray", "gray", "dark gray", "black"}
 )

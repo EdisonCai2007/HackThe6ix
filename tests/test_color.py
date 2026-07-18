@@ -4,6 +4,7 @@ from skimage.color import deltaE_ciede2000, rgb2lab
 
 import pipeline.color as color_module
 from pipeline.color import (
+    INVENTORY_PALETTE,
     PALETTE,
     apply_illuminant_correction,
     choose_illuminant_correction,
@@ -150,6 +151,13 @@ def test_palette_has_expected_colors():
     }
     assert names == expected
     assert len(PALETTE) == len(expected)  # no duplicate names
+
+
+def test_inventory_palette_matches_physical_demo_bucket():
+    assert tuple(color.name for color in INVENTORY_PALETTE) == (
+        "red", "orange", "yellow", "beige", "brown", "green",
+        "dark green", "blue", "white", "light gray", "dark gray", "black",
+    )
 
 
 @pytest.mark.parametrize("color", PALETTE, ids=lambda c: c.name)

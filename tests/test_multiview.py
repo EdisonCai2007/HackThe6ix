@@ -167,6 +167,20 @@ def test_consensus_color_emits_ambiguity_for_dark_low_light_neutral():
     assert consensus_color(instance).name == "ambiguous(black/dark gray)"
 
 
+def test_final_consensus_cannot_emit_dark_red():
+    observation = _obs(1, (30, 30, 80, 100), color="dark red")
+    observation.color_evidence = {
+        "decision_rgb": list(_color("dark red").rgb),
+        "raw_rgb": list(_color("dark red").rgb),
+        "background": {"rgb": [175, 165, 148]},
+        "decision": {"gate": "chromatic"},
+        "flags": [],
+        "view_quality": {"tilt_deg": 15.0},
+    }
+
+    assert consensus_color(FusedInstance([observation], observation)).name == "red"
+
+
 def test_unconfirmed_singleton_requires_two_contradicting_views_to_remove():
     observation = _obs(1, (30, 30, 60, 60), color="dark gray")
     instance = FusedInstance([observation], observation)

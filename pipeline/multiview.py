@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 
 from pipeline.color import (
+    INVENTORY_COLOR_NAMES,
+    INVENTORY_PALETTE,
     PALETTE,
     LegoColor,
     choose_illuminant_correction,
@@ -248,7 +250,10 @@ def _legacy_consensus_color(instance: FusedInstance) -> LegoColor:
         votes[name] = votes.get(name, 0) + 1
     best_name = instance.best.color.name
     winner = max(votes, key=lambda name: (votes[name], name == best_name))
-    return next(color for color in PALETTE if color.name == winner)
+    reference = next(color for color in PALETTE if color.name == winner)
+    if reference.name in INVENTORY_COLOR_NAMES:
+        return reference
+    return match_color(reference.rgb, INVENTORY_PALETTE)
 
 
 def _ambiguous_color(first: str, second: str) -> LegoColor:
@@ -378,7 +383,9 @@ def consensus_color_details(instance: FusedInstance) -> tuple[LegoColor, dict]:
     weights_by_name: dict[str, float] = {}
     for observation, weight, _, _ in selected:
         rgb = tuple(map(int, (observation.color_evidence or {})["decision_rgb"]))
-        matches, _ = rank_color_candidates(rgb, limit=len(PALETTE))
+        matches, _ = rank_color_candidates(
+            rgb, colors=INVENTORY_PALETTE, limit=len(INVENTORY_PALETTE)
+        )
         for match in matches:
             name = match["name"]
             totals[name] = totals.get(name, 0.0) + weight * float(match["decision_score"])
@@ -403,7 +410,9 @@ def consensus_color_details(instance: FusedInstance) -> tuple[LegoColor, dict]:
     if ambiguity_reason:
         color = _ambiguous_color(best_name, second_name)
     else:
-        color = next(color for color in PALETTE if color.name == best_name)
+        color = next(
+            color for color in INVENTORY_PALETTE if color.name == best_name
+        )
     return color, {
         "strategy": "quality_weighted_gated_scores",
         "predicted_color": color.name,
@@ -445,6 +454,7 @@ def color_provenance(instance: FusedInstance) -> dict:
     _, aggregation = consensus_color_details(instance)
     return {
         **aggregation,
+        "output_palette": list(INVENTORY_COLOR_NAMES),
         "vote_counts": votes,
         "observations": rows,
     }
