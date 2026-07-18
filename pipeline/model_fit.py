@@ -480,6 +480,23 @@ def _view_value(view, name):
     return getattr(view, name, None)
 
 
+def _derive_view_tilt_deg(camera_to_world, world_to_table):
+    camera_forward_world = (
+        np.asarray(camera_to_world, dtype=np.float64)[:3, :3]
+        @ np.array([0.0, 0.0, -1.0])
+    )
+    viewing_ray_table = (
+        np.asarray(world_to_table, dtype=np.float64)[:3, :3]
+        @ camera_forward_world
+    )
+    magnitude = float(np.linalg.norm(viewing_ray_table))
+    if magnitude <= 0 or not np.isfinite(magnitude):
+        return None
+    viewing_ray_table /= magnitude
+    cosine = float(np.clip(-viewing_ray_table[2], -1.0, 1.0))
+    return float(np.degrees(np.arccos(cosine)))
+
+
 def load_frame_calibrations(session_dir, views) -> dict[int, FrameCalibration]:
     """Load selected ARKit frame calibration in explicit matrix conventions."""
     session_dir = Path(session_dir)
@@ -509,6 +526,8 @@ def load_frame_calibrations(session_dir, views) -> dict[int, FrameCalibration]:
         intrinsics = record["intrinsics"]
         # Stored RGB size follows NumPy (height, width) order.
         height, width = (int(value) for value in record["rgb_size"])
+        camera_to_world = np.asarray(record["pose_mat"], dtype=np.float64)
+        stored_tilt = _view_value(view, "view_tilt_deg")
         calibrations[frame_id] = FrameCalibration(
             frame_id=frame_id,
             intrinsics=(
@@ -518,12 +537,12 @@ def load_frame_calibrations(session_dir, views) -> dict[int, FrameCalibration]:
                 float(intrinsics["cy"]),
             ),
             rgb_size=(width, height),
-            camera_to_world=np.asarray(record["pose_mat"], dtype=np.float64),
+            camera_to_world=camera_to_world,
             world_to_table=world_to_table,
             view_tilt_deg=(
-                None
-                if _view_value(view, "view_tilt_deg") is None
-                else float(_view_value(view, "view_tilt_deg"))
+                _derive_view_tilt_deg(camera_to_world, world_to_table)
+                if stored_tilt is None
+                else float(stored_tilt)
             ),
         )
     return calibrations

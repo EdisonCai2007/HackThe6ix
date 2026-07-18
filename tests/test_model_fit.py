@@ -4,6 +4,7 @@ import json
 
 import cv2
 import numpy as np
+import pytest
 
 
 TARGET_SESSION = Path(
@@ -82,6 +83,33 @@ def test_real_frame_projection_agrees_with_stored_plane_homography():
     ).reshape(-1, 2)
     np.testing.assert_array_equal(valid, [True, True, True])
     np.testing.assert_allclose(projected, expected, atol=1e-5, rtol=0.0)
+
+
+def test_loader_derives_legacy_optical_tilt_from_pose_and_table_frame():
+    from pipeline.model_fit import load_frame_calibrations
+
+    record = next(
+        json.loads(line)
+        for line in (TARGET_SESSION / "frames.jsonl").read_text().splitlines()
+        if json.loads(line)["frame_id"] == 14
+    )
+    world_to_table = np.asarray(json.loads(
+        (TARGET_SESSION / "table_frame.json").read_text()
+    )["world_to_table"])
+    camera_forward_world = (
+        np.asarray(record["pose_mat"])[:3, :3] @ [0.0, 0.0, -1.0]
+    )
+    table_up_world = world_to_table[2, :3]
+    expected_optical_tilt = np.degrees(np.arccos(np.clip(
+        -(camera_forward_world @ table_up_world), -1.0, 1.0
+    )))
+    legacy_view = SimpleNamespace(frame_id=14, view_tilt_deg=None)
+
+    calibration = load_frame_calibrations(
+        TARGET_SESSION, [legacy_view]
+    )[14]
+
+    assert calibration.view_tilt_deg == pytest.approx(expected_optical_tilt)
 
 
 def test_regular_model_parses_brick_and_plate_dimensions():
