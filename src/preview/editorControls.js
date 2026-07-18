@@ -108,6 +108,7 @@ export function createEditorControls({
   setModel,
   onSelectionChange,
   onBrickContextMenu,
+  isLocked = () => false,
   createTransformControls = (editorCamera, editorDomElement) =>
     new TransformControls(editorCamera, editorDomElement),
 }) {
@@ -180,6 +181,17 @@ export function createEditorControls({
   let axisDragActive = false;
   let axisCommitPending = false;
   let snappingAxisObject = false;
+  let locked = false;
+
+  function controlsLocked() {
+    return locked || Boolean(isLocked?.());
+  }
+
+  function hideRotationHandles() {
+    rotationRing.visible = false;
+    rotationRingHitTarget.visible = false;
+    rotationAngleFill.visible = false;
+  }
 
   function updatePointer(event) {
     const rect = domElement.getBoundingClientRect();
@@ -223,10 +235,8 @@ export function createEditorControls({
   }
 
   function syncRotationRingToBrick(brick) {
-    if (!brick || tool !== "rotate") {
-      rotationRing.visible = false;
-      rotationRingHitTarget.visible = false;
-      rotationAngleFill.visible = false;
+    if (!brick || tool !== "rotate" || controlsLocked()) {
+      hideRotationHandles();
       return;
     }
 
@@ -234,9 +244,7 @@ export function createEditorControls({
     const dimensions = getPartDimensions(brick.part_id, brick.rotation);
 
     if (radius === null || !dimensions) {
-      rotationRing.visible = false;
-      rotationRingHitTarget.visible = false;
-      rotationAngleFill.visible = false;
+      hideRotationHandles();
       return;
     }
 
@@ -294,7 +302,7 @@ export function createEditorControls({
 
   function cancelHandDrag() {
     handDrag = null;
-    orbitControls.enabled = true;
+    orbitControls.enabled = !controlsLocked();
   }
 
   function cancelActiveDrag(event) {
@@ -500,10 +508,15 @@ export function createEditorControls({
     }
 
     updateRotationAngleFill(null);
-    orbitControls.enabled = true;
+    orbitControls.enabled = !controlsLocked();
   }
 
   function pointerDown(event) {
+    if (controlsLocked()) {
+      cancelActiveDrag(event);
+      return;
+    }
+
     if (tool === "axis" && transformControls.dragging) {
       return;
     }
@@ -574,6 +587,10 @@ export function createEditorControls({
   }
 
   function contextMenu(event) {
+    if (controlsLocked()) {
+      return;
+    }
+
     const brickId = intersectBrick(event);
 
     if (!brickId) {
@@ -590,6 +607,11 @@ export function createEditorControls({
   }
 
   function pointerMove(event) {
+    if (controlsLocked()) {
+      cancelActiveDrag(event);
+      return;
+    }
+
     if (rotateDrag) {
       if (event.pointerId !== rotateDrag.pointerId) {
         return;
@@ -683,6 +705,11 @@ export function createEditorControls({
   }
 
   function pointerUp(event) {
+    if (controlsLocked()) {
+      cancelActiveDrag(event);
+      return;
+    }
+
     if (rotateDrag) {
       if (event.pointerId !== rotateDrag.pointerId) {
         return;
@@ -751,7 +778,7 @@ export function createEditorControls({
   }
 
   function snapAxisObjectToGrid() {
-    if (!selectedBrickId || tool !== "axis") {
+    if (controlsLocked() || !selectedBrickId || tool !== "axis") {
       return null;
     }
 
@@ -788,6 +815,11 @@ export function createEditorControls({
   }
 
   function commitAxisTransform() {
+    if (controlsLocked()) {
+      axisCommitPending = false;
+      return;
+    }
+
     const gridPosition = snapAxisObjectToGrid();
 
     if (!gridPosition) {
@@ -803,7 +835,7 @@ export function createEditorControls({
   }
 
   function keyDown(event) {
-    if (event.key !== "Escape" || !rotateDrag) {
+    if (controlsLocked() || event.key !== "Escape" || !rotateDrag) {
       return;
     }
 
@@ -813,6 +845,14 @@ export function createEditorControls({
   }
 
   transformControls.addEventListener("dragging-changed", (event) => {
+    if (controlsLocked()) {
+      orbitControls.enabled = false;
+      axisDragActive = false;
+      axisCommitPending = false;
+      transformControls.detach();
+      return;
+    }
+
     orbitControls.enabled = !event.value;
 
     if (event.value) {
@@ -830,7 +870,7 @@ export function createEditorControls({
   });
 
   transformControls.addEventListener("objectChange", () => {
-    if (snappingAxisObject) {
+    if (controlsLocked() || snappingAxisObject) {
       return;
     }
 
@@ -855,6 +895,13 @@ export function createEditorControls({
 
       tool = nextTool;
 
+      if (controlsLocked()) {
+        transformControls.detach();
+        updateRotationAngleFill(null);
+        hideRotationHandles();
+        return tool;
+      }
+
       const selectedObject = selectedBrickId
         ? brickScene.getBrickObject(selectedBrickId)
         : null;
@@ -872,6 +919,18 @@ export function createEditorControls({
       updateRotationRing();
     },
     setSelectedBrickId: selectBrick,
+    setLocked(nextLocked) {
+      locked = Boolean(nextLocked);
+      if (locked) {
+        cancelActiveDrag();
+        transformControls.detach();
+        updateRotationAngleFill(null);
+        hideRotationHandles();
+        return;
+      }
+
+      updateRotationRing();
+    },
     reset() {
       cancelActiveDrag();
       tool = "hand";
