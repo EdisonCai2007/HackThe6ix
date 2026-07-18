@@ -1,0 +1,386 @@
+<style>
+  .regen-board {
+    display: grid;
+    gap: 22px;
+  }
+
+  .hero-preview {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+    gap: 18px;
+    align-items: stretch;
+  }
+
+  .preview-shell {
+    overflow: hidden;
+    min-height: 470px;
+    border: 1px solid #e9cfe0;
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at 52% 40%, #ffe6f0 0 16%, transparent 42%),
+      linear-gradient(180deg, #fffafb 0%, #fff3f8 100%);
+    color: #55283e;
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", ui-rounded, system-ui, sans-serif;
+    box-shadow: 0 22px 60px rgba(198, 114, 151, 0.16);
+  }
+
+  .app-bar {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    height: 34px;
+    padding: 0 18px;
+    border-bottom: 1px solid #f0c8dc;
+    background: rgba(255, 255, 255, 0.82);
+    color: #6b3450;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .tool-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 56px;
+    border-bottom: 1px solid #f0c8dc;
+    background: rgba(255, 241, 248, 0.92);
+  }
+
+  .icon-button,
+  .text-button {
+    display: grid;
+    min-width: 38px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid #eeb9d2;
+    border-radius: 8px;
+    background: #fff;
+    color: #71344f;
+    font-size: 14px;
+    font-weight: 900;
+    box-shadow: 0 6px 14px rgba(216, 134, 171, 0.1);
+  }
+
+  .icon-button.active {
+    border-color: #df84ae;
+    background: #ffddea;
+    color: #622941;
+    box-shadow: 0 0 0 4px rgba(255, 221, 234, 0.72);
+  }
+
+  .text-button {
+    padding: 0 13px;
+  }
+
+  .canvas-area {
+    position: relative;
+    height: 380px;
+  }
+
+  .left-rail,
+  .right-rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(255, 239, 247, 0.9);
+    border-color: #f0c8dc;
+  }
+
+  .left-rail {
+    left: 0;
+    width: 30%;
+    border-right: 1px solid #f0c8dc;
+  }
+
+  .right-rail {
+    right: 0;
+    width: 22%;
+    border-left: 1px solid #f0c8dc;
+  }
+
+  .panel {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid #f0c8dc;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 22px rgba(182, 104, 139, 0.09);
+  }
+
+  .panel-title {
+    color: #8e4b68;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .line {
+    height: 9px;
+    border-radius: 999px;
+    background: #f8cddf;
+  }
+
+  .line.short {
+    width: 68%;
+  }
+
+  .input {
+    height: 28px;
+    border: 1px solid #efbfd5;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .generate {
+    display: grid;
+    height: 32px;
+    place-items: center;
+    border: 1px solid #df84ae;
+    border-radius: 9px;
+    background: #ffddea;
+    color: #622941;
+    font-size: 12px;
+    font-weight: 950;
+  }
+
+  .build-object {
+    position: absolute;
+    top: 120px;
+    left: 48%;
+    width: 76px;
+    height: 58px;
+    border: 5px solid #e78ab1;
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 18px 12px, rgba(255, 255, 255, 0.78) 0 7px, transparent 8px),
+      radial-gradient(circle at 48px 12px, rgba(255, 255, 255, 0.78) 0 7px, transparent 8px),
+      #ffd5e6;
+    box-shadow: 0 26px 44px rgba(211, 120, 160, 0.24);
+    transform: rotate(-8deg);
+  }
+
+  .grid-plane {
+    position: absolute;
+    right: 25%;
+    bottom: 40px;
+    left: 34%;
+    height: 68px;
+    opacity: 0.28;
+    background:
+      linear-gradient(#df9eba 1px, transparent 1px),
+      linear-gradient(90deg, #df9eba 1px, transparent 1px);
+    background-size: 19px 19px;
+    transform: perspective(130px) rotateX(60deg);
+  }
+
+  .drawer-tab-left,
+  .drawer-tab-right {
+    position: absolute;
+    top: 50%;
+    display: grid;
+    width: 22px;
+    height: 82px;
+    place-items: center;
+    border: 1px solid #eeb9d2;
+    background: #fff;
+    color: #71344f;
+    font-weight: 950;
+  }
+
+  .drawer-tab-left {
+    left: 30%;
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .drawer-tab-right {
+    right: 22%;
+    border-right: 0;
+    border-radius: 8px 0 0 8px;
+  }
+
+  .design-spec {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid #e8eaf4;
+    border-radius: 16px;
+    background: #fff;
+  }
+
+  .palette-row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+  }
+
+  .palette-label {
+    color: #6a7183;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .swatch {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: end center;
+    padding-bottom: 4px;
+    border: 1px solid rgba(55, 63, 79, 0.12);
+    border-radius: 999px;
+    color: rgba(38, 45, 61, 0.74);
+    font-size: 9px;
+    font-weight: 900;
+  }
+
+  .rule-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .rule {
+    padding: 10px 12px;
+    border: 1px solid #edf0f8;
+    border-radius: 10px;
+    background: #fbfcff;
+    color: #5c6578;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .rule strong {
+    color: #333b4e;
+  }
+
+  .theme-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .mini-theme {
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg);
+  }
+
+  .mini-theme-name {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .mini-theme-ui {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .mini-theme-ui div {
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  @media (max-width: 980px) {
+    .hero-preview,
+    .theme-strip {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="regen-board">
+  <div>
+    <h2>Regenerated Light Pastel Direction</h2>
+    <p class="subtitle">This version keeps the app bright: white controls, pale theme surfaces, darker theme text, and zero yellow secondary accents.</p>
+  </div>
+
+  <div class="hero-preview">
+    <div class="preview-shell">
+      <div class="app-bar"><span>File</span><span>Window</span><span>Help</span></div>
+      <div class="tool-strip">
+        <div class="icon-button">↶</div>
+        <div class="icon-button">↷</div>
+        <div class="icon-button active">●</div>
+        <div class="icon-button">↕</div>
+        <div class="icon-button">↻</div>
+        <div class="text-button">Instructions</div>
+      </div>
+      <div class="canvas-area">
+        <div class="grid-plane"></div>
+        <div class="build-object"></div>
+        <div class="left-rail">
+          <div class="panel"><div class="panel-title">Ready to generate</div><div class="line"></div><div class="line short"></div></div>
+          <div class="panel"><div class="panel-title">Build Ideas</div><div class="line"></div><div class="line" style="width:82%"></div><div class="line short"></div></div>
+          <div class="panel"><div class="panel-title">Prompt</div><div class="input"></div><div class="input"></div><div class="generate">Generate</div></div>
+        </div>
+        <div class="right-rail">
+          <div class="panel"><div class="panel-title">Bricks</div><div class="input" style="height:56px"></div><div class="input" style="height:56px"></div><div class="input" style="height:56px"></div></div>
+        </div>
+        <div class="drawer-tab-left">›</div>
+        <div class="drawer-tab-right">›</div>
+      </div>
+    </div>
+
+    <div class="design-spec">
+      <h3>Design Rules</h3>
+      <div class="palette-row">
+        <div class="palette-label">Pink Seed</div>
+        <div class="swatches">
+          <div class="swatch" style="background:#fff">UI</div>
+          <div class="swatch" style="background:#fff3f8">bar</div>
+          <div class="swatch" style="background:#fdebf3">rail</div>
+          <div class="swatch" style="background:#ffddea">btn</div>
+          <div class="swatch" style="background:#55283e; color:#fff">text</div>
+        </div>
+      </div>
+      <div class="rule-list">
+        <div class="rule"><strong>Keep surfaces light.</strong> Panels, cards, inputs, toolbar buttons, and menus are white or very pale theme tints.</div>
+        <div class="rule"><strong>No yellow fallback.</strong> Runtime palette excludes yellow and avoids warm unrelated accents.</div>
+        <div class="rule"><strong>Theme-relative contrast.</strong> Text is a darker version of the chosen pastel; active states are saturated but still soft.</div>
+        <div class="rule"><strong>Same layout.</strong> Full-width toolbar, side panels, resize handles, drawer tabs, and canvas placement stay the same.</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3>Runtime Palette Examples</h3>
+    <div class="theme-strip">
+      <div class="mini-theme" style="--bg:#fff3f8; --line:#f0c8dc; --text:#55283e; --accent:#ffddea">
+        <div class="mini-theme-name">Pastel Pink</div><div class="mini-theme-ui"><div></div><div style="width:76%"></div><div style="width:52%"></div></div>
+      </div>
+      <div class="mini-theme" style="--bg:#f0fbf6; --line:#bfead5; --text:#1c4332; --accent:#dff8ed">
+        <div class="mini-theme-name">Pastel Mint</div><div class="mini-theme-ui"><div></div><div style="width:76%"></div><div style="width:52%"></div></div>
+      </div>
+      <div class="mini-theme" style="--bg:#f3f1ff; --line:#cec7ff; --text:#312d63; --accent:#e6e2ff">
+        <div class="mini-theme-name">Pastel Purple</div><div class="mini-theme-ui"><div></div><div style="width:76%"></div><div style="width:52%"></div></div>
+      </div>
+      <div class="mini-theme" style="--bg:#eff8ff; --line:#badff7; --text:#214764; --accent:#d9efff">
+        <div class="mini-theme-name">Pastel Sky</div><div class="mini-theme-ui"><div></div><div style="width:76%"></div><div style="width:52%"></div></div>
+      </div>
+      <div class="mini-theme" style="--bg:#fff4f0; --line:#f4c8ba; --text:#663829; --accent:#ffe2d9">
+        <div class="mini-theme-name">Pastel Peach</div><div class="mini-theme-ui"><div></div><div style="width:76%"></div><div style="width:52%"></div></div>
+      </div>
+    </div>
+  </div>
+</div>

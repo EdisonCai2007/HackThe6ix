@@ -1,0 +1,337 @@
+<style>
+  .theme-board {
+    display: grid;
+    gap: 22px;
+  }
+
+  .theme-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .theme-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 2px solid transparent;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 12px 34px rgba(30, 42, 62, 0.1);
+    cursor: pointer;
+  }
+
+  .theme-card.selected {
+    border-color: #5b6ff0;
+  }
+
+  .theme-card h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .theme-card p {
+    margin: 0;
+    color: #5f6675;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .editor-mini {
+    overflow: hidden;
+    height: 330px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--canvas);
+    color: var(--text);
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", ui-rounded, system-ui, sans-serif;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+
+  .mini-menu,
+  .mini-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--dark);
+    color: var(--dark-text);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .mini-toolbar {
+    justify-content: center;
+    height: 42px;
+  }
+
+  .mini-tool,
+  .mini-cta {
+    display: grid;
+    min-width: 28px;
+    height: 26px;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--base) 52%, white);
+    border-radius: 7px;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .mini-tool.active {
+    background: var(--accent);
+  }
+
+  .mini-cta {
+    width: auto;
+    padding: 0 9px;
+  }
+
+  .mini-body {
+    position: relative;
+    height: 252px;
+  }
+
+  .mini-left,
+  .mini-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 10px;
+    background: var(--panel);
+    border-color: var(--line);
+  }
+
+  .mini-left {
+    left: 0;
+    width: 35%;
+    border-right: 1px solid var(--line);
+  }
+
+  .mini-right {
+    right: 0;
+    width: 25%;
+    border-left: 1px solid var(--line);
+  }
+
+  .mini-panel {
+    display: grid;
+    gap: 7px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .mini-panel-title {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .mini-line {
+    height: 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--base) 26%, white);
+  }
+
+  .mini-input {
+    height: 25px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--surface) 82%, white);
+  }
+
+  .mini-build-button {
+    display: grid;
+    height: 27px;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mini-canvas-mark {
+    position: absolute;
+    top: 82px;
+    left: 44%;
+    width: 58px;
+    height: 48px;
+    border: 4px solid var(--accent);
+    border-radius: 12px;
+    background:
+      linear-gradient(90deg, transparent 13px, rgba(255, 255, 255, 0.34) 13px 17px, transparent 17px),
+      var(--button);
+    box-shadow: 0 18px 36px color-mix(in srgb, var(--base) 36%, transparent);
+    transform: rotate(-8deg);
+  }
+
+  .mini-grid {
+    position: absolute;
+    right: 28%;
+    bottom: 28px;
+    left: 38%;
+    height: 42px;
+    opacity: 0.34;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 17px 17px;
+    transform: perspective(100px) rotateX(58deg);
+  }
+
+  .swatches {
+    display: flex;
+    gap: 6px;
+  }
+
+  .swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .note {
+    padding: 12px;
+    border: 1px solid #e0e5f3;
+    border-radius: 10px;
+    background: #fbfcff;
+  }
+
+  .note strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #2c3342;
+  }
+
+  .note span {
+    color: #687083;
+    font-size: 13px;
+  }
+
+  @media (max-width: 980px) {
+    .theme-card-grid,
+    .notes {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="theme-board">
+  <div>
+    <h2>Pastel Runtime Theme Directions</h2>
+    <p class="subtitle">Same editor layout. Each dev server start picks one pastel base color, then derives lighter buttons, darker panels, accent states, and readable text from that color.</p>
+  </div>
+
+  <div class="theme-card-grid">
+    <div
+      class="theme-card"
+      data-choice="paper-playroom"
+      onclick="toggleSelect(this)"
+      style="--base:#f8b7cd; --button:#ffe2ee; --accent:#f296b9; --dark:#d982a8; --dark-text:#54253b; --surface:#fff3f8; --panel:#fce0eb; --canvas:#fff7fb; --text:#50293c; --muted:#8d4d67; --line:#efbad0; --grid:#dc98b6;"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>A. Pastel Paper Workspace</h3>
+      <p>Recommended. Bright, soft, and kid-friendly while still preserving strong contrast for controls and text.</p>
+      <div class="swatches"><span class="swatch" style="background:#f8b7cd"></span><span class="swatch" style="background:#ffe2ee"></span><span class="swatch" style="background:#d982a8"></span></div>
+    </div>
+
+    <div
+      class="theme-card"
+      data-choice="candy-console"
+      onclick="toggleSelect(this)"
+      style="--base:#b8e7d1; --button:#e4fff1; --accent:#85dcb3; --dark:#76c69f; --dark-text:#173f30; --surface:#153528; --panel:#1d4636; --canvas:#102d24; --text:#f2fff8; --muted:#b9f0d5; --line:#4c8f73; --grid:#76c69f;"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>B. Candy Console</h3>
+      <p>Keeps the old dark workspace feel, but replaces gray/yellow with a themed pastel glow. More serious, less kid-forward.</p>
+      <div class="swatches"><span class="swatch" style="background:#b8e7d1"></span><span class="swatch" style="background:#e4fff1"></span><span class="swatch" style="background:#1d4636"></span></div>
+    </div>
+
+    <div
+      class="theme-card"
+      data-choice="toy-table"
+      onclick="toggleSelect(this)"
+      style="--base:#c9c2ff; --button:#efecff; --accent:#a99dff; --dark:#958ae8; --dark-text:#302b67; --surface:#fff8df; --panel:#f3edff; --canvas:#f8fbff; --text:#312d63; --muted:#6960a8; --line:#cec7ff; --grid:#a99dff;"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>C. Toy Table</h3>
+      <p>Uses one random pastel as the base but allows a warm neutral secondary surface. Friendlier, but less strictly “entire UI from one color.”</p>
+      <div class="swatches"><span class="swatch" style="background:#c9c2ff"></span><span class="swatch" style="background:#efecff"></span><span class="swatch" style="background:#fff8df"></span></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><strong>Runtime behavior</strong><span>Pick a base pastel once on dev server start. The browser receives that seed and does not reshuffle on refresh.</span></div>
+    <div class="note"><strong>Color relationship</strong><span>Buttons are lighter than the base; selected states and dark surfaces are deeper relatives of the base.</span></div>
+    <div class="note"><strong>Font</strong><span>Use a rounded system stack so it feels softer without depending on any external font download.</span></div>
+  </div>
+</div>

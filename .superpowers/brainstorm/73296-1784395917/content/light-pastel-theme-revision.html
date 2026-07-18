@@ -1,0 +1,348 @@
+<style>
+  .light-theme-board {
+    display: grid;
+    gap: 22px;
+  }
+
+  .revision-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .summary-pill {
+    padding: 12px;
+    border: 1px solid #e5eaf6;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .summary-pill strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #283142;
+    font-size: 13px;
+  }
+
+  .summary-pill span {
+    color: #687285;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .theme-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .theme-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 2px solid transparent;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 12px 34px rgba(30, 42, 62, 0.1);
+    cursor: pointer;
+  }
+
+  .theme-card.selected {
+    border-color: #5b6ff0;
+  }
+
+  .theme-card h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .theme-card p {
+    margin: 0;
+    color: #5f6675;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .editor-mini {
+    overflow: hidden;
+    height: 340px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background:
+      radial-gradient(circle at 52% 36%, var(--canvas-glow), transparent 45%),
+      var(--canvas);
+    color: var(--text);
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", ui-rounded, system-ui, sans-serif;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.78);
+  }
+
+  .mini-menu,
+  .mini-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--chrome);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  .mini-toolbar {
+    justify-content: center;
+    height: 42px;
+    background: var(--toolbar);
+  }
+
+  .mini-tool,
+  .mini-cta {
+    display: grid;
+    min-width: 28px;
+    height: 26px;
+    place-items: center;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .mini-tool.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+
+  .mini-cta {
+    width: auto;
+    padding: 0 9px;
+    background: #fff;
+  }
+
+  .mini-body {
+    position: relative;
+    height: 262px;
+  }
+
+  .mini-left,
+  .mini-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 10px;
+    background: var(--panel);
+    border-color: var(--line);
+  }
+
+  .mini-left {
+    left: 0;
+    width: 35%;
+    border-right: 1px solid var(--line);
+  }
+
+  .mini-right {
+    right: 0;
+    width: 25%;
+    border-left: 1px solid var(--line);
+  }
+
+  .mini-panel {
+    display: grid;
+    gap: 7px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 8px 18px rgba(40, 48, 66, 0.06);
+  }
+
+  .mini-panel-title {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .mini-line {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--stripe);
+  }
+
+  .mini-input {
+    height: 25px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+  }
+
+  .mini-build-button {
+    display: grid;
+    height: 27px;
+    place-items: center;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--button);
+    color: var(--button-text);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mini-canvas-mark {
+    position: absolute;
+    top: 82px;
+    left: 44%;
+    width: 58px;
+    height: 48px;
+    border: 4px solid var(--accent);
+    border-radius: 12px;
+    background:
+      linear-gradient(90deg, transparent 13px, rgba(255, 255, 255, 0.6) 13px 17px, transparent 17px),
+      var(--accent-soft);
+    box-shadow: 0 18px 36px var(--shadow);
+    transform: rotate(-8deg);
+  }
+
+  .mini-grid {
+    position: absolute;
+    right: 28%;
+    bottom: 28px;
+    left: 38%;
+    height: 42px;
+    opacity: 0.34;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 17px 17px;
+    transform: perspective(100px) rotateX(58deg);
+  }
+
+  .swatches {
+    display: flex;
+    gap: 6px;
+  }
+
+  .swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  @media (max-width: 980px) {
+    .theme-card-grid,
+    .revision-summary {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="light-theme-board">
+  <div>
+    <h2>Light Pastel Revision</h2>
+    <p class="subtitle">Updated from your feedback: light pastel workspace, white and theme-colored surfaces, no yellow secondary accent, and no dark console panels.</p>
+  </div>
+
+  <div class="revision-summary">
+    <div class="summary-pill"><strong>Base</strong><span>Random pastel per dev server start.</span></div>
+    <div class="summary-pill"><strong>Surfaces</strong><span>Mostly white, with light theme tint for panels.</span></div>
+    <div class="summary-pill"><strong>Buttons</strong><span>White or lighter-than-base pastel, not yellow.</span></div>
+    <div class="summary-pill"><strong>Text</strong><span>Darker version of the same theme color.</span></div>
+  </div>
+
+  <div class="theme-card-grid">
+    <div
+      class="theme-card"
+      data-choice="white-pastel"
+      onclick="toggleSelect(this)"
+      style="--base:#f8b7cd; --chrome:#fff8fb; --toolbar:#fff3f8; --surface:#fff; --panel:#fdebf3; --canvas:#fff7fb; --canvas-glow:#ffe3ef; --button:#fff; --button-text:#71304d; --accent:#e987ae; --accent-soft:#ffddeb; --accent-text:#6e2948; --text:#50293c; --muted:#8d4d67; --line:#f1c8da; --line-strong:#eeb4cd; --grid:#e7aac5; --stripe:#f9cadd; --shadow:rgba(232, 135, 174, 0.23);"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>A. White Pastel</h3>
+      <p>Recommended. Mostly white UI with pastel-tinted rails, toolbar, outlines, selected tools, and canvas glow.</p>
+      <div class="swatches"><span class="swatch" style="background:#fff"></span><span class="swatch" style="background:#fdebf3"></span><span class="swatch" style="background:#f8b7cd"></span><span class="swatch" style="background:#50293c"></span></div>
+    </div>
+
+    <div
+      class="theme-card"
+      data-choice="soft-wash"
+      onclick="toggleSelect(this)"
+      style="--base:#b8e7d1; --chrome:#f8fffb; --toolbar:#effcf5; --surface:#fff; --panel:#e9faF1; --canvas:#f8fffb; --canvas-glow:#ddf8eb; --button:#fff; --button-text:#1f5a42; --accent:#7bd3a6; --accent-soft:#dff8ed; --accent-text:#1b573e; --text:#1c4332; --muted:#45745d; --line:#bfead5; --line-strong:#9bdcbb; --grid:#8bd5b1; --stripe:#ccefdc; --shadow:rgba(123, 211, 166, 0.24);"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>B. Soft Wash</h3>
+      <p>Lightest option. The whole app feels nearly white, with the pastel mainly visible in outlines, hover states, and canvas atmosphere.</p>
+      <div class="swatches"><span class="swatch" style="background:#fff"></span><span class="swatch" style="background:#e9faf1"></span><span class="swatch" style="background:#b8e7d1"></span><span class="swatch" style="background:#1c4332"></span></div>
+    </div>
+
+    <div
+      class="theme-card"
+      data-choice="tinted-toolbar"
+      onclick="toggleSelect(this)"
+      style="--base:#c9c2ff; --chrome:#fbfaff; --toolbar:#ece9ff; --surface:#fff; --panel:#f1efff; --canvas:#fafaff; --canvas-glow:#e7e3ff; --button:#fff; --button-text:#383273; --accent:#9f92ff; --accent-soft:#e6e2ff; --accent-text:#3b3476; --text:#312d63; --muted:#6960a8; --line:#cec7ff; --line-strong:#bcb3ff; --grid:#a99dff; --stripe:#ded9ff; --shadow:rgba(159, 146, 255, 0.24);"
+    >
+      <div class="editor-mini">
+        <div class="mini-menu"><span>File</span><span>Window</span><span>Help</span></div>
+        <div class="mini-toolbar">
+          <div class="mini-tool">↶</div><div class="mini-tool">↷</div><div class="mini-tool active">●</div><div class="mini-tool">↕</div><div class="mini-tool">↻</div><div class="mini-cta">Instructions</div>
+        </div>
+        <div class="mini-body">
+          <div class="mini-grid"></div>
+          <div class="mini-canvas-mark"></div>
+          <div class="mini-left">
+            <div class="mini-panel"><div class="mini-panel-title">Ready</div><div class="mini-line"></div><div class="mini-line" style="width:70%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Build Ideas</div><div class="mini-line"></div><div class="mini-line" style="width:82%"></div></div>
+            <div class="mini-panel"><div class="mini-panel-title">Prompt</div><div class="mini-input"></div><div class="mini-build-button">Generate</div></div>
+          </div>
+          <div class="mini-right">
+            <div class="mini-panel"><div class="mini-panel-title">Bricks</div><div class="mini-input" style="height:54px"></div><div class="mini-input" style="height:54px"></div></div>
+          </div>
+        </div>
+      </div>
+      <h3>C. Tinted Toolbar</h3>
+      <p>Slightly stronger theme presence in the toolbar and rails, while cards and inputs stay clean white.</p>
+      <div class="swatches"><span class="swatch" style="background:#fff"></span><span class="swatch" style="background:#f1efff"></span><span class="swatch" style="background:#c9c2ff"></span><span class="swatch" style="background:#312d63"></span></div>
+    </div>
+  </div>
+</div>
