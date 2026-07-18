@@ -1,0 +1,127 @@
+# Task 4 Review Package (no git repository)
+
+## Changed file contents
+
+### server/generationServer.js
+     1	import { createServer } from "node:http";
+     2	
+     3	import { createOpenRouterClient } from "../src/generation/openRouterClient.js";
+     4	import { generateModel } from "../src/generation/service.js";
+     5	
+     6	const HOST = "127.0.0.1";
+     7	const PORT = Number(process.env.GENERATION_PORT ?? 8787);
+     8	const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL;
+     9	
+    10	function sendJson(response, statusCode, payload) {
+    11	  response.writeHead(statusCode, {
+    12	    "Access-Control-Allow-Origin": "http://127.0.0.1:5173",
+    13	    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    14	    "Access-Control-Allow-Headers": "Content-Type",
+    15	    "Content-Type": "application/json",
+    16	  });
+    17	  response.end(JSON.stringify(payload));
+    18	}
+    19	
+    20	async function readJson(request) {
+    21	  const chunks = [];
+    22	
+    23	  for await (const chunk of request) {
+    24	    chunks.push(chunk);
+    25	  }
+    26	
+    27	  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    28	}
+    29	
+    30	function validateRequestBody(body) {
+    31	  const errors = [];
+    32	
+    33	  if (!body || typeof body !== "object") {
+    34	    return ["Request body must be a JSON object."];
+    35	  }
+    36	
+    37	  if (typeof body.userPrompt !== "string" || body.userPrompt.trim() === "") {
+    38	    errors.push("userPrompt must be a non-empty string.");
+    39	  }
+    40	
+    41	  if (!body.inventory || !Array.isArray(body.inventory.items)) {
+    42	    errors.push("inventory.items must be an array.");
+    43	  }
+    44	
+    45	  return errors;
+    46	}
+    47	
+    48	const server = createServer(async (request, response) => {
+    49	  if (request.method === "OPTIONS") {
+    50	    sendJson(response, 204, {});
+    51	    return;
+    52	  }
+    53	
+    54	  if (request.method !== "POST" || request.url !== "/api/generate") {
+    55	    sendJson(response, 404, { ok: false, errors: ["Not found."] });
+    56	    return;
+    57	  }
+    58	
+    59	  if (!process.env.OPENROUTER_API_KEY) {
+    60	    sendJson(response, 500, {
+    61	      ok: false,
+    62	      stage: "configuration",
+    63	      errors: ["OPENROUTER_API_KEY is required."],
+    64	    });
+    65	    return;
+    66	  }
+    67	
+    68	  try {
+    69	    const body = await readJson(request);
+    70	    const requestErrors = validateRequestBody(body);
+    71	
+    72	    if (requestErrors.length > 0) {
+    73	      sendJson(response, 400, {
+    74	        ok: false,
+    75	        stage: "request",
+    76	        errors: requestErrors,
+    77	      });
+    78	      return;
+    79	    }
+    80	
+    81	    const openRouterClient = createOpenRouterClient({
+    82	      apiKey: process.env.OPENROUTER_API_KEY,
+    83	    });
+    84	
+    85	    const result = await generateModel({
+    86	      userPrompt: body.userPrompt.trim(),
+    87	      inventory: body.inventory,
+    88	      targetPieceCount: body.targetPieceCount,
+    89	      openRouterClient,
+    90	      model: OPENROUTER_MODEL,
+    91	    });
+    92	
+    93	    sendJson(response, result.ok ? 200 : 422, result);
+    94	  } catch (error) {
+    95	    sendJson(response, 500, {
+    96	      ok: false,
+    97	      stage: "server",
+    98	      errors: [error.message],
+    99	    });
+   100	  }
+   101	});
+   102	
+   103	server.listen(PORT, HOST, () => {
+   104	  console.log(`Generation service listening at http://${HOST}:${PORT}`);
+   105	});
+
+### package.json
+     1	{
+     2	  "name": "hackthe6ix-lego-generator",
+     3	  "version": "0.1.0",
+     4	  "private": true,
+     5	  "type": "module",
+     6	  "scripts": {
+     7	    "dev": "vite --host 127.0.0.1",
+     8	    "serve:generation": "node server/generationServer.js",
+     9	    "test": "node --test"
+    10	  },
+    11	  "dependencies": {
+    12	    "three": "^0.185.1",
+    13	    "vite": "^8.1.4"
+    14	  }
+    15	}

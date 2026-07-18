@@ -1,0 +1,662 @@
+# Task 1 Review Package (no git repository)
+
+## Changed file contents
+
+### src/generation/designPlan.js
+     1	function issue(field, message) {
+     2	  return { field, message };
+     3	}
+     4	
+     5	function isPlainObject(value) {
+     6	  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+     7	}
+     8	
+     9	function requireString(plan, field, errors) {
+    10	  if (typeof plan[field] !== "string" || plan[field].trim() === "") {
+    11	    errors.push(issue(field, `${field} must be a non-empty string.`));
+    12	  }
+    13	}
+    14	
+    15	function requirePositiveNumber(plan, field, errors) {
+    16	  if (!Number.isFinite(plan[field]) || plan[field] <= 0) {
+    17	    errors.push(issue(field, `${field} must be a positive number.`));
+    18	  }
+    19	}
+    20	
+    21	function requireNonEmptyArray(plan, field, errors) {
+    22	  if (!Array.isArray(plan[field]) || plan[field].length === 0) {
+    23	    errors.push(issue(field, `${field} must be a non-empty array.`));
+    24	  }
+    25	}
+    26	
+    27	export function parseJsonObject(text, label) {
+    28	  try {
+    29	    const value = JSON.parse(text);
+    30	
+    31	    if (!isPlainObject(value)) {
+    32	      return {
+    33	        ok: false,
+    34	        errors: [issue(label, `${label} JSON must be an object.`)],
+    35	      };
+    36	    }
+    37	
+    38	    return { ok: true, value, errors: [] };
+    39	  } catch (error) {
+    40	    return {
+    41	      ok: false,
+    42	      errors: [issue(label, `Invalid ${label} JSON: ${error.message}`)],
+    43	    };
+    44	  }
+    45	}
+    46	
+    47	export function validateStructurePlan(plan) {
+    48	  const errors = [];
+    49	
+    50	  if (!isPlainObject(plan)) {
+    51	    return {
+    52	      ok: false,
+    53	      errors: [issue("structure_plan", "Structure plan must be an object.")],
+    54	    };
+    55	  }
+    56	
+    57	  for (const field of ["model_name", "primary_object", "overall_shape", "user_facing_summary"]) {
+    58	    requireString(plan, field, errors);
+    59	  }
+    60	
+    61	  requirePositiveNumber(plan, "target_piece_count", errors);
+    62	  requireNonEmptyArray(plan, "required_features", errors);
+    63	  requireNonEmptyArray(plan, "part_usage_plan", errors);
+    64	  requireNonEmptyArray(plan, "fallback_priorities", errors);
+    65	
+    66	  if (!isPlainObject(plan.build_strategy)) {
+    67	    errors.push(issue("build_strategy", "build_strategy must be an object."));
+    68	  }
+    69	
+    70	  return {
+    71	    ok: errors.length === 0,
+    72	    errors,
+    73	  };
+    74	}
+    75	
+    76	export function parseStructurePlanText(text) {
+    77	  const parsed = parseJsonObject(text, "structure plan");
+    78	
+    79	  if (!parsed.ok) {
+    80	    return parsed;
+    81	  }
+    82	
+    83	  const validation = validateStructurePlan(parsed.value);
+    84	
+    85	  return {
+    86	    ok: validation.ok,
+    87	    value: validation.ok ? parsed.value : undefined,
+    88	    errors: validation.errors,
+    89	  };
+    90	}
+
+### src/generation/generatedModelSchema.js
+     1	const VALID_ROTATIONS = new Set([0, 90, 180, 270]);
+     2	
+     3	function issue(field, message) {
+     4	  return { field, message };
+     5	}
+     6	
+     7	function isPlainObject(value) {
+     8	  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+     9	}
+    10	
+    11	function requireString(value, field, errors) {
+    12	  if (typeof value !== "string" || value.trim() === "") {
+    13	    errors.push(issue(field, `${field} must be a non-empty string.`));
+    14	  }
+    15	}
+    16	
+    17	function requireNumber(value, field, errors) {
+    18	  if (!Number.isFinite(value)) {
+    19	    errors.push(issue(field, `${field} must be a finite number.`));
+    20	  }
+    21	}
+    22	
+    23	function validateDimensions(dimensions, errors) {
+    24	  if (!isPlainObject(dimensions)) {
+    25	    errors.push(issue("dimensions", "dimensions must be an object."));
+    26	    return;
+    27	  }
+    28	
+    29	  for (const field of ["width_studs", "depth_studs", "height_layers"]) {
+    30	    requireNumber(dimensions[field], `dimensions.${field}`, errors);
+    31	  }
+    32	}
+    33	
+    34	function validatePosition(position, index, errors) {
+    35	  if (!isPlainObject(position)) {
+    36	    errors.push(issue(`bricks[${index}].position`, "position must be an object."));
+    37	    return;
+    38	  }
+    39	
+    40	  for (const axis of ["x", "y", "z"]) {
+    41	    requireNumber(position[axis], `bricks[${index}].position.${axis}`, errors);
+    42	  }
+    43	}
+    44	
+    45	function validateBrick(brick, index, errors) {
+    46	  if (!isPlainObject(brick)) {
+    47	    errors.push(issue(`bricks[${index}]`, "brick must be an object."));
+    48	    return;
+    49	  }
+    50	
+    51	  for (const field of [
+    52	    "id",
+    53	    "part_id",
+    54	    "ldraw_id",
+    55	    "label",
+    56	    "color_id",
+    57	    "color_name",
+    58	    "feature",
+    59	  ]) {
+    60	    requireString(brick[field], `bricks[${index}].${field}`, errors);
+    61	  }
+    62	
+    63	  validatePosition(brick.position, index, errors);
+    64	
+    65	  if (!VALID_ROTATIONS.has(brick.rotation)) {
+    66	    errors.push(issue(`bricks[${index}].rotation`, "rotation must be 0, 90, 180, or 270."));
+    67	  }
+    68	
+    69	  if (!Number.isInteger(brick.step) || brick.step <= 0) {
+    70	    errors.push(issue(`bricks[${index}].step`, "step must be a positive integer."));
+    71	  }
+    72	}
+    73	
+    74	export function validateGeneratedModelShape(model) {
+    75	  const errors = [];
+    76	
+    77	  if (!isPlainObject(model)) {
+    78	    return {
+    79	      ok: false,
+    80	      errors: [issue("model", "Generated model must be an object.")],
+    81	    };
+    82	  }
+    83	
+    84	  for (const field of [
+    85	    "model_name",
+    86	    "prompt",
+    87	    "created_from_inventory_id",
+    88	    "generator_version",
+    89	  ]) {
+    90	    requireString(model[field], field, errors);
+    91	  }
+    92	
+    93	  if (!Number.isInteger(model.piece_count) || model.piece_count < 0) {
+    94	    errors.push(issue("piece_count", "piece_count must be a non-negative integer."));
+    95	  }
+    96	
+    97	  validateDimensions(model.dimensions, errors);
+    98	
+    99	  if (!Array.isArray(model.bricks)) {
+   100	    errors.push(issue("bricks", "bricks must be an array."));
+   101	  } else {
+   102	    model.bricks.forEach((brick, index) => validateBrick(brick, index, errors));
+   103	  }
+   104	
+   105	  if (!Array.isArray(model.notes)) {
+   106	    errors.push(issue("notes", "notes must be an array."));
+   107	  }
+   108	
+   109	  return {
+   110	    ok: errors.length === 0,
+   111	    errors,
+   112	  };
+   113	}
+
+### src/generation/partCatalog.js
+     1	export const MAX_MODEL_PIECES = 50;
+     2	
+     3	export const PART_HEIGHTS = {
+     4	  brick: 3,
+     5	  plate: 1,
+     6	};
+     7	
+     8	export const SUPPORTED_PARTS = {
+     9	  3005: {
+    10	    label: "1x1 brick",
+    11	    category: "brick",
+    12	    part_id: "3005",
+    13	    ldraw_id: "3005.dat",
+    14	    width: 1,
+    15	    depth: 1,
+    16	  },
+    17	  3004: {
+    18	    label: "1x2 brick",
+    19	    category: "brick",
+    20	    part_id: "3004",
+    21	    ldraw_id: "3004.dat",
+    22	    width: 1,
+    23	    depth: 2,
+    24	  },
+    25	  3622: {
+    26	    label: "1x3 brick",
+    27	    category: "brick",
+    28	    part_id: "3622",
+    29	    ldraw_id: "3622.dat",
+    30	    width: 1,
+    31	    depth: 3,
+    32	  },
+    33	  3010: {
+    34	    label: "1x4 brick",
+    35	    category: "brick",
+    36	    part_id: "3010",
+    37	    ldraw_id: "3010.dat",
+    38	    width: 1,
+    39	    depth: 4,
+    40	  },
+    41	  3009: {
+    42	    label: "1x6 brick",
+    43	    category: "brick",
+    44	    part_id: "3009",
+    45	    ldraw_id: "3009.dat",
+    46	    width: 1,
+    47	    depth: 6,
+    48	  },
+    49	  3008: {
+    50	    label: "1x8 brick",
+    51	    category: "brick",
+    52	    part_id: "3008",
+    53	    ldraw_id: "3008.dat",
+    54	    width: 1,
+    55	    depth: 8,
+    56	  },
+    57	  3003: {
+    58	    label: "2x2 brick",
+    59	    category: "brick",
+    60	    part_id: "3003",
+    61	    ldraw_id: "3003.dat",
+    62	    width: 2,
+    63	    depth: 2,
+    64	  },
+    65	  3002: {
+    66	    label: "2x3 brick",
+    67	    category: "brick",
+    68	    part_id: "3002",
+    69	    ldraw_id: "3002.dat",
+    70	    width: 2,
+    71	    depth: 3,
+    72	  },
+    73	  3001: {
+    74	    label: "2x4 brick",
+    75	    category: "brick",
+    76	    part_id: "3001",
+    77	    ldraw_id: "3001.dat",
+    78	    width: 2,
+    79	    depth: 4,
+    80	  },
+    81	  3023: {
+    82	    label: "1x2 plate",
+    83	    category: "plate",
+    84	    part_id: "3023",
+    85	    ldraw_id: "3023.dat",
+    86	    width: 1,
+    87	    depth: 2,
+    88	  },
+    89	  3710: {
+    90	    label: "1x4 plate",
+    91	    category: "plate",
+    92	    part_id: "3710",
+    93	    ldraw_id: "3710.dat",
+    94	    width: 1,
+    95	    depth: 4,
+    96	  },
+    97	  3666: {
+    98	    label: "1x6 plate",
+    99	    category: "plate",
+   100	    part_id: "3666",
+   101	    ldraw_id: "3666.dat",
+   102	    width: 1,
+   103	    depth: 6,
+   104	  },
+   105	  3022: {
+   106	    label: "2x2 plate",
+   107	    category: "plate",
+   108	    part_id: "3022",
+   109	    ldraw_id: "3022.dat",
+   110	    width: 2,
+   111	    depth: 2,
+   112	  },
+   113	  3020: {
+   114	    label: "2x4 plate",
+   115	    category: "plate",
+   116	    part_id: "3020",
+   117	    ldraw_id: "3020.dat",
+   118	    width: 2,
+   119	    depth: 4,
+   120	  },
+   121	  3031: {
+   122	    label: "4x4 plate",
+   123	    category: "plate",
+   124	    part_id: "3031",
+   125	    ldraw_id: "3031.dat",
+   126	    width: 4,
+   127	    depth: 4,
+   128	  },
+   129	  3032: {
+   130	    label: "4x6 plate",
+   131	    category: "plate",
+   132	    part_id: "3032",
+   133	    ldraw_id: "3032.dat",
+   134	    width: 4,
+   135	    depth: 6,
+   136	  },
+   137	  3035: {
+   138	    label: "4x8 plate",
+   139	    category: "plate",
+   140	    part_id: "3035",
+   141	    ldraw_id: "3035.dat",
+   142	    width: 4,
+   143	    depth: 8,
+   144	  },
+   145	};
+   146	
+   147	export function getPartDimensions(partId, rotation = 0) {
+   148	  const part = SUPPORTED_PARTS[partId];
+   149	
+   150	  if (!part) {
+   151	    return null;
+   152	  }
+   153	
+   154	  const normalizedRotation = ((rotation % 360) + 360) % 360;
+   155	
+   156	  if (normalizedRotation === 90 || normalizedRotation === 270) {
+   157	    return {
+   158	      width: part.depth,
+   159	      depth: part.width,
+   160	      height: PART_HEIGHTS[part.category] ?? PART_HEIGHTS.brick,
+   161	    };
+   162	  }
+   163	
+   164	  return {
+   165	    width: part.width,
+   166	    depth: part.depth,
+   167	    height: PART_HEIGHTS[part.category] ?? PART_HEIGHTS.brick,
+   168	  };
+   169	}
+
+### test/generation/designPlan.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import {
+     5	  parseJsonObject,
+     6	  parseStructurePlanText,
+     7	  validateStructurePlan,
+     8	} from "../../src/generation/designPlan.js";
+     9	
+    10	const validPlan = {
+    11	  model_name: "Small Duck",
+    12	  primary_object: "duck",
+    13	  target_piece_count: 15,
+    14	  overall_shape: "Small blocky duck with body, head, beak, and eyes.",
+    15	  required_features: [
+    16	    {
+    17	      name: "body",
+    18	      visual_goal: "Wide low yellow body",
+    19	      priority: "required",
+    20	      preferred_colors: ["yellow"],
+    21	      approximate_piece_budget: 6,
+    22	    },
+    23	  ],
+    24	  part_usage_plan: [
+    25	    {
+    26	      feature: "body",
+    27	      allowed_part_ids: ["3001", "3003"],
+    28	      allowed_color_ids: ["14"],
+    29	      max_pieces: 6,
+    30	      notes: "Use larger yellow bricks for the body.",
+    31	    },
+    32	  ],
+    33	  build_strategy: {
+    34	    base: "Use plates for a stable footprint.",
+    35	    body: "Keep the body wider than the head.",
+    36	    raised_details: "Place details on supported bricks.",
+    37	    stability_notes: "Avoid unsupported overhangs.",
+    38	  },
+    39	  fallback_priorities: ["Keep body, head, and beak."],
+    40	  user_facing_summary: "I planned a small duck.",
+    41	};
+    42	
+    43	describe("design plan schema", () => {
+    44	  it("parses JSON object text", () => {
+    45	    const result = parseJsonObject(JSON.stringify(validPlan), "structure plan");
+    46	
+    47	    assert.equal(result.ok, true);
+    48	    assert.equal(result.value.primary_object, "duck");
+    49	  });
+    50	
+    51	  it("rejects malformed JSON text", () => {
+    52	    const result = parseJsonObject("{ nope", "structure plan");
+    53	
+    54	    assert.equal(result.ok, false);
+    55	    assert.match(result.errors[0].message, /Invalid structure plan JSON/);
+    56	  });
+    57	
+    58	  it("accepts a complete structure plan", () => {
+    59	    const result = validateStructurePlan(validPlan);
+    60	
+    61	    assert.equal(result.ok, true);
+    62	    assert.deepEqual(result.errors, []);
+    63	  });
+    64	
+    65	  it("rejects a structure plan missing required arrays", () => {
+    66	    const result = validateStructurePlan({
+    67	      ...validPlan,
+    68	      required_features: [],
+    69	      part_usage_plan: "body pieces",
+    70	    });
+    71	
+    72	    assert.equal(result.ok, false);
+    73	    assert.equal(result.errors.some((error) => error.field === "required_features"), true);
+    74	    assert.equal(result.errors.some((error) => error.field === "part_usage_plan"), true);
+    75	  });
+    76	
+    77	  it("parses and validates structure plan text in one call", () => {
+    78	    const result = parseStructurePlanText(JSON.stringify(validPlan));
+    79	
+    80	    assert.equal(result.ok, true);
+    81	    assert.equal(result.value.model_name, "Small Duck");
+    82	  });
+    83	});
+
+### test/generation/generatedModelSchema.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import { validateGeneratedModelShape } from "../../src/generation/generatedModelSchema.js";
+     5	
+     6	const validModel = {
+     7	  model_name: "Small Duck",
+     8	  prompt: "build me a duck",
+     9	  piece_count: 1,
+    10	  dimensions: { width_studs: 2, depth_studs: 4, height_layers: 3 },
+    11	  created_from_inventory_id: "duck-demo",
+    12	  generator_version: "openrouter-test",
+    13	  bricks: [
+    14	    {
+    15	      id: "body-1",
+    16	      part_id: "3001",
+    17	      ldraw_id: "3001.dat",
+    18	      label: "2x4 brick",
+    19	      color_id: "14",
+    20	      color_name: "yellow",
+    21	      position: { x: 0, y: 0, z: 0 },
+    22	      rotation: 0,
+    23	      feature: "body",
+    24	      step: 1,
+    25	    },
+    26	  ],
+    27	  notes: ["Valid shape for schema tests."],
+    28	};
+    29	
+    30	describe("generated model schema", () => {
+    31	  it("accepts a GeneratedModel-shaped object", () => {
+    32	    const result = validateGeneratedModelShape(validModel);
+    33	
+    34	    assert.equal(result.ok, true);
+    35	    assert.deepEqual(result.errors, []);
+    36	  });
+    37	
+    38	  it("rejects missing model metadata", () => {
+    39	    const result = validateGeneratedModelShape({
+    40	      ...validModel,
+    41	      model_name: "",
+    42	      created_from_inventory_id: undefined,
+    43	    });
+    44	
+    45	    assert.equal(result.ok, false);
+    46	    assert.equal(result.errors.some((error) => error.field === "model_name"), true);
+    47	    assert.equal(result.errors.some((error) => error.field === "created_from_inventory_id"), true);
+    48	  });
+    49	
+    50	  it("rejects malformed brick fields before validator runs", () => {
+    51	    const result = validateGeneratedModelShape({
+    52	      ...validModel,
+    53	      bricks: [{ ...validModel.bricks[0], position: { x: 0, y: 0 }, rotation: 45 }],
+    54	    });
+    55	
+    56	    assert.equal(result.ok, false);
+    57	    assert.equal(result.errors.some((error) => error.field === "bricks[0].position.z"), true);
+    58	    assert.equal(result.errors.some((error) => error.field === "bricks[0].rotation"), true);
+    59	  });
+    60	});
+
+### test/generation/partCatalog.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import {
+     5	  getPartDimensions,
+     6	  MAX_MODEL_PIECES,
+     7	  SUPPORTED_PARTS,
+     8	} from "../../src/generation/partCatalog.js";
+     9	
+    10	describe("supported part catalog", () => {
+    11	  it("uses the documented MVP max model piece count", () => {
+    12	    assert.equal(MAX_MODEL_PIECES, 50);
+    13	  });
+    14	
+    15	  it("includes longer 1-wide bricks with brick-height dimensions", () => {
+    16	    assert.deepEqual(SUPPORTED_PARTS["3010"], {
+    17	      label: "1x4 brick",
+    18	      category: "brick",
+    19	      part_id: "3010",
+    20	      ldraw_id: "3010.dat",
+    21	      width: 1,
+    22	      depth: 4,
+    23	    });
+    24	    assert.deepEqual(getPartDimensions("3010", 90), {
+    25	      width: 4,
+    26	      depth: 1,
+    27	      height: 3,
+    28	    });
+    29	
+    30	    assert.deepEqual(SUPPORTED_PARTS["3009"], {
+    31	      label: "1x6 brick",
+    32	      category: "brick",
+    33	      part_id: "3009",
+    34	      ldraw_id: "3009.dat",
+    35	      width: 1,
+    36	      depth: 6,
+    37	    });
+    38	    assert.deepEqual(getPartDimensions("3009"), {
+    39	      width: 1,
+    40	      depth: 6,
+    41	      height: 3,
+    42	    });
+    43	
+    44	    assert.deepEqual(SUPPORTED_PARTS["3008"], {
+    45	      label: "1x8 brick",
+    46	      category: "brick",
+    47	      part_id: "3008",
+    48	      ldraw_id: "3008.dat",
+    49	      width: 1,
+    50	      depth: 8,
+    51	    });
+    52	    assert.deepEqual(getPartDimensions("3008", 270), {
+    53	      width: 8,
+    54	      depth: 1,
+    55	      height: 3,
+    56	    });
+    57	  });
+    58	
+    59	  it("includes longer 1-wide plates with plate-height dimensions", () => {
+    60	    assert.deepEqual(SUPPORTED_PARTS["3710"], {
+    61	      label: "1x4 plate",
+    62	      category: "plate",
+    63	      part_id: "3710",
+    64	      ldraw_id: "3710.dat",
+    65	      width: 1,
+    66	      depth: 4,
+    67	    });
+    68	    assert.deepEqual(getPartDimensions("3710"), {
+    69	      width: 1,
+    70	      depth: 4,
+    71	      height: 1,
+    72	    });
+    73	
+    74	    assert.deepEqual(SUPPORTED_PARTS["3666"], {
+    75	      label: "1x6 plate",
+    76	      category: "plate",
+    77	      part_id: "3666",
+    78	      ldraw_id: "3666.dat",
+    79	      width: 1,
+    80	      depth: 6,
+    81	    });
+    82	    assert.deepEqual(getPartDimensions("3666", 90), {
+    83	      width: 6,
+    84	      depth: 1,
+    85	      height: 1,
+    86	    });
+    87	  });
+    88	
+    89	  it("includes larger 4-wide plates with plate-height dimensions", () => {
+    90	    assert.deepEqual(SUPPORTED_PARTS["3031"], {
+    91	      label: "4x4 plate",
+    92	      category: "plate",
+    93	      part_id: "3031",
+    94	      ldraw_id: "3031.dat",
+    95	      width: 4,
+    96	      depth: 4,
+    97	    });
+    98	    assert.deepEqual(getPartDimensions("3031"), {
+    99	      width: 4,
+   100	      depth: 4,
+   101	      height: 1,
+   102	    });
+   103	
+   104	    assert.deepEqual(SUPPORTED_PARTS["3032"], {
+   105	      label: "4x6 plate",
+   106	      category: "plate",
+   107	      part_id: "3032",
+   108	      ldraw_id: "3032.dat",
+   109	      width: 4,
+   110	      depth: 6,
+   111	    });
+   112	    assert.deepEqual(getPartDimensions("3032", 90), {
+   113	      width: 6,
+   114	      depth: 4,
+   115	      height: 1,
+   116	    });
+   117	
+   118	    assert.deepEqual(SUPPORTED_PARTS["3035"], {
+   119	      label: "4x8 plate",
+   120	      category: "plate",
+   121	      part_id: "3035",
+   122	      ldraw_id: "3035.dat",
+   123	      width: 4,
+   124	      depth: 8,
+   125	    });
+   126	    assert.deepEqual(getPartDimensions("3035", 90), {
+   127	      width: 8,
+   128	      depth: 4,
+   129	      height: 1,
+   130	    });
+   131	  });
+   132	});

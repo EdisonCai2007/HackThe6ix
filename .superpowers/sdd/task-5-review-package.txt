@@ -1,0 +1,476 @@
+# Task 5 Review Package (no git repository)
+
+## Changed file contents
+
+### index.html
+     1	<!doctype html>
+     2	<html lang="en">
+     3	  <head>
+     4	    <meta charset="UTF-8" />
+     5	    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     6	    <title>HackThe6ix LEGO Preview</title>
+     7	    <link rel="stylesheet" href="/src/preview/styles.css" />
+     8	  </head>
+     9	  <body>
+    10	    <main class="app-shell">
+    11	      <section class="viewer-panel" aria-label="LEGO model preview">
+    12	        <canvas id="preview-canvas"></canvas>
+    13	        <form class="control-panel" id="generation-form">
+    14	          <label>
+    15	            Prompt
+    16	            <input id="prompt-input" name="prompt" value="build me a duck" autocomplete="off" />
+    17	          </label>
+    18	          <label>
+    19	            Inventory
+    20	            <select id="inventory-select" name="inventory"></select>
+    21	          </label>
+    22	          <label>
+    23	            Target pieces
+    24	            <input id="target-pieces" name="targetPieces" type="number" min="1" max="50" value="15" />
+    25	          </label>
+    26	          <button id="generate-button" type="submit">Generate</button>
+    27	        </form>
+    28	        <div class="model-card">
+    29	          <p id="model-name">Ready to generate</p>
+    30	          <dl>
+    31	            <div>
+    32	              <dt>Pieces</dt>
+    33	              <dd id="piece-count">-</dd>
+    34	            </div>
+    35	            <div>
+    36	              <dt>Status</dt>
+    37	              <dd id="validation-status">Idle</dd>
+    38	            </div>
+    39	          </dl>
+    40	          <ul id="generation-notes" class="generation-notes"></ul>
+    41	          <pre id="validation-errors" class="validation-errors" hidden></pre>
+    42	        </div>
+    43	      </section>
+    44	    </main>
+    45	    <script type="module" src="/src/preview/main.js"></script>
+    46	  </body>
+    47	</html>
+
+### src/preview/main.js
+     1	import * as THREE from "three";
+     2	import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+     3	import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
+     4	import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
+     5	
+     6	import { carInventory } from "../generation/fixtures/carInventory.js";
+     7	import { daisyInventory } from "../generation/fixtures/daisyInventory.js";
+     8	import { duckInventory } from "../generation/fixtures/duckInventory.js";
+     9	import { horseInventory } from "../generation/fixtures/horseInventory.js";
+    10	import { houseFlyInventory } from "../generation/fixtures/houseFlyInventory.js";
+    11	import { sandcastleInventory } from "../generation/fixtures/sandcastleInventory.js";
+    12	import { buildSmallDuckModel } from "../generation/fixtures/smallDuckModel.js";
+    13	import { validateModel } from "../generation/validator.js";
+    14	import { exportModelToLDraw } from "../ldraw/exportLDraw.js";
+    15	
+    16	const canvas = document.querySelector("#preview-canvas");
+    17	const modelName = document.querySelector("#model-name");
+    18	const pieceCount = document.querySelector("#piece-count");
+    19	const validationStatus = document.querySelector("#validation-status");
+    20	const form = document.querySelector("#generation-form");
+    21	const promptInput = document.querySelector("#prompt-input");
+    22	const inventorySelect = document.querySelector("#inventory-select");
+    23	const targetPiecesInput = document.querySelector("#target-pieces");
+    24	const generateButton = document.querySelector("#generate-button");
+    25	const notesList = document.querySelector("#generation-notes");
+    26	const validationErrors = document.querySelector("#validation-errors");
+    27	
+    28	const inventories = [
+    29	  { id: "duck", label: "Duck demo pieces", inventory: duckInventory },
+    30	  { id: "car", label: "Car demo pieces", inventory: carInventory },
+    31	  { id: "daisy", label: "Daisy demo pieces", inventory: daisyInventory },
+    32	  { id: "horse", label: "Horse demo pieces", inventory: horseInventory },
+    33	  { id: "house-fly", label: "House fly demo pieces", inventory: houseFlyInventory },
+    34	  { id: "sandcastle", label: "Sandcastle demo pieces", inventory: sandcastleInventory },
+    35	];
+    36	
+    37	for (const option of inventories) {
+    38	  const element = document.createElement("option");
+    39	  element.value = option.id;
+    40	  element.textContent = option.label;
+    41	  inventorySelect.append(element);
+    42	}
+    43	
+    44	function selectedInventory() {
+    45	  return inventories.find((entry) => entry.id === inventorySelect.value)?.inventory ?? duckInventory;
+    46	}
+    47	
+    48	const renderer = new THREE.WebGLRenderer({
+    49	  canvas,
+    50	  antialias: true,
+    51	  alpha: true,
+    52	});
+    53	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    54	renderer.setSize(window.innerWidth, window.innerHeight);
+    55	renderer.outputColorSpace = THREE.SRGBColorSpace;
+    56	renderer.shadowMap.enabled = true;
+    57	
+    58	const scene = new THREE.Scene();
+    59	scene.background = new THREE.Color(0x111318);
+    60	
+    61	const camera = new THREE.PerspectiveCamera(
+    62	  45,
+    63	  window.innerWidth / window.innerHeight,
+    64	  0.1,
+    65	  3000,
+    66	);
+    67	camera.position.set(180, 150, 230);
+    68	
+    69	const controls = new OrbitControls(camera, renderer.domElement);
+    70	controls.enableDamping = true;
+    71	controls.dampingFactor = 0.08;
+    72	controls.target.set(20, -40, 35);
+    73	controls.minDistance = 90;
+    74	controls.maxDistance = 650;
+    75	
+    76	const hemiLight = new THREE.HemisphereLight(0xffffff, 0x252a32, 1.8);
+    77	scene.add(hemiLight);
+    78	
+    79	const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    80	keyLight.position.set(180, 260, 140);
+    81	keyLight.castShadow = true;
+    82	scene.add(keyLight);
+    83	
+    84	const fillLight = new THREE.DirectionalLight(0x8fb7ff, 0.9);
+    85	fillLight.position.set(-160, 90, -120);
+    86	scene.add(fillLight);
+    87	
+    88	const grid = new THREE.GridHelper(420, 21, 0x445064, 0x252b35);
+    89	grid.position.y = 8;
+    90	scene.add(grid);
+    91	
+    92	let currentModelGroup = null;
+    93	
+    94	function clearCurrentModel() {
+    95	  if (!currentModelGroup) {
+    96	    return;
+    97	  }
+    98	
+    99	  scene.remove(currentModelGroup);
+   100	  currentModelGroup.traverse((child) => {
+   101	    child.geometry?.dispose?.();
+   102	    if (Array.isArray(child.material)) {
+   103	      child.material.forEach((material) => material.dispose?.());
+   104	    } else {
+   105	      child.material?.dispose?.();
+   106	    }
+   107	  });
+   108	  currentModelGroup = null;
+   109	}
+   110	
+   111	function renderModel(model) {
+   112	  const loader = new LDrawLoader();
+   113	  loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
+   114	  const ldrawText = exportModelToLDraw(model);
+   115	
+   116	  loader.parse(
+   117	    ldrawText,
+   118	    (group) => {
+   119	      clearCurrentModel();
+   120	      group.rotation.x = Math.PI;
+   121	      group.traverse((child) => {
+   122	        if (child.isMesh) {
+   123	          child.castShadow = true;
+   124	          child.receiveShadow = true;
+   125	        }
+   126	      });
+   127	
+   128	      const box = new THREE.Box3().setFromObject(group);
+   129	      const size = box.getSize(new THREE.Vector3());
+   130	      const center = box.getCenter(new THREE.Vector3());
+   131	      group.position.sub(center);
+   132	
+   133	      scene.add(group);
+   134	      currentModelGroup = group;
+   135	      controls.target.set(0, 0, 0);
+   136	
+   137	      const maxDimension = Math.max(size.x, size.y, size.z);
+   138	      const fov = THREE.MathUtils.degToRad(camera.fov);
+   139	      const distance = (maxDimension / (2 * Math.tan(fov / 2))) * 1.45;
+   140	      const viewDirection = new THREE.Vector3(1.1, 0.75, 1.35).normalize();
+   141	
+   142	      camera.position.copy(viewDirection.multiplyScalar(distance));
+   143	      camera.near = Math.max(0.1, distance / 100);
+   144	      camera.far = distance * 10;
+   145	      camera.updateProjectionMatrix();
+   146	      controls.minDistance = distance * 0.35;
+   147	      controls.maxDistance = distance * 2.2;
+   148	      controls.update();
+   149	    },
+   150	    (error) => {
+   151	      validationStatus.textContent = "Load error";
+   152	      validationErrors.hidden = false;
+   153	      validationErrors.textContent = error.message;
+   154	    },
+   155	  );
+   156	}
+   157	
+   158	function setNotes(notes) {
+   159	  notesList.replaceChildren();
+   160	
+   161	  for (const note of notes ?? []) {
+   162	    const item = document.createElement("li");
+   163	    item.textContent = note;
+   164	    notesList.append(item);
+   165	  }
+   166	}
+   167	
+   168	function showErrors(errors) {
+   169	  validationErrors.hidden = false;
+   170	  validationErrors.textContent = JSON.stringify(errors, null, 2);
+   171	}
+   172	
+   173	function hideErrors() {
+   174	  validationErrors.hidden = true;
+   175	  validationErrors.textContent = "";
+   176	}
+   177	
+   178	function showModel(model, validation) {
+   179	  modelName.textContent = model.model_name;
+   180	  pieceCount.textContent = String(model.piece_count);
+   181	  validationStatus.textContent = validation.valid ? "Valid" : "Invalid";
+   182	  setNotes(model.notes);
+   183	  hideErrors();
+   184	  renderModel(model);
+   185	}
+   186	
+   187	async function requestGeneration() {
+   188	  const response = await fetch("http://127.0.0.1:8787/api/generate", {
+   189	    method: "POST",
+   190	    headers: { "Content-Type": "application/json" },
+   191	    body: JSON.stringify({
+   192	      userPrompt: promptInput.value,
+   193	      inventory: selectedInventory(),
+   194	      targetPieceCount: Number(targetPiecesInput.value),
+   195	    }),
+   196	  });
+   197	
+   198	  const result = await response.json();
+   199	
+   200	  if (!response.ok || !result.ok) {
+   201	    throw result;
+   202	  }
+   203	
+   204	  return result;
+   205	}
+   206	
+   207	function resize() {
+   208	  const width = window.innerWidth;
+   209	  const height = window.innerHeight;
+   210	
+   211	  camera.aspect = width / height;
+   212	  camera.updateProjectionMatrix();
+   213	  renderer.setSize(width, height);
+   214	}
+   215	
+   216	window.addEventListener("resize", resize);
+   217	
+   218	form.addEventListener("submit", async (event) => {
+   219	  event.preventDefault();
+   220	  generateButton.disabled = true;
+   221	  validationStatus.textContent = "Generating";
+   222	  modelName.textContent = "Calling OpenRouter";
+   223	  pieceCount.textContent = "-";
+   224	  setNotes([]);
+   225	  hideErrors();
+   226	
+   227	  try {
+   228	    const result = await requestGeneration();
+   229	    showModel(result.model, result.validation);
+   230	  } catch (error) {
+   231	    validationStatus.textContent = "Failed";
+   232	    modelName.textContent = "Generation failed";
+   233	    pieceCount.textContent = "-";
+   234	    setNotes([]);
+   235	    showErrors(error.errors ?? [error.message ?? "Unknown generation error"]);
+   236	  } finally {
+   237	    generateButton.disabled = false;
+   238	  }
+   239	});
+   240	
+   241	const initialModel = buildSmallDuckModel(duckInventory);
+   242	const initialValidation = validateModel(initialModel, duckInventory);
+   243	showModel(initialModel, initialValidation);
+   244	
+   245	function animate() {
+   246	  controls.update();
+   247	  renderer.render(scene, camera);
+   248	  requestAnimationFrame(animate);
+   249	}
+   250	
+   251	animate();
+
+### src/preview/styles.css
+     1	* {
+     2	  box-sizing: border-box;
+     3	}
+     4	
+     5	html,
+     6	body {
+     7	  width: 100%;
+     8	  height: 100%;
+     9	  margin: 0;
+    10	  overflow: hidden;
+    11	  background: #111318;
+    12	  color: #f5f7fb;
+    13	  font-family:
+    14	    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    15	    sans-serif;
+    16	}
+    17	
+    18	.app-shell {
+    19	  width: 100vw;
+    20	  height: 100vh;
+    21	}
+    22	
+    23	.viewer-panel {
+    24	  position: relative;
+    25	  width: 100%;
+    26	  height: 100%;
+    27	  background:
+    28	    radial-gradient(circle at 50% 30%, rgba(102, 142, 184, 0.22), transparent 28rem),
+    29	    linear-gradient(180deg, #171b23 0%, #0f1115 100%);
+    30	}
+    31	
+    32	#preview-canvas {
+    33	  display: block;
+    34	  width: 100%;
+    35	  height: 100%;
+    36	}
+    37	
+    38	.model-card {
+    39	  position: absolute;
+    40	  left: 24px;
+    41	  top: 24px;
+    42	  width: min(320px, calc(100vw - 48px));
+    43	  padding: 16px 18px;
+    44	  border: 1px solid rgba(255, 255, 255, 0.12);
+    45	  border-radius: 8px;
+    46	  background: rgba(16, 18, 24, 0.72);
+    47	  backdrop-filter: blur(14px);
+    48	  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    49	}
+    50	
+    51	.model-card p {
+    52	  margin: 0 0 14px;
+    53	  font-size: 18px;
+    54	  font-weight: 700;
+    55	}
+    56	
+    57	.model-card dl {
+    58	  display: grid;
+    59	  grid-template-columns: repeat(2, minmax(0, 1fr));
+    60	  gap: 12px;
+    61	  margin: 0;
+    62	}
+    63	
+    64	.model-card div {
+    65	  min-width: 0;
+    66	}
+    67	
+    68	.model-card dt {
+    69	  margin-bottom: 4px;
+    70	  color: #aeb6c7;
+    71	  font-size: 11px;
+    72	  font-weight: 700;
+    73	  letter-spacing: 0.08em;
+    74	  text-transform: uppercase;
+    75	}
+    76	
+    77	.model-card dd {
+    78	  margin: 0;
+    79	  color: #fff;
+    80	  font-size: 15px;
+    81	  font-weight: 650;
+    82	}
+    83	
+    84	.control-panel {
+    85	  position: absolute;
+    86	  left: 24px;
+    87	  bottom: 24px;
+    88	  display: grid;
+    89	  width: min(420px, calc(100vw - 48px));
+    90	  gap: 10px;
+    91	  padding: 14px;
+    92	  border: 1px solid rgba(255, 255, 255, 0.12);
+    93	  border-radius: 8px;
+    94	  background: rgba(16, 18, 24, 0.78);
+    95	  backdrop-filter: blur(14px);
+    96	  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    97	}
+    98	
+    99	.control-panel label {
+   100	  display: grid;
+   101	  gap: 5px;
+   102	  color: #c8d0df;
+   103	  font-size: 12px;
+   104	  font-weight: 700;
+   105	}
+   106	
+   107	.control-panel input,
+   108	.control-panel select {
+   109	  width: 100%;
+   110	  min-height: 34px;
+   111	  border: 1px solid rgba(255, 255, 255, 0.16);
+   112	  border-radius: 6px;
+   113	  background: #0f1218;
+   114	  color: #f5f7fb;
+   115	  font: inherit;
+   116	  font-size: 14px;
+   117	  padding: 7px 9px;
+   118	}
+   119	
+   120	.control-panel button {
+   121	  min-height: 36px;
+   122	  border: 0;
+   123	  border-radius: 6px;
+   124	  background: #f2cd37;
+   125	  color: #17130a;
+   126	  font-weight: 800;
+   127	  cursor: pointer;
+   128	}
+   129	
+   130	.control-panel button:disabled {
+   131	  cursor: wait;
+   132	  opacity: 0.65;
+   133	}
+   134	
+   135	.generation-notes {
+   136	  margin: 14px 0 0;
+   137	  padding-left: 18px;
+   138	  color: #d8deeb;
+   139	  font-size: 13px;
+   140	}
+   141	
+   142	.validation-errors {
+   143	  max-height: 170px;
+   144	  overflow: auto;
+   145	  margin: 14px 0 0;
+   146	  padding: 10px;
+   147	  border-radius: 6px;
+   148	  background: rgba(201, 26, 9, 0.18);
+   149	  color: #ffd8d2;
+   150	  font-size: 12px;
+   151	  white-space: pre-wrap;
+   152	}
+   153	
+   154	@media (max-width: 640px) {
+   155	  .control-panel {
+   156	    left: 14px;
+   157	    right: 14px;
+   158	    bottom: 14px;
+   159	    width: auto;
+   160	  }
+   161	
+   162	  .model-card {
+   163	    left: 14px;
+   164	    top: 14px;
+   165	    padding: 13px 14px;
+   166	    max-height: 38vh;
+   167	    overflow: auto;
+   168	  }
+   169	}

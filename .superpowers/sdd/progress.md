@@ -1,0 +1,5 @@
+Task 1: complete (no git commits; review clean; npm test 27/27 passing)
+Task 2: complete (no git commits; review clean after fix; npm test 31/31 passing)
+Task 3: complete (no git commits; review clean; npm test 35/35 passing)
+Task 4: complete (no git commits; review clean; npm test 35/35 passing; server missing-key check passed with elevated localhost binding)
+Task 5: complete (no git commits; review clean; npm test 35/35 passing; minor noted: LDraw parse error fallback could be more defensive)

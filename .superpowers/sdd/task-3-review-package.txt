@@ -1,0 +1,277 @@
+# Task 3 Review Package (no git repository)
+
+## Changed file contents
+
+### src/generation/openRouterClient.js
+     1	const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+     2	
+     3	export function createOpenRouterClient({
+     4	  apiKey,
+     5	  fetchImpl = fetch,
+     6	  baseUrl = DEFAULT_BASE_URL,
+     7	} = {}) {
+     8	  if (!apiKey) {
+     9	    throw new Error("OPENROUTER_API_KEY is required.");
+    10	  }
+    11	
+    12	  return {
+    13	    async complete(request) {
+    14	      const response = await fetchImpl(baseUrl, {
+    15	        method: "POST",
+    16	        headers: {
+    17	          Authorization: `Bearer ${apiKey}`,
+    18	          "Content-Type": "application/json",
+    19	          "HTTP-Referer": "http://127.0.0.1:5173",
+    20	          "X-Title": "HackThe6ix LEGO Generator",
+    21	        },
+    22	        body: JSON.stringify(request),
+    23	      });
+    24	
+    25	      const body = await response.json().catch(() => null);
+    26	
+    27	      if (!response.ok) {
+    28	        const message = body?.error?.message ?? `OpenRouter request failed with ${response.status}`;
+    29	        throw new Error(message);
+    30	      }
+    31	
+    32	      const content = body?.choices?.[0]?.message?.content;
+    33	
+    34	      if (typeof content !== "string" || content.trim() === "") {
+    35	        throw new Error("OpenRouter response did not include message content.");
+    36	      }
+    37	
+    38	      return content;
+    39	    },
+    40	  };
+    41	}
+
+### src/generation/service.js
+     1	import { parseJsonObject, parseStructurePlanText } from "./designPlan.js";
+     2	import { validateGeneratedModelShape } from "./generatedModelSchema.js";
+     3	import { buildPlacementPrompt, buildStructurePrompt } from "./openRouterPrompts.js";
+     4	import { validateModel } from "./validator.js";
+     5	
+     6	function failure(stage, errors, extra = {}) {
+     7	  return {
+     8	    ok: false,
+     9	    stage,
+    10	    errors,
+    11	    ...extra,
+    12	  };
+    13	}
+    14	
+    15	export async function generateModel({
+    16	  userPrompt,
+    17	  inventory,
+    18	  targetPieceCount,
+    19	  openRouterClient,
+    20	  model,
+    21	}) {
+    22	  const structureRequest = buildStructurePrompt({
+    23	    userPrompt,
+    24	    inventory,
+    25	    targetPieceCount,
+    26	    model,
+    27	  });
+    28	
+    29	  const structureText = await openRouterClient.complete(structureRequest);
+    30	  const structureResult = parseStructurePlanText(structureText);
+    31	
+    32	  if (!structureResult.ok) {
+    33	    return failure("structure_parse", structureResult.errors);
+    34	  }
+    35	
+    36	  const placementRequest = buildPlacementPrompt({
+    37	    userPrompt,
+    38	    inventory,
+    39	    structurePlan: structureResult.value,
+    40	    targetPieceCount,
+    41	    model,
+    42	  });
+    43	
+    44	  const placementText = await openRouterClient.complete(placementRequest);
+    45	  const placementJson = parseJsonObject(placementText, "placement model");
+    46	
+    47	  if (!placementJson.ok) {
+    48	    return failure("placement_parse", placementJson.errors, {
+    49	      structurePlan: structureResult.value,
+    50	    });
+    51	  }
+    52	
+    53	  const shapeResult = validateGeneratedModelShape(placementJson.value);
+    54	
+    55	  if (!shapeResult.ok) {
+    56	    return failure("placement_shape", shapeResult.errors, {
+    57	      structurePlan: structureResult.value,
+    58	    });
+    59	  }
+    60	
+    61	  const validation = validateModel(placementJson.value, inventory);
+    62	
+    63	  if (!validation.valid) {
+    64	    return failure("validation", validation.errors, {
+    65	      structurePlan: structureResult.value,
+    66	      model: placementJson.value,
+    67	      validation,
+    68	    });
+    69	  }
+    70	
+    71	  return {
+    72	    ok: true,
+    73	    stage: "complete",
+    74	    structurePlan: structureResult.value,
+    75	    model: placementJson.value,
+    76	    validation,
+    77	  };
+    78	}
+
+### test/generation/service.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+     5	import { generateModel } from "../../src/generation/service.js";
+     6	
+     7	const structurePlan = {
+     8	  model_name: "Tiny Duck",
+     9	  primary_object: "duck",
+    10	  target_piece_count: 2,
+    11	  overall_shape: "A tiny blocky duck marker.",
+    12	  required_features: [
+    13	    {
+    14	      name: "body",
+    15	      visual_goal: "Yellow rectangular body",
+    16	      priority: "required",
+    17	      preferred_colors: ["yellow"],
+    18	      approximate_piece_budget: 1,
+    19	    },
+    20	  ],
+    21	  part_usage_plan: [
+    22	    {
+    23	      feature: "body",
+    24	      allowed_part_ids: ["3001"],
+    25	      allowed_color_ids: ["14"],
+    26	      max_pieces: 1,
+    27	      notes: "Use a yellow 2x4 brick.",
+    28	    },
+    29	  ],
+    30	  build_strategy: {
+    31	    base: "Place the brick on the ground.",
+    32	    body: "Use one brick as body.",
+    33	    raised_details: "Skip raised details.",
+    34	    stability_notes: "Ground contact only.",
+    35	  },
+    36	  fallback_priorities: ["Keep the body."],
+    37	  user_facing_summary: "I planned a tiny duck marker.",
+    38	};
+    39	
+    40	const validModel = {
+    41	  model_name: "Tiny Duck",
+    42	  prompt: "build me a tiny duck",
+    43	  piece_count: 1,
+    44	  dimensions: { width_studs: 2, depth_studs: 4, height_layers: 3 },
+    45	  created_from_inventory_id: "duck-demo",
+    46	  generator_version: "openrouter-two-stage-v1",
+    47	  bricks: [
+    48	    {
+    49	      id: "body-1",
+    50	      part_id: "3001",
+    51	      ldraw_id: "3001.dat",
+    52	      label: "2x4 brick",
+    53	      color_id: "14",
+    54	      color_name: "yellow",
+    55	      position: { x: 0, y: 0, z: 0 },
+    56	      rotation: 0,
+    57	      feature: "body",
+    58	      step: 1,
+    59	    },
+    60	  ],
+    61	  notes: ["A tiny valid single-brick duck marker."],
+    62	};
+    63	
+    64	function fakeClient(contents) {
+    65	  const calls = [];
+    66	
+    67	  return {
+    68	    calls,
+    69	    async complete(request) {
+    70	      calls.push(request);
+    71	      return contents.shift();
+    72	    },
+    73	  };
+    74	}
+    75	
+    76	describe("generateModel", () => {
+    77	  it("runs structure, placement, shape validation, and model validation", async () => {
+    78	    const client = fakeClient([JSON.stringify(structurePlan), JSON.stringify(validModel)]);
+    79	
+    80	    const result = await generateModel({
+    81	      userPrompt: "build me a tiny duck",
+    82	      inventory: duckInventory,
+    83	      targetPieceCount: 2,
+    84	      openRouterClient: client,
+    85	    });
+    86	
+    87	    assert.equal(result.ok, true);
+    88	    assert.equal(result.model.model_name, "Tiny Duck");
+    89	    assert.equal(result.structurePlan.primary_object, "duck");
+    90	    assert.equal(result.validation.valid, true);
+    91	    assert.equal(client.calls.length, 2);
+    92	  });
+    93	
+    94	  it("returns parse errors when structure JSON is malformed", async () => {
+    95	    const client = fakeClient(["{ bad"]);
+    96	
+    97	    const result = await generateModel({
+    98	      userPrompt: "build me a duck",
+    99	      inventory: duckInventory,
+   100	      openRouterClient: client,
+   101	    });
+   102	
+   103	    assert.equal(result.ok, false);
+   104	    assert.equal(result.stage, "structure_parse");
+   105	    assert.match(result.errors[0].message, /Invalid structure plan JSON/);
+   106	  });
+   107	
+   108	  it("returns shape errors before validator when placement JSON is malformed", async () => {
+   109	    const client = fakeClient([
+   110	      JSON.stringify(structurePlan),
+   111	      JSON.stringify({ ...validModel, bricks: [{ id: "bad" }] }),
+   112	    ]);
+   113	
+   114	    const result = await generateModel({
+   115	      userPrompt: "build me a duck",
+   116	      inventory: duckInventory,
+   117	      openRouterClient: client,
+   118	    });
+   119	
+   120	    assert.equal(result.ok, false);
+   121	    assert.equal(result.stage, "placement_shape");
+   122	    assert.equal(result.errors.some((error) => error.field.includes("part_id")), true);
+   123	  });
+   124	
+   125	  it("returns validator errors for unsupported generated placements", async () => {
+   126	    const invalidModel = {
+   127	      ...validModel,
+   128	      bricks: [
+   129	        {
+   130	          ...validModel.bricks[0],
+   131	          part_id: "9999",
+   132	          ldraw_id: "9999.dat",
+   133	          label: "unsupported part",
+   134	        },
+   135	      ],
+   136	    };
+   137	    const client = fakeClient([JSON.stringify(structurePlan), JSON.stringify(invalidModel)]);
+   138	
+   139	    const result = await generateModel({
+   140	      userPrompt: "build me a duck",
+   141	      inventory: duckInventory,
+   142	      openRouterClient: client,
+   143	    });
+   144	
+   145	    assert.equal(result.ok, false);
+   146	    assert.equal(result.stage, "validation");
+   147	    assert.equal(result.validation.errors.some((error) => error.type === "unsupported_part"), true);
+   148	  });
+   149	});

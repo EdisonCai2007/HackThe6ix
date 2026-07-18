@@ -1,0 +1,392 @@
+# Task 6 Review Package (no git repository)
+
+## Changed/verified file contents
+
+### src/generation/openRouterPrompts.js
+     1	import { MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
+     2	
+     3	export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1-mini";
+     4	const OPENROUTER_MAX_TOKENS = 2500;
+     5	
+     6	function clampTargetPieceCount(targetPieceCount) {
+     7	  if (!Number.isFinite(targetPieceCount)) {
+     8	    return Math.min(40, MAX_MODEL_PIECES);
+     9	  }
+    10	
+    11	  return Math.max(1, Math.min(Math.floor(targetPieceCount), MAX_MODEL_PIECES));
+    12	}
+    13	
+    14	export function summarizeSupportedInventory(inventory) {
+    15	  return {
+    16	    inventory_id: inventory.inventory_id,
+    17	    source: inventory.source,
+    18	    items: inventory.items
+    19	      .filter((item) => item.supported && SUPPORTED_PARTS[item.part_id])
+    20	      .map((item) => ({
+    21	        label: item.label,
+    22	        category: item.category,
+    23	        part_id: item.part_id,
+    24	        ldraw_id: item.ldraw_id,
+    25	        color_name: item.color_name,
+    26	        color_id: item.color_id,
+    27	        count: item.count,
+    28	        supported: true,
+    29	        dimensions: {
+    30	          width: SUPPORTED_PARTS[item.part_id].width,
+    31	          depth: SUPPORTED_PARTS[item.part_id].depth,
+    32	          height_layers: SUPPORTED_PARTS[item.part_id].category === "plate" ? 1 : 3,
+    33	        },
+    34	      })),
+    35	  };
+    36	}
+    37	
+    38	export function buildStructurePrompt({
+    39	  userPrompt,
+    40	  inventory,
+    41	  targetPieceCount,
+    42	  model = DEFAULT_OPENROUTER_MODEL,
+    43	}) {
+    44	  const cappedTarget = clampTargetPieceCount(targetPieceCount);
+    45	  const inventorySummary = summarizeSupportedInventory(inventory);
+    46	
+    47	  return {
+    48	    model,
+    49	    max_tokens: OPENROUTER_MAX_TOKENS,
+    50	    response_format: { type: "json_object" },
+    51	    messages: [
+    52	      {
+    53	        role: "system",
+    54	        content: [
+    55	          "You are a LEGO model planning agent for a local LEGO generation app.",
+    56	          "Your job is to convert a user's request and confirmed LEGO inventory into a high-level build plan.",
+    57	          "Output valid JSON only. No markdown, no commentary.",
+    58	          "Do not output exact brick coordinates.",
+    59	          "Do not output LDraw.",
+    60	          "Do not output meshes, vertices, or arbitrary 3D geometry.",
+    61	          "Do not invent parts, colors, or quantities outside the provided inventory.",
+    62	          "The generated model must be one small free-standing connected LEGO object, not a scene.",
+    63	          `Prefer 10-40 pieces and never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
+    64	          "Prioritize recognizable silhouette, required object features, inventory availability, stable construction, and color match in that order.",
+    65	        ].join("\n"),
+    66	      },
+    67	      {
+    68	        role: "user",
+    69	        content: JSON.stringify(
+    70	          {
+    71	            user_prompt: userPrompt,
+    72	            target_piece_count: cappedTarget,
+    73	            inventory: inventorySummary,
+    74	            required_output_shape: {
+    75	              model_name: "string",
+    76	              primary_object: "string",
+    77	              target_piece_count: "number",
+    78	              overall_shape: "string",
+    79	              required_features: [
+    80	                {
+    81	                  name: "string",
+    82	                  visual_goal: "string",
+    83	                  priority: "required | optional",
+    84	                  preferred_colors: ["string"],
+    85	                  approximate_piece_budget: "number",
+    86	                },
+    87	              ],
+    88	              part_usage_plan: [
+    89	                {
+    90	                  feature: "string",
+    91	                  allowed_part_ids: ["string"],
+    92	                  allowed_color_ids: ["string"],
+    93	                  max_pieces: "number",
+    94	                  notes: "string",
+    95	                },
+    96	              ],
+    97	              build_strategy: {
+    98	                base: "string",
+    99	                body: "string",
+   100	                raised_details: "string",
+   101	                stability_notes: "string",
+   102	              },
+   103	              fallback_priorities: ["string"],
+   104	              user_facing_summary: "string",
+   105	            },
+   106	          },
+   107	          null,
+   108	          2,
+   109	        ),
+   110	      },
+   111	    ],
+   112	  };
+   113	}
+   114	
+   115	export function buildPlacementPrompt({
+   116	  userPrompt,
+   117	  inventory,
+   118	  structurePlan,
+   119	  targetPieceCount,
+   120	  model = DEFAULT_OPENROUTER_MODEL,
+   121	}) {
+   122	  const cappedTarget = clampTargetPieceCount(targetPieceCount ?? structurePlan.target_piece_count);
+   123	  const inventorySummary = summarizeSupportedInventory(inventory);
+   124	
+   125	  return {
+   126	    model,
+   127	    max_tokens: OPENROUTER_MAX_TOKENS,
+   128	    response_format: { type: "json_object" },
+   129	    messages: [
+   130	      {
+   131	        role: "system",
+   132	        content: [
+   133	          "You are a LEGO placement planner for a local LEGO generation app.",
+   134	          "Convert a high-level LEGO structure plan into exact internal GeneratedModel JSON.",
+   135	          "Output valid JSON only. No markdown, no commentary.",
+   136	          "Do not output raw LDraw.",
+   137	          "Do not output meshes, vertices, or arbitrary 3D geometry.",
+   138	          "Use only parts and colors present in the inventory.",
+   139	          "Do not exceed inventory quantities.",
+   140	          `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+   141	          "piece_count must be a non-negative integer.",
+   142	          "step must be a positive integer.",
+   143	          "Use x and y as stud-grid positions.",
+   144	          "Use z as layer height; plates are 1 layer tall and bricks are 3 layers tall.",
+   145	          "Every brick must use numeric rotation 0, 90, 180, or 270, never a string.",
+   146	          "Avoid overlapping bricks, floating bricks, disconnected components, and models without ground contact.",
+   147	        ].join("\n"),
+   148	      },
+   149	      {
+   150	        role: "user",
+   151	        content: JSON.stringify(
+   152	          {
+   153	            user_prompt: userPrompt,
+   154	            target_piece_count: cappedTarget,
+   155	            inventory: inventorySummary,
+   156	            structure_plan: structurePlan,
+   157	            required_output_shape: {
+   158	              model_name: "string",
+   159	              prompt: "string",
+   160	              piece_count: cappedTarget,
+   161	              dimensions: {
+   162	                width_studs: "number",
+   163	                depth_studs: "number",
+   164	                height_layers: "number",
+   165	              },
+   166	              created_from_inventory_id: inventory.inventory_id,
+   167	              generator_version: "openrouter-two-stage-v1",
+   168	              bricks: [
+   169	                {
+   170	                  id: "string",
+   171	                  part_id: "string",
+   172	                  ldraw_id: "string",
+   173	                  label: "string",
+   174	                  color_id: "string",
+   175	                  color_name: "string",
+   176	                  position: { x: "number", y: "number", z: "number" },
+   177	                  rotation: 0,
+   178	                  feature: "string",
+   179	                  step: 1,
+   180	                },
+   181	              ],
+   182	              notes: ["string"],
+   183	            },
+   184	          },
+   185	          null,
+   186	          2,
+   187	        ),
+   188	      },
+   189	    ],
+   190	  };
+   191	}
+
+### test/generation/openRouterPrompts.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+     5	import {
+     6	  buildPlacementPrompt,
+     7	  buildStructurePrompt,
+     8	  summarizeSupportedInventory,
+     9	} from "../../src/generation/openRouterPrompts.js";
+    10	
+    11	const structurePlan = {
+    12	  model_name: "Small Duck",
+    13	  primary_object: "duck",
+    14	  target_piece_count: 15,
+    15	  overall_shape: "Small blocky duck with a body, head, and beak.",
+    16	  required_features: [{ name: "body", priority: "required" }],
+    17	  part_usage_plan: [{ feature: "body", allowed_part_ids: ["3001"], max_pieces: 4 }],
+    18	  build_strategy: { base: "Stable base" },
+    19	  fallback_priorities: ["Keep the duck body."],
+    20	  user_facing_summary: "I planned a duck.",
+    21	};
+    22	
+    23	describe("OpenRouter prompt builders", () => {
+    24	  it("summarizes only supported inventory fields needed by the model", () => {
+    25	    const summary = summarizeSupportedInventory(duckInventory);
+    26	
+    27	    assert.equal(summary.inventory_id, "duck-demo");
+    28	    assert.equal(summary.items.some((item) => item.part_id === "3001"), true);
+    29	    assert.equal(summary.items.every((item) => item.supported === true), true);
+    30	    assert.equal(summary.items.every((item) => "count" in item), true);
+    31	  });
+    32	
+    33	  it("builds the structure-planner request with JSON-only and cap rules", () => {
+    34	    const request = buildStructurePrompt({
+    35	      userPrompt: "build me a duck",
+    36	      inventory: duckInventory,
+    37	      targetPieceCount: 15,
+    38	      model: "openai/gpt-4.1-mini",
+    39	    });
+    40	
+    41	    const text = request.messages.map((message) => message.content).join("\n");
+    42	
+    43	    assert.equal(request.model, "openai/gpt-4.1-mini");
+    44	    assert.equal(request.max_tokens, 2500);
+    45	    assert.match(text, /build me a duck/);
+    46	    assert.match(text, /Output valid JSON only/);
+    47	    assert.match(text, /Do not output exact brick coordinates/);
+    48	    assert.match(text, /50-piece MVP cap/);
+    49	    assert.match(text, /duck-demo/);
+    50	    assert.equal(request.response_format.type, "json_object");
+    51	  });
+    52	
+    53	  it("builds the placement-planner request for GeneratedModel JSON, not LDraw", () => {
+    54	    const request = buildPlacementPrompt({
+    55	      userPrompt: "build me a duck",
+    56	      inventory: duckInventory,
+    57	      structurePlan,
+    58	      targetPieceCount: 15,
+    59	      model: "openai/gpt-4.1-mini",
+    60	    });
+    61	
+    62	    const text = request.messages.map((message) => message.content).join("\n");
+    63	
+    64	    assert.match(text, /GeneratedModel/);
+    65	    assert.match(text, /Do not output raw LDraw/);
+    66	    assert.match(text, /Do not output meshes/);
+    67	    assert.match(text, /position/);
+    68	    assert.match(text, /rotation/);
+    69	    assert.match(text, /plates are 1 layer tall and bricks are 3 layers tall/);
+    70	    assert.match(text, /3001/);
+    71	    assert.equal(request.max_tokens, 2500);
+    72	    assert.equal(request.response_format.type, "json_object");
+    73	  });
+    74	
+    75	  it("uses GeneratedModel numeric constraints in the placement template", () => {
+    76	    const request = buildPlacementPrompt({
+    77	      userPrompt: "build me a duck",
+    78	      inventory: duckInventory,
+    79	      structurePlan,
+    80	      targetPieceCount: 15,
+    81	    });
+    82	
+    83	    const placementTemplate = JSON.parse(request.messages[1].content).required_output_shape;
+    84	    const brickTemplate = placementTemplate.bricks[0];
+    85	
+    86	    assert.equal(Number.isInteger(placementTemplate.piece_count), true);
+    87	    assert.equal(Number.isInteger(brickTemplate.step), true);
+    88	    assert.equal(brickTemplate.step > 0, true);
+    89	    assert.equal(typeof brickTemplate.rotation, "number");
+    90	    assert.deepEqual([0, 90, 180, 270].includes(brickTemplate.rotation), true);
+    91	  });
+    92	});
+
+### .superpowers/sdd/task-6-report.md
+     1	# Task 6: Full Local Verification With Live OpenRouter
+     2	
+     3	## Status
+     4	
+     5	BLOCKED. Automated verification passed, but the required generation service could not bind to localhost in this execution environment. The task explicitly directs reporting this condition rather than working around it.
+     6	
+     7	## Commands Run
+     8	
+     9	1. `npm test`
+    10	   - Exit status: 0.
+    11	   - Summary: 35 tests passed; 0 failed, cancelled, skipped, or todo.
+    12	   - Covered suites included prompt builders, service orchestration with injected doubles, schema guards, model validation, LDraw export, and loader integration.
+    13	
+    14	2. `if [ -n "$OPENROUTER_API_KEY" ]; then printf 'OPENROUTER_API_KEY=present\\n'; else printf 'OPENROUTER_API_KEY=absent\\n'; fi`
+    15	   - Output: `OPENROUTER_API_KEY=absent`.
+    16	
+    17	3. `npm run serve:generation`
+    18	   - Required expected output was not reached.
+    19	   - Exact failure:
+    20	     ```text
+    21	     Error: listen EPERM: operation not permitted 127.0.0.1:8787
+    22	     ...
+    23	     code: 'EPERM',
+    24	     errno: -1,
+    25	     syscall: 'listen',
+    26	     address: '127.0.0.1',
+    27	     port: 8787
+    28	     ```
+    29	   - Because the service could not start, `npm run dev`, browser generation at `http://127.0.0.1:5173/`, and the required `curl` invalid-request check could not be run. No substitute server or port was used, per the task brief.
+    30	
+    31	4. `git status --short`
+    32	   - Output: `fatal: not a git repository (or any of the parent directories): .git`.
+    33	   - Commit is blocked until `.git` is restored.
+    34	
+    35	## Live OpenRouter Result
+    36	
+    37	Not verified. `OPENROUTER_API_KEY` was unavailable and the local generation service was blocked from binding to `127.0.0.1:8787` before any live OpenRouter request could be issued.
+    38	
+    39	## Changes Made
+    40	
+    41	No source files were modified. This report is the only file created.
+    42	
+    43	## Files Changed
+    44	
+    45	- `.superpowers/sdd/task-6-report.md`
+    46	
+    47	## Self-Review Findings
+    48	
+    49	- No concrete integration issue was observed from the automated suite.
+    50	- The generation-service startup error is an environment sandbox restriction, not evidence of a source integration failure.
+    51	- No silent fallback was introduced or exercised.
+    52	
+    53	## Concerns
+    54	
+    55	- Full acceptance requires rerunning `npm run serve:generation` and `npm run dev` in an environment permitted to bind localhost, with `OPENROUTER_API_KEY` loaded.
+    56	- Once both services are running, perform the browser `Duck demo pieces` / `build me a duck` flow and the specified malformed-request `curl` check before declaring the two-call generation flow verified.
+    57	
+    58	## Controller Follow-Up Verification
+    59	
+    60	The controller resolved the subagent's sandbox blocker with elevated localhost execution and confirmed `.env` contains `OPENROUTER_API_KEY` without printing the key.
+    61	
+    62	Additional commands and outcomes:
+    63	
+    64	1. `npm run serve:generation` with `.env` loaded and elevated localhost binding.
+    65	   - Output: `Generation service listening at http://127.0.0.1:8787`.
+    66	
+    67	2. Invalid-request check:
+    68	   - Command: `curl -s http://127.0.0.1:8787/api/generate -H 'Content-Type: application/json' -d '{"userPrompt":"","inventory":{"items":[]}}'`
+    69	   - Output: `{"ok":false,"stage":"request","errors":["userPrompt must be a non-empty string."]}`.
+    70	
+    71	3. First live duck generation request reached OpenRouter but failed before generation:
+    72	   - HTTP status: `500`.
+    73	   - Error summary: OpenRouter rejected the request because the default token budget requested up to `65536` tokens while the account could afford `25000`.
+    74	
+    75	4. Integration fix made after that failure:
+    76	   - `src/generation/openRouterPrompts.js` now sets `max_tokens: 2500` on both OpenRouter prompt requests.
+    77	   - `test/generation/openRouterPrompts.test.js` now asserts both prompt builders include `max_tokens: 2500`.
+    78	
+    79	5. Verification after the token-cap fix:
+    80	   - `node --test test/generation/openRouterPrompts.test.js`: 4/4 passing.
+    81	   - `npm test`: 35/35 passing.
+    82	
+    83	6. Live duck generation retry after restarting the service:
+    84	   - HTTP status: `422`.
+    85	   - Result: OpenRouter returned structure and placement JSON, and the service rejected the placement at the deterministic validation stage with overlap, floating-brick, and disconnected-component errors.
+    86	   - This verifies the two-call live path reaches OpenRouter and that invalid AI placement is not silently replaced with a fixture fallback.
+    87	
+    88	7. Vite smoke check:
+    89	   - `npm run dev` started successfully at `http://127.0.0.1:5173/`.
+    90	   - `curl -i http://127.0.0.1:5173/` returned `HTTP/1.1 200 OK` and the updated app shell with prompt, inventory selector, target-piece input, and Generate button.
+    91	
+    92	Controller-side source files changed after the subagent report:
+    93	
+    94	- `src/generation/openRouterPrompts.js`
+    95	- `test/generation/openRouterPrompts.test.js`
+    96	- `.superpowers/sdd/task-6-report.md`
+    97	
+    98	Remaining limitation:
+    99	
+   100	- A valid rendered live AI model was not achieved because repair is intentionally out of scope and the live placement failed validation. The failure behavior is acceptable for this pass: the service returns validation errors and does not use a silent fallback.

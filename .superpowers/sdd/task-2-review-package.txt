@@ -1,0 +1,265 @@
+# Task 2 Review Package (no git repository)
+
+## Changed file contents
+
+### src/generation/openRouterPrompts.js
+     1	import { MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
+     2	
+     3	export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1-mini";
+     4	
+     5	function clampTargetPieceCount(targetPieceCount) {
+     6	  if (!Number.isFinite(targetPieceCount)) {
+     7	    return Math.min(40, MAX_MODEL_PIECES);
+     8	  }
+     9	
+    10	  return Math.max(1, Math.min(Math.floor(targetPieceCount), MAX_MODEL_PIECES));
+    11	}
+    12	
+    13	export function summarizeSupportedInventory(inventory) {
+    14	  return {
+    15	    inventory_id: inventory.inventory_id,
+    16	    source: inventory.source,
+    17	    items: inventory.items
+    18	      .filter((item) => item.supported && SUPPORTED_PARTS[item.part_id])
+    19	      .map((item) => ({
+    20	        label: item.label,
+    21	        category: item.category,
+    22	        part_id: item.part_id,
+    23	        ldraw_id: item.ldraw_id,
+    24	        color_name: item.color_name,
+    25	        color_id: item.color_id,
+    26	        count: item.count,
+    27	        supported: true,
+    28	        dimensions: {
+    29	          width: SUPPORTED_PARTS[item.part_id].width,
+    30	          depth: SUPPORTED_PARTS[item.part_id].depth,
+    31	          height_layers: SUPPORTED_PARTS[item.part_id].category === "plate" ? 1 : 3,
+    32	        },
+    33	      })),
+    34	  };
+    35	}
+    36	
+    37	export function buildStructurePrompt({
+    38	  userPrompt,
+    39	  inventory,
+    40	  targetPieceCount,
+    41	  model = DEFAULT_OPENROUTER_MODEL,
+    42	}) {
+    43	  const cappedTarget = clampTargetPieceCount(targetPieceCount);
+    44	  const inventorySummary = summarizeSupportedInventory(inventory);
+    45	
+    46	  return {
+    47	    model,
+    48	    response_format: { type: "json_object" },
+    49	    messages: [
+    50	      {
+    51	        role: "system",
+    52	        content: [
+    53	          "You are a LEGO model planning agent for a local LEGO generation app.",
+    54	          "Your job is to convert a user's request and confirmed LEGO inventory into a high-level build plan.",
+    55	          "Output valid JSON only. No markdown, no commentary.",
+    56	          "Do not output exact brick coordinates.",
+    57	          "Do not output LDraw.",
+    58	          "Do not output meshes, vertices, or arbitrary 3D geometry.",
+    59	          "Do not invent parts, colors, or quantities outside the provided inventory.",
+    60	          "The generated model must be one small free-standing connected LEGO object, not a scene.",
+    61	          `Prefer 10-40 pieces and never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
+    62	          "Prioritize recognizable silhouette, required object features, inventory availability, stable construction, and color match in that order.",
+    63	        ].join("\n"),
+    64	      },
+    65	      {
+    66	        role: "user",
+    67	        content: JSON.stringify(
+    68	          {
+    69	            user_prompt: userPrompt,
+    70	            target_piece_count: cappedTarget,
+    71	            inventory: inventorySummary,
+    72	            required_output_shape: {
+    73	              model_name: "string",
+    74	              primary_object: "string",
+    75	              target_piece_count: "number",
+    76	              overall_shape: "string",
+    77	              required_features: [
+    78	                {
+    79	                  name: "string",
+    80	                  visual_goal: "string",
+    81	                  priority: "required | optional",
+    82	                  preferred_colors: ["string"],
+    83	                  approximate_piece_budget: "number",
+    84	                },
+    85	              ],
+    86	              part_usage_plan: [
+    87	                {
+    88	                  feature: "string",
+    89	                  allowed_part_ids: ["string"],
+    90	                  allowed_color_ids: ["string"],
+    91	                  max_pieces: "number",
+    92	                  notes: "string",
+    93	                },
+    94	              ],
+    95	              build_strategy: {
+    96	                base: "string",
+    97	                body: "string",
+    98	                raised_details: "string",
+    99	                stability_notes: "string",
+   100	              },
+   101	              fallback_priorities: ["string"],
+   102	              user_facing_summary: "string",
+   103	            },
+   104	          },
+   105	          null,
+   106	          2,
+   107	        ),
+   108	      },
+   109	    ],
+   110	  };
+   111	}
+   112	
+   113	export function buildPlacementPrompt({
+   114	  userPrompt,
+   115	  inventory,
+   116	  structurePlan,
+   117	  targetPieceCount,
+   118	  model = DEFAULT_OPENROUTER_MODEL,
+   119	}) {
+   120	  const cappedTarget = clampTargetPieceCount(targetPieceCount ?? structurePlan.target_piece_count);
+   121	  const inventorySummary = summarizeSupportedInventory(inventory);
+   122	
+   123	  return {
+   124	    model,
+   125	    response_format: { type: "json_object" },
+   126	    messages: [
+   127	      {
+   128	        role: "system",
+   129	        content: [
+   130	          "You are a LEGO placement planner for a local LEGO generation app.",
+   131	          "Convert a high-level LEGO structure plan into exact internal GeneratedModel JSON.",
+   132	          "Output valid JSON only. No markdown, no commentary.",
+   133	          "Do not output raw LDraw.",
+   134	          "Do not output meshes, vertices, or arbitrary 3D geometry.",
+   135	          "Use only parts and colors present in the inventory.",
+   136	          "Do not exceed inventory quantities.",
+   137	          `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+   138	          "Use x and y as stud-grid positions.",
+   139	          "Use z as layer height; plates are 1 layer tall and bricks are 3 layers tall.",
+   140	          "Every brick must use rotation 0, 90, 180, or 270.",
+   141	          "Avoid overlapping bricks, floating bricks, disconnected components, and models without ground contact.",
+   142	        ].join("\n"),
+   143	      },
+   144	      {
+   145	        role: "user",
+   146	        content: JSON.stringify(
+   147	          {
+   148	            user_prompt: userPrompt,
+   149	            target_piece_count: cappedTarget,
+   150	            inventory: inventorySummary,
+   151	            structure_plan: structurePlan,
+   152	            required_output_shape: {
+   153	              model_name: "string",
+   154	              prompt: "string",
+   155	              piece_count: "number",
+   156	              dimensions: {
+   157	                width_studs: "number",
+   158	                depth_studs: "number",
+   159	                height_layers: "number",
+   160	              },
+   161	              created_from_inventory_id: inventory.inventory_id,
+   162	              generator_version: "openrouter-two-stage-v1",
+   163	              bricks: [
+   164	                {
+   165	                  id: "string",
+   166	                  part_id: "string",
+   167	                  ldraw_id: "string",
+   168	                  label: "string",
+   169	                  color_id: "string",
+   170	                  color_name: "string",
+   171	                  position: { x: "number", y: "number", z: "number" },
+   172	                  rotation: "0 | 90 | 180 | 270",
+   173	                  feature: "string",
+   174	                  step: "number",
+   175	                },
+   176	              ],
+   177	              notes: ["string"],
+   178	            },
+   179	          },
+   180	          null,
+   181	          2,
+   182	        ),
+   183	      },
+   184	    ],
+   185	  };
+   186	}
+
+### test/generation/openRouterPrompts.test.js
+     1	import assert from "node:assert/strict";
+     2	import { describe, it } from "node:test";
+     3	
+     4	import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+     5	import {
+     6	  buildPlacementPrompt,
+     7	  buildStructurePrompt,
+     8	  summarizeSupportedInventory,
+     9	} from "../../src/generation/openRouterPrompts.js";
+    10	
+    11	const structurePlan = {
+    12	  model_name: "Small Duck",
+    13	  primary_object: "duck",
+    14	  target_piece_count: 15,
+    15	  overall_shape: "Small blocky duck with a body, head, and beak.",
+    16	  required_features: [{ name: "body", priority: "required" }],
+    17	  part_usage_plan: [{ feature: "body", allowed_part_ids: ["3001"], max_pieces: 4 }],
+    18	  build_strategy: { base: "Stable base" },
+    19	  fallback_priorities: ["Keep the duck body."],
+    20	  user_facing_summary: "I planned a duck.",
+    21	};
+    22	
+    23	describe("OpenRouter prompt builders", () => {
+    24	  it("summarizes only supported inventory fields needed by the model", () => {
+    25	    const summary = summarizeSupportedInventory(duckInventory);
+    26	
+    27	    assert.equal(summary.inventory_id, "duck-demo");
+    28	    assert.equal(summary.items.some((item) => item.part_id === "3001"), true);
+    29	    assert.equal(summary.items.every((item) => item.supported === true), true);
+    30	    assert.equal(summary.items.every((item) => "count" in item), true);
+    31	  });
+    32	
+    33	  it("builds the structure-planner request with JSON-only and cap rules", () => {
+    34	    const request = buildStructurePrompt({
+    35	      userPrompt: "build me a duck",
+    36	      inventory: duckInventory,
+    37	      targetPieceCount: 15,
+    38	      model: "openai/gpt-4.1-mini",
+    39	    });
+    40	
+    41	    const text = request.messages.map((message) => message.content).join("\n");
+    42	
+    43	    assert.equal(request.model, "openai/gpt-4.1-mini");
+    44	    assert.match(text, /build me a duck/);
+    45	    assert.match(text, /Output valid JSON only/);
+    46	    assert.match(text, /Do not output exact brick coordinates/);
+    47	    assert.match(text, /50-piece MVP cap/);
+    48	    assert.match(text, /duck-demo/);
+    49	    assert.equal(request.response_format.type, "json_object");
+    50	  });
+    51	
+    52	  it("builds the placement-planner request for GeneratedModel JSON, not LDraw", () => {
+    53	    const request = buildPlacementPrompt({
+    54	      userPrompt: "build me a duck",
+    55	      inventory: duckInventory,
+    56	      structurePlan,
+    57	      targetPieceCount: 15,
+    58	      model: "openai/gpt-4.1-mini",
+    59	    });
+    60	
+    61	    const text = request.messages.map((message) => message.content).join("\n");
+    62	
+    63	    assert.match(text, /GeneratedModel/);
+    64	    assert.match(text, /Do not output raw LDraw/);
+    65	    assert.match(text, /Do not output meshes/);
+    66	    assert.match(text, /position/);
+    67	    assert.match(text, /rotation/);
+    68	    assert.match(text, /plates are 1 layer tall and bricks are 3 layers tall/);
+    69	    assert.match(text, /3001/);
+    70	    assert.equal(request.response_format.type, "json_object");
+    71	  });
+    72	});
