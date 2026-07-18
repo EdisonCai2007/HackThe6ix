@@ -26,7 +26,13 @@ async function loadWorkspace() {
   select.innerHTML = state.workspace.sessions.map((row) =>
     `<option value="${row.session_id}">${row.session_id} (${row.expected_count})</option>`
   ).join("");
+  renderExportState();
   await loadSession(state.workspace.sessions[0].session_id);
+}
+
+function renderExportState() {
+  const ready = state.workspace && state.workspace.sessions.every((row) => row.locked);
+  $("export-inventory").disabled = !ready;
 }
 
 async function loadSession(sessionId) {
@@ -189,7 +195,19 @@ $("add-missed").addEventListener("click", addMissed);
 $("lock-session").addEventListener("click", async () => {
   try {
     state.document = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/lock`, { method: "POST" });
+    const workspaceRow = state.workspace.sessions.find((row) => row.session_id === state.sessionId);
+    if (workspaceRow) {
+      workspaceRow.locked = true;
+      workspaceRow.reconciliation = state.document.reconciliation;
+    }
+    renderExportState();
     render();
+  } catch (error) { alert(error.message); }
+});
+$("export-inventory").addEventListener("click", async () => {
+  try {
+    const result = await api("/api/export", { method: "POST" });
+    alert(`Verified inventory written to ${result.output_dir}`);
   } catch (error) { alert(error.message); }
 });
 window.addEventListener("resize", fitShapeLayer);

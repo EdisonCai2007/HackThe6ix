@@ -151,7 +151,8 @@ def test_browser_client_is_served(tmp_path):
 
     index = client.get("/").text
     assert 'id="segmentation-stage"' in index
-    assert '/app.js?v=2' in index
+    assert 'id="export-inventory"' in index
+    assert '/app.js?v=3' in index
     assert client.get("/app.js").headers["content-type"].startswith(
         "text/javascript"
     )
