@@ -21,6 +21,16 @@ export function resolveGenerationModels(env = process.env) {
   };
 }
 
+export function resolveRefinementModel(env = process.env) {
+  const refinementModel = cleanEnvValue(env.GEMINI_REFINEMENT_MODEL);
+
+  if (refinementModel) {
+    return refinementModel;
+  }
+
+  return resolveGenerationModels(env).placementModel;
+}
+
 export function resolveSuggestionModel(env = process.env) {
   const suggestionModel = cleanEnvValue(env.GEMINI_SUGGESTION_MODEL);
 
