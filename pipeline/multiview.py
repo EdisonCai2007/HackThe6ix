@@ -1307,6 +1307,7 @@ def _attach_model_fit_diagnostics(
                 "runner_up_margin": None,
                 "candidates": [],
                 "overlay_paths": [],
+                "review_recommended": False,
             }
             info["model_fit"] = serialized
             summaries.append(serialized)
@@ -1341,6 +1342,7 @@ def _attach_model_fit_diagnostics(
                 "runner_up_margin": None,
                 "candidates": [],
                 "overlay_paths": [],
+                "review_recommended": False,
             }
             info["model_fit"] = serialized
             summaries.append(serialized)
@@ -1362,6 +1364,17 @@ def _attach_model_fit_diagnostics(
                 _serialize_candidate_fit(fit) for fit in evidence.candidates
             ],
         }
+        final_part_id = info.get("brickognize", {}).get("part_id")
+        review_recommended = bool(
+            evidence.reliability == "diagnostic"
+            and evidence.best_part_id is not None
+            and final_part_id != evidence.best_part_id
+        )
+        serialized["review_recommended"] = review_recommended
+        if review_recommended:
+            flags = info.setdefault("flags", [])
+            if "diagnostic_model_disagreement" not in flags:
+                flags.append("diagnostic_model_disagreement")
         serialized["overlay_paths"] = _write_model_fit_overlays(
             analysis_dir, index, fit_observations, evidence
         )

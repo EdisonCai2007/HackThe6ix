@@ -585,7 +585,7 @@ def test_model_fit_diagnostic_ranks_regular_conflicts_without_changing_id(
     monkeypatch.setattr(
         pipeline.multiview, "compare_regular_candidates", fake_compare
     )
-    identity = {"part_id": "3020", "name": "Plate 2 x 4", "score": 0.88}
+    identity = {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.88}
     id_crops = [{
         "brickognize": dict(identity),
         "appearance_support": {"candidate_support": {
@@ -613,6 +613,8 @@ def test_model_fit_diagnostic_ranks_regular_conflicts_without_changing_id(
 
     assert calls == [("3020", "3001")]
     assert id_crops[0]["model_fit"]["best_part_id"] == "3020"
+    assert id_crops[0]["model_fit"]["review_recommended"] is True
+    assert "diagnostic_model_disagreement" in id_crops[0]["flags"]
     assert id_crops[0]["brickognize"] == identity
     overlay_paths = id_crops[0]["model_fit"]["overlay_paths"]
     assert overlay_paths
