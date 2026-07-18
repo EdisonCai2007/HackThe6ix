@@ -1,0 +1,279 @@
+{
+  "item_name": "Telemetry causal experiments and product roadmap",
+  "category": "Measurement and decision program",
+  "scope": "End-to-end measurement for inventory suggestions and direct requests, including offline benchmarks, online outcomes, oracle substitutions, multi-objective quality frontiers, experiment assignment, statistical confidence, cost/latency, roadmap gates, and anti-roadmap. It covers prompt, model, representation, search, scorer, validator, and product changes. It excludes claiming causality from unrandomized logs or optimizing a single proxy as product quality.",
+  "relevance_to_current_system": "generationRuntimeLogger.js currently creates a run-scoped JSONL file and records runtime_start plus each AI request, response or error with call ID, phase, stage, label, request model, duration, raw request, raw response text, and optional provider metadata. service.js exposes named suggestion, structure, placement, JSON-repair, validation, deterministic inventory-cleanup, and validation-repair stages and returns structurePlan, model, validation, removedBricks, and repaired status. The logger does not currently record benchmark case ID, experiment assignment, inventory fingerprint, final deterministic outcome, multi-view quality scores, user acceptance, regeneration, edits, abandonment, end-to-end latency, or cost as stable first-class events. Tests strongly cover parser, cleanup, repair, stage labels, and validator behavior but not semantic quality or user outcomes.",
+  "bottleneck_layer": "multiple layers: telemetry, evaluation, intent, planning, placement, verification, search, and interaction",
+  "ceiling_hypothesis": "A frozen stratified benchmark plus stage-complete telemetry and one-factor oracle substitutions will reveal that measured quality variance is concentrated in a small number of stages. Prioritizing interventions by paired human-preference gain per engineering and runtime cost will outperform undirected prompt/model tuning; if no stage oracle creates material lift, inventory or the product quality target is the true ceiling.",
+  "observed_project_evidence": [
+    "Direct observation: runtime logging captures complete request and response payloads and per-call duration, enabling retrospective model-output diagnosis.",
+    "Direct observation: each AI call is labeled by phase and stage, including suggestion_generate, structure_generate, placement_generate, JSON repair, and validation repair.",
+    "Direct observation: final generation results include validation and may include removedBricks and repaired flags, but createGenerationRuntimeLogger has no dedicated final_result event.",
+    "Direct observation: the current service performs one main structure call and one main placement call, with bounded repair paths; it does not generate or rank multiple legal candidates.",
+    "Direct observation: validator tests measure deterministic legality, while service tests measure orchestration contracts and repair behavior rather than visual quality.",
+    "Direct observation: .env.example names gemini-3.5-flash for placement and repair and a moving gemini-flash-lite-latest alias for structure and suggestion; Backboard has separate provider/model overrides, so runtime request.model is the reliable per-call record.",
+    "Interpretation: existing logs answer what the model emitted but not whether the user liked, edited, regenerated, or completed the build."
+  ],
+  "mechanisms": [
+    "Without a frozen task suite, apparent improvements can be caused by easier prompts, inventories, or cherry-picked examples.",
+    "Without experiment IDs and stable hashes, model, prompt, provider, and code changes are confounded.",
+    "Offline legality can rise while recognizability, creativity, or acceptance falls because the objectives are distinct.",
+    "Suggestion and direct-request tasks have different causal paths; pooling them hides idea-selection and suggestion-realization failures.",
+    "Repeatedly inspecting results and stopping when a metric looks favorable invalidates ordinary fixed-horizon confidence claims.",
+    "An automatic scorer can select outputs that exploit its blind spots unless held-out human preference and gaming audits remain authoritative.",
+    "A model swap can appear to help because the harness, API, schema, or repair frequency changed, not because base capability improved."
+  ],
+  "problem_a_impact": "Suggestion evaluation must log the entire funnel: inventory received, candidate ideas, feasibility estimates, selected suggestion, preserved brief/feature anchors, generated build, human-rated realization, user selection or override, regeneration, edits, and abandonment. The key causal outcomes are idea quality and suggestion-to-build continuity, not only valid JSON.",
+  "problem_b_impact": "Direct-request evaluation must stratify prompt feasibility and explicit feature count, then log semantic coverage, recognizability, preference, regeneration, edit burden, and fallback behavior. This distinguishes an impossible request from planning or placement underperformance.",
+  "confirmed_facts": [
+    "Current runtime logs provide stage, model, raw payload, duration, errors, and optional provider metadata but no stable product-quality outcome schema.",
+    "OpenAI's 2026 trustworthy-evaluation guidance emphasizes that measured capability depends on task environment and harness, not only the underlying model.",
+    "GDPval uses blind expert pairwise comparison, detailed rubrics, and an automated grader calibrated to humans; the automated grader is explicitly not treated as a replacement for experts.",
+    "When Benchmarks Talk reports that model rankings can change between static and interactive evaluation, supporting separate online interaction metrics.",
+    "Always-valid inference shows that continuously monitoring ordinary p-values or confidence intervals can invalidate conclusions; sequential designs require sequentially valid methods or precommitted stopping.",
+    "CUPED-style pre-experiment covariate adjustment can reduce variance while preserving unbiased average-treatment estimation when used correctly.",
+    "BrickGPT ablations isolate rejection sampling and rollback; BrickNet compares representation and model-size variants and observes diminishing returns, illustrating the value of staged ablation rather than one end-to-end score."
+  ],
+  "plausible_inferences": [
+    "Inference: the fastest high-value work is not another prompt revision but adding final-outcome and experiment events around the logger, then freezing a small benchmark.",
+    "Inference: deterministic fixtures can serve as reproducible smoke anchors but will overestimate quality if used as the full benchmark.",
+    "Inference: a human-plan oracle and human-best-of-candidate oracle will likely explain more variance than another schema change because schema validity is already strongly guarded.",
+    "Inference: candidate search will help only after a calibrated scorer shows it can recover a human-preferred candidate from a fixed pool.",
+    "Inference: online acceptance will be sparse and noisy early, so paired offline human preference should drive initial decisions while online data validates product transfer."
+  ],
+  "unresolved_questions": [
+    "What are current baseline legality, human preference, regeneration, edit, abandonment, latency, and provider-cost distributions?",
+    "How much traffic is available for a powered online experiment?",
+    "Does Backboard return stable token and cost metadata for every configured model/provider?",
+    "Which prompt/inventory slices account for most user dissatisfaction?",
+    "How often does deterministic inventory cleanup remove a semantically critical feature?",
+    "What is human inter-rater reliability for LEGO creativity and aesthetics?",
+    "Does a higher-quality candidate pool exist today for a scorer to exploit?"
+  ],
+  "confidence": "High confidence in the telemetry gaps and staged causal program because they are directly visible in code and supported by established evaluation practice. Moderate confidence in proposed early thresholds; online sample sizes and effect sizes remain product-specific.",
+  "expected_impact": "Very high decision quality and moderate immediate product quality. Measurement prevents wasted work and identifies the highest-leverage intervention; direct user-visible gains arrive when the first validated intervention is shipped.",
+  "key_external_findings": [
+    "Current frontier-evaluation guidance treats the harness and environment as part of the evaluated system, so model comparisons must freeze provider translation, tools, schemas, and repair policies.",
+    "Blind expert pairwise ratings with explicit rubrics remain the strongest evidence for complex deliverables; automated graders should be calibrated and audited rather than presumed authoritative.",
+    "Interactive evaluation can reorder model rankings relative to static tasks, so user edits, feedback incorporation, and abandonment need separate measurement.",
+    "Sequential experiments need precommitted stopping or always-valid inference; ordinary repeated peeking creates false positives.",
+    "Brick generation papers demonstrate informative ablation patterns: validity/stability modules and graph representations can produce much larger changes than simple model scaling."
+  ],
+  "primary_sources": [
+    {
+      "title": "A shared playbook for trustworthy third party evaluations",
+      "url": "https://openai.com/index/trustworthy-third-party-evaluations-foundations/",
+      "source_type": "First-party evaluation guidance",
+      "publication_or_update_date": "2026-05-29",
+      "supported_claim": "Frontier model performance depends on the environment and harness for long, tool-using workflows.",
+      "relevance": "Supports logging and freezing provider, orchestration, tools, and context handling in every comparison."
+    },
+    {
+      "title": "Measuring the performance of our models on real-world tasks (GDPval)",
+      "url": "https://openai.com/index/gdpval/",
+      "source_type": "First-party benchmark report",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Blind expert comparisons and detailed rubrics anchor deliverable quality; automated graders estimate but do not replace expert judgments.",
+      "relevance": "Strong evaluation pattern for LEGO design preference."
+    },
+    {
+      "title": "When Benchmarks Talk: Re-Evaluating Code LLMs with Interactive Feedback",
+      "url": "https://aclanthology.org/2025.findings-acl.1267/",
+      "source_type": "Peer-reviewed ACL Findings paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Static and interactive evaluation can produce different model rankings and behaviors.",
+      "relevance": "Supports measuring edits and feedback, not only one-shot output."
+    },
+    {
+      "title": "Always Valid Inference: Bringing Sequential Analysis to A/B Testing",
+      "url": "https://arxiv.org/abs/1512.04922",
+      "source_type": "Research paper with large-scale deployment",
+      "publication_or_update_date": "2015",
+      "supported_claim": "Ordinary inference fails under continuous monitoring; always-valid p-values and intervals support sequential stopping.",
+      "relevance": "Prevents peeking-driven false decisions in product experiments."
+    },
+    {
+      "title": "Improving the Sensitivity of Online Controlled Experiments by Utilizing Pre-Experiment Data",
+      "url": "https://gwern.net/doc/statistics/power-analysis/2013-deng.pdf",
+      "source_type": "Peer-reviewed experimentation paper",
+      "publication_or_update_date": "2013",
+      "supported_claim": "CUPED uses pre-experiment covariates for variance reduction in randomized online experiments.",
+      "relevance": "Potential power improvement once stable user-level covariates exist."
+    },
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/html/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.html",
+      "source_type": "Peer-reviewed CVPR paper",
+      "publication_or_update_date": "2026-06",
+      "supported_claim": "Representation and model-size ablations expose validity survival and diminishing scale returns.",
+      "relevance": "Direct-domain example of causal ceiling decomposition."
+    },
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "Ablations separate rejection sampling and physics rollback effects on validity and stability while preserving semantic metrics.",
+      "relevance": "Direct-domain example of module-level attribution."
+    },
+    {
+      "title": "Gemini API release notes",
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "source_type": "First-party model/API documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "gemini-3.5-flash became GA on 2026-05-19 and gemini-3.1-flash-lite became GA on 2026-05-07; moving aliases and deprecations are date-sensitive.",
+      "relevance": "Supports exact model/version logging rather than relying on aliases."
+    }
+  ],
+  "contradicting_evidence": [
+    "Offline expert preference may not predict whether users enjoy editing or physically building the result.",
+    "Online randomized tests may be underpowered in an early product, making qualitative failure review and paired offline studies more practical initially.",
+    "CUPED helps only when valid pre-experiment covariates exist and does not repair biased assignment, interference, or poor outcome definitions.",
+    "A large oracle gap identifies headroom but does not guarantee the oracle component can be automated economically.",
+    "High average preference can hide catastrophic failures on rare inventories; slice and worst-case reporting remain necessary."
+  ],
+  "transfer_limits": [
+    "Code, language, health, or general deliverable eval practices transfer methodologically, not as numeric LEGO thresholds.",
+    "BrickGPT and BrickNet benchmarks do not model this product's exact inventories, user suggestion funnel, editor behavior, or Backboard translation.",
+    "Large-platform A/B methods assume more traffic and mature randomization infrastructure than may be available.",
+    "Human preference measures visual desirability but not necessarily physical stability or instruction usability.",
+    "Provider token, latency, and cost behavior must be measured through the actual Backboard path."
+  ],
+  "capability_snapshot": "Verified 2026-07-17: live .env.example uses gemini-3.5-flash for placement/repair and gemini-flash-lite-latest aliases for structure/suggestion, while Backboard can override provider and stage models; generationRuntimeLogger records request.model per call. Google release notes show gemini-3.5-flash GA since 2026-05-19 and gemini-3.1-flash-lite GA since 2026-05-07. [uncertain] The exact deployed runtime models, Backboard translation version, token usage completeness, cost fields, and reproducible sampling controls require inspection of actual run metadata rather than configuration examples.",
+  "data_target_match": "The benchmark must use current JSON schema, validator, part catalog, renderer, inventories, provider path, and both product modes. Public brick benchmarks inform metrics and ablations but cannot replace live exact-inventory cases. Online telemetry should join anonymous session/experiment outcomes to offline benchmark definitions without retaining unnecessary raw personal data.",
+  "source_quality_notes": "Repo facts come from live source and tests. OpenAI and Google claims are current first-party sources; their product interests warrant independent validation. BrickNet and BrickGPT are peer-reviewed direct-domain work. Sequential-inference and CUPED sources are established methods, but implementation details must be reviewed by someone statistically competent before launch.",
+  "near_term_recommendations": [
+    "Add run_manifest, final_result, quality_scores, user_outcome, edit_summary, and experiment_assignment events keyed by run ID, case ID, anonymous session ID, inventory hash, prompt hash, code commit/build version, prompt version, provider, exact model, schema version, and renderer version.",
+    "Derive and store stage success, repair count, removed critical features, hard-validation errors, end-to-end latency, per-stage duration, token usage, estimated cost, and final model hash; redact API keys and minimize raw user content retention.",
+    "Freeze a 24-case diagnostic suite within 48 hours: 12 suggestion cases and 12 direct requests across inventory and object slices, with deterministic references and known legal-poor mutations.",
+    "Run three repeated generations per case for the current baseline before changing prompts; publish aggregate and slice distributions, not selected screenshots.",
+    "Collect blinded pairwise human preference on the baseline and first interventions; use automatic scores for scale only after human calibration.",
+    "Pre-register each experiment's changed variable, controls, primary metric, guardrails, minimum detectable effect or interval-width target, stopping rule, and rollback rule.",
+    "Create a dashboard or report that traces suggestion brief to plan to placements to cleanup/repair to final user outcome and highlights first feature loss."
+  ],
+  "longer_term_architecture_options": [
+    "Evaluation service with versioned benchmark cases, deterministic graders, render/VLM graders, human labels, experiment registry, and immutable result artifacts.",
+    "Factorial or sequential oracle harness able to inject human briefs, gold feature graphs, deterministic placements, human scorers, or expanded inventories one stage at a time.",
+    "Candidate-search platform that logs every candidate, score vector, diversity distance, rejection reason, and selection decision so scorer value can be measured independently.",
+    "Privacy-aware online experimentation layer with sticky randomization, exposure logging, sequentially valid analysis, guardrails, and automated rollback."
+  ],
+  "expected_signal": "Instrumentation completeness should exceed 95%; baseline variance and dominant failure slices become visible; oracle substitutions produce stage-specific headroom estimates; validated changes show repeatable human-preference lift with stable legality; decision time falls because every roadmap item has a stop rule.",
+  "likely_ceiling": "Telemetry does not itself improve designs, and small benchmarks can overfit. Oracle results can be expensive to automate. Online metrics remain noisy and can drift as users or inventories change. Long-term quality still depends on better plans, representations, search, and inventory expressivity.",
+  "implementation_effort": "48-hour slice: low-to-medium for event schemas, hashes, final-outcome logging, 24-case benchmark, and baseline runner. One-to-two-week slice: medium for canonical renders, rating workflow, scorer calibration, oracle injection, and reporting. Long-term platform and online experimentation: high.",
+  "latency_token_cost": "Telemetry serialization is negligible but raw payload storage can grow quickly. Offline three-seed baselines and candidate search multiply provider usage. Human ratings are labor cost. Online event logging should be asynchronous and bounded. Track total cost per accepted build and cost per human-preference point, not only call cost.",
+  "risks": [
+    "Raw prompts, inventories, responses, and stack traces may contain sensitive data or secrets.",
+    "Experiment contamination can occur if users switch variants or if provider aliases change mid-test.",
+    "Multiple metrics and repeated peeking create false discoveries.",
+    "A benchmark can be overfit through prompt iteration or evaluator leakage.",
+    "Automated quality scores can be gamed and may discriminate against creative but unusual designs.",
+    "Low traffic can produce unstable online conclusions.",
+    "Logging every draft may increase storage and make deletion/retention obligations harder."
+  ],
+  "dependencies": [
+    "Versioned prompts, schemas, catalogs, validator, renderer, and provider configuration.",
+    "Canonical multi-view rubric and human pairwise-rating process.",
+    "Reference inventories and deterministic/skilled builds.",
+    "Token/cost metadata extraction from the actual provider path.",
+    "Privacy, retention, redaction, and access policy for logs.",
+    "A stable experiment unit and exposure event before online A/B testing."
+  ],
+  "sequencing": [
+    "48 hours: define the metric tree and event schema; add final_result and experiment metadata; freeze 24 cases; run and archive current three-seed baseline; manually rate the most diagnostic pairs.",
+    "Days 3-7: add canonical multi-view renders, automatic deterministic graders, failure taxonomy, and a basic case-level report; commission skilled same-inventory references.",
+    "Week 1-2: run human-plan, deterministic-placement, human-scorer, and inventory oracle substitutions; calibrate a visual evaluator; test first-sample versus best-of-4 selection on a fixed candidate pool.",
+    "After week 2: choose the highest preference-lift-per-cost intervention, run a controlled offline replication, then an online randomized exposure if traffic permits.",
+    "Longer term: move semantic plans toward feature graphs and deterministic/constrained placement only if oracle evidence attributes substantial headroom to those layers."
+  ],
+  "rollback_criteria": "Revert an intervention if the 95% interval for blinded human-preference lift includes zero after the planned sample, legality falls more than 1 point, mandatory-feature coverage falls more than 5 points on any major slice, p95 latency grows more than 50%, cost per accepted build more than doubles without compensating preference lift, or online regeneration/abandonment worsens beyond pre-registered guardrails. Stop an experiment if assignment/exposure logging is incomplete or model aliases change.",
+  "anti_recommendations": [
+    "Do not swap models indiscriminately; first freeze harness, exact model IDs, prompts, seeds where available, and benchmark cases.",
+    "Do not continue prompt tweaking without a held-out eval set and versioned prompt IDs.",
+    "Do not add specialty parts before measuring skilled same-inventory headroom and per-family marginal gain.",
+    "Do not launch best-of-N before demonstrating that a scorer selects human-preferred candidates from a fixed pool.",
+    "Do not train a reward or preference model before collecting de-duplicated, blinded human comparisons and a hidden holdout.",
+    "Do not treat schema validity, validator pass rate, or one aggregate VLM score as product success.",
+    "Do not use ordinary p-values while continuously peeking and stopping opportunistically."
+  ],
+  "selective_generation_policy": "When the feasibility estimator or oracle-calibrated scorer is low-confidence, generate a simpler object/brief, use a validated deterministic fixture/template where appropriate, or present two legal alternatives for human choice. If all candidates fail hard legality, do not expose them as finished. If online telemetry is unavailable or incomplete, fall back to the last validated configuration rather than auto-promoting a new variant.",
+  "smallest_discriminating_experiments": [
+    {
+      "name": "Instrumentation audit",
+      "design": "Replay 24 frozen cases and require every run to join configuration, stage events, final model/validation, scores, latency/cost, and synthetic user outcome without orphaned IDs."
+    },
+    {
+      "name": "One-factor model and prompt tests",
+      "design": "Change only structure model, placement model, or one prompt version at a time; keep provider path, inventory, seeds/candidates, repair, and evaluator fixed."
+    },
+    {
+      "name": "Oracle ladder",
+      "design": "Replace suggestion idea, structure plan, placement, scorer, validator ground truth, and inventory one at a time with skilled or deterministic oracles."
+    },
+    {
+      "name": "Candidate-search value",
+      "design": "Generate a fixed pool of four legal candidates per task; compare first, random, automatic scorer, and human-oracle selection without changing generation."
+    },
+    {
+      "name": "Online transfer",
+      "design": "Randomize eligible sessions between last validated control and one offline-winning variant; measure acceptance, regeneration, edit burden, abandonment, latency, and cost with precommitted guardrails."
+    }
+  ],
+  "variables_and_controls": "Every experiment changes one named layer and freezes inventory snapshots, prompt cases, target counts, provider/API path, exact model IDs for other stages, prompt/schema versions, repair policy, candidate budget, renderer, evaluator version, and code build. Use paired cases and common candidate pools where possible. Randomize online at anonymous user/session level with sticky assignment; log exposure separately from assignment. Predefine primary metric, slices, stopping, exclusions, and multiple-comparison handling.",
+  "dataset_and_slices": "Minimum offline suite: 24 diagnostic cases immediately, expanding to 60-100 before architecture commitment. Balance suggestion and direct request; inventories by total pieces, shape diversity, color diversity, scarcity, and adversarial mismatch; objects by vehicle, furniture, animal, plant, container/vessel, architecture, and abstract; piece bands 10-25, 26-50, 51-100; symmetric/asymmetric; low-relief/full-3D; common/novel prompts. Include deterministic car/daisy, skilled references, legal-poor mutations, and fixed hidden holdout families.",
+  "metrics_and_scoring": {
+    "funnel": [
+      "Suggestion shown, selected, overridden, build accepted, regenerated, edited, instructions opened, exported, abandoned"
+    ],
+    "hard_quality": [
+      "Parse/schema pass, inventory compliance, validator pass, cleanup and repair counts, failure type"
+    ],
+    "semantic_design": [
+      "Mandatory-feature coverage, recognizability, silhouette/proportion/depth, color, creativity, diversity, human pairwise preference"
+    ],
+    "continuity": [
+      "Suggestion brief anchors retained in plan and final build, first stage of feature loss"
+    ],
+    "interaction": [
+      "Regeneration rate, brick edits, edit time, undo count, final acceptance, abandonment"
+    ],
+    "operational": [
+      "Per-stage and end-to-end latency, tokens, provider cost, retries, error rate, storage"
+    ],
+    "analysis": [
+      "Task-level paired effects, slice effects, bootstrap or randomization intervals, worst-decile outcomes, Pareto frontier, automatic-human agreement"
+    ]
+  },
+  "sample_size_or_confidence_method": "Offline: begin with 24 paired cases times three repeats for diagnostics, then use at least 60 task-inventory cells and three blinded ratings per pair for roadmap decisions; report task-clustered bootstrap 95% intervals and hold out object families. Online: [uncertain] calculate sample size from the measured control rate and minimum worthwhile effect; if traffic is low, use a precommitted fixed-width interval or an always-valid sequential method rather than claiming significance from arbitrary peeking. Treat session/user, not generation, as the independent unit.",
+  "success_thresholds": [
+    "At least 95% of eligible runs have complete joined telemetry and 100% have exact model/prompt/schema/catalog/build versions before comparisons are trusted.",
+    "An intervention must achieve at least 60% blinded human win rate over control with the 95% interval lower bound above 50% on the hidden holdout.",
+    "Mandatory-feature coverage improves at least 10 points with no more than 1-point legality loss and no major slice falling more than 5 points.",
+    "Suggestion interventions improve both suggestion selection and suggestion-to-build anchor retention by at least 10 points.",
+    "Online promotion requires no guardrail breach and directionally consistent acceptance/regeneration effects; exact powered thresholds are set from baseline traffic before launch.",
+    "A roadmap item is deprioritized when two well-controlled replications fail to achieve a 5-point human-preference lift or are Pareto-dominated on quality, latency, and cost."
+  ],
+  "decision_enabled": "Instrumentation audit determines whether any comparison is trustworthy. One-factor tests decide prompt/model tuning. Oracle ladder attributes headroom to inventory, idea, plan, placement, scorer, or validator. Candidate-pool tests decide whether search is useful. Offline-to-online transfer decides product rollout. Negative results explicitly redirect effort rather than trigger more unmeasured tuning.",
+  "oracle_replacement_test": {
+    "inventory_oracle": "Provide the same prompt with current inventory and a controlled expressivity-matched expanded inventory; isolates catalog headroom.",
+    "suggestion_oracle": "Skilled builder selects the best feasible object and feature brief for the exact inventory; isolates idea quality.",
+    "plan_oracle": "Human supplies semantic feature graph, proportions, colors, symmetry, and subassemblies while AI still places bricks; isolates planning.",
+    "placement_oracle": "Deterministic/skilled builder realizes the frozen plan under exact inventory; isolates placement and representation.",
+    "scorer_oracle": "Human chooses the best candidate from a fixed pool; isolates automatic evaluation.",
+    "validator_oracle": "Expert/physical review replaces simplified legality labels on a stratified sample; estimates false acceptance/rejection.",
+    "interaction_oracle": "A skilled editor repairs the AI output under an edit-time budget; estimates recoverable value and edit burden."
+  },
+  "marginal_gain_curve": "For each major lever, plot human preference and mandatory-feature coverage against cost: model scale; candidates N={1,2,4,8}; repair passes={0,1,2}; oracle depth; evaluator views; reference examples; and catalog families. Add end-to-end latency and cost to identify the Pareto frontier. Stop when incremental confidence intervals include zero or the option is dominated.",
+  "validator_soundness_and_completeness": "Quarterly or per-validator-version, sample passes and failures across every error type and inventory slice for expert review; physically build a subset. Estimate type-specific false accept/reject rates and retain adjudication artifacts. Do not allow changes in validator strictness to masquerade as generation-quality changes.",
+  "semantic_validation_required": "After schema and legality, measure whether the suggestion or direct request is recognizable, mandatory features exist in the correct count/location/color, proportions and depth are credible, symmetry intent is met, and repairs retain correct regions. Human preference remains the product anchor; automatic metrics are versioned proxies.",
+  "objective_vector_and_pareto_status": "Keep legality, stability proxy, recognizability, feature coverage, composition, creativity, diversity, inventory efficiency, edit burden, acceptance, latency, and cost unaggregated. Hard legality and privacy are gates. Use Pareto rankings for roadmap comparison; publish any weighted score alongside components and sensitivity to weights.",
+  "representation_efficiency": "Log prompt/output tokens, schema size, bricks per output token, sequence length, invalid-token/parse events, placement survival, retries, and time by piece count. Compare raw coordinate and future feature-graph/constrained representations at matched semantic brief and candidate budget so token savings are not confused with quality.",
+  "physical_and_assembly_implications": "Current telemetry captures simplified validator results, not force stability, prefix validity, or instruction accessibility. Add these as separate future measures and physical-audit outcomes. Never infer real buildability from visual preference or connectedness alone.",
+  "feature_retention_and_edit_locality": "Assign stable feature-anchor IDs from suggestion/plan through every model version and repair. Log feature state, responsible brick IDs, cleanup deletions, repair diffs, protected-region changes, edit count, and first-loss stage. This enables continuity metrics and identifies repairs that improve one issue by rebuilding correct regions.",
+  "failure_onset_and_propagation": "Record first failure at suggestion, feasibility, structure, placement token/brick, parse, shape validation, inventory cleanup, buildability repair, visual scoring, or user edit. Link downstream errors and affected features, rollback depth, retry count, and final recovery. Aggregate transition matrices reveal which early failures create expensive downstream repair.",
+  "real_world_build_validation": "[uncertain] No current physical-build telemetry exists. Add a small recurring audit where users or researchers build stratified final models and log completion, time, substitutions, collapse, inaccessible steps, instruction errors, and post-build preference. Use observed rates to size later studies; do not prescribe an online-scale sample before baseline evidence.",
+  "uncertain": [
+    "capability_snapshot",
+    "sample_size_or_confidence_method",
+    "real_world_build_validation"
+  ]
+}

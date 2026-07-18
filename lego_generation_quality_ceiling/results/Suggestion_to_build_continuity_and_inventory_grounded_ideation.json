@@ -1,0 +1,307 @@
+{
+  "item_name": "Suggestion to build continuity and inventory grounded ideation",
+  "category": "Problem A and shared pipeline diagnosis",
+  "scope": "Investigates inventory-conditioned idea generation, feasibility screening, diversity, ranking, intent persistence, and accountable handoff into planning and placement. It covers the current suggestion-selected flow and its shared downstream failure modes with direct requests. It does not claim that a particular new builder, learned ranker, or expanded part catalog is already proven for HackThe6ix; those require the controlled experiments below.",
+  "relevance_to_current_system": "In src/generation/generationPrompts.js, BUILD_SUGGESTIONS_SCHEMA contains only label, prompt_metadata, and inventory_reasoning. The suggestion prompt asks for inventory reasoning but forbids part IDs, dimensions, counts, and construction instructions in prompt_metadata. In src/preview/main.js lines 189-200, clicking a suggestion copies only suggestion.prompt_metadata into the prompt input. In src/generation/service.js, that text then enters the ordinary structure-plan and exact-placement flow; the selected suggestion ID, inventory reasoning, candidate geometry, and feasibility evidence are not inputs. The current structure plan adds feature and part-use prose but no occupancy, anchor coordinates, or trace links to the selected suggestion. This is a verified information discontinuity, not merely a prompt-style concern.",
+  "bottleneck_layer": "Multiple layers: inventory, intent, representation, planning, search, verification, and evaluation.",
+  "ceiling_hypothesis": "If the system generates and ranks ideas only as prose, discards the inventory rationale at selection, and never scores a provisional build, then suggestions with high linguistic appeal but low geometric feasibility will be selected and defining features will be lost before placement. A falsifying result would be that a persistent, feasibility-checked canonical brief produces no material improvement in suggestion-to-build feature retention or user preference under fixed models and inventories.",
+  "observed_project_evidence": [
+    {
+      "type": "direct observation",
+      "evidence": "The prompt explicitly prefers recurring examples such as Mailbox, Coffee Mug, Fire Hydrant, or Snack Cart, while runtime examples repeatedly include fire hydrants, benches, mugs, mailboxes, crates, and signs. There is no history or diversity state across refreshes."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "Suggestions are produced in one call, at most five, with no best-of-N geometry, feasibility score, diversity penalty, novelty archive, render, or validator-informed ranking."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "prompt_metadata is prohibited from naming parts, dimensions, piece counts, or construction instructions, so the only field that survives selection is deliberately stripped of the facts needed to hold construction accountable."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "inventory_reasoning is generated and validated as a non-empty string, but the preview click handler never copies or stores it."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The downstream exact-placement stage emits one complete model candidate. Deterministic validation checks legality and connectivity, not whether the selected suggestion's silhouette, colors, or defining features survived."
+    },
+    {
+      "type": "diagnostic observation from project snapshot",
+      "evidence": "Most recent parseable placements were legal (6 of 7) while users remained dissatisfied; benches used 10-15 pieces and hydrants 22-28 pieces. This separates legality from semantic and design quality."
+    }
+  ],
+  "mechanisms": [
+    "Prior-dominated ideation: without a novelty archive or geometry-backed score, a language model returns common, easy-to-name object categories favored by its training priors and even by examples in the prompt.",
+    "False affordance reasoning: prose can claim rounded tops, handles, wheels, hinges, or cylinders without paying the geometric cost of realizing them from 17 axis-aligned rectangular shapes.",
+    "Objective mismatch: idea ranking implicitly rewards plausibility and wording, while product success requires expected best-build quality under exact inventory and a 100-piece cap.",
+    "Information bottleneck: the only surviving artifact is a short prompt; inventory allocation, approximation policy, feature priorities, and feasibility evidence are discarded and downstream stages must reconstruct them stochastically.",
+    "No accountability graph: final bricks have free-text feature labels, but there is no stable feature ID linking suggestion, brief, plan, provisional sketch, placement, critique, repair, and final model.",
+    "Single-candidate search: a concept that admits one poor placement is treated as if the concept itself were proven feasible; there is no comparison against alternative concepts or alternative sketches of the same concept.",
+    "Validator blind spot: a connected stack can pass while failing the selected object's defining visual contract, so repair pressure is directed toward legality rather than feature recovery.",
+    "Refresh amnesia: isolated calls and no cross-refresh archive mean repeated ideas incur no penalty and recent failed concepts provide no negative feedback."
+  ],
+  "problem_a_impact": "Problem A loses its theoretical advantage. Letting the system choose the object helps only if it searches the inventory-conditioned design space and estimates downstream build quality. The current system instead searches a small prose space, so it can choose an object whose name and color story fit the inventory while its geometry does not. Selection then deletes the very inventory reasoning that made the idea appear grounded. The easier case therefore collapses into the same underconstrained build problem as a direct request, plus an additional suggestion-to-build drift failure.",
+  "problem_b_impact": "Direct requests do not have the discarded suggestion rationale, but they share the weak prose-to-prose-to-coordinates representation and the absence of semantic scoring. A canonical brief with required feature anchors, allowed approximations, budgets, and trace IDs would also make direct requests more testable and repairs more local.",
+  "confirmed_facts": [
+    "Only prompt_metadata is copied when a suggestion is clicked; inventory_reasoning is not handed forward.",
+    "The suggestion schema has no canonical brief, part/color budget, dimensions, feature IDs, provisional geometry, feasibility result, or score.",
+    "The current suggestion call has no explicit diversity or best-of-N mechanism and no persistent history across refreshes.",
+    "The deterministic validator cannot establish resemblance, feature fidelity, visual appeal, novelty, proportion, color composition, or suggestion match.",
+    "BrickGPT uses next-brick autoregressive generation with validity checks and physics-aware rollback; BrickNet uses a graph-backed representation of part connectivity. These are direct brick-generation examples of grounding generation in construction state.",
+    "Quality-diversity research explicitly separates behavioral diversity from quality and maintains an archive of elites rather than returning near-duplicate high-probability samples."
+  ],
+  "plausible_inferences": [
+    "Inference: repeated object categories are partly prompt-induced because several recurring categories are named as preferred examples; this should be tested by removing examples while retaining the rubric.",
+    "Inference: the greatest near-term Problem A gain will come from carrying a scored canonical brief and provisional sketch into planning, not from longer inventory_reasoning prose.",
+    "Inference: suggestions describing specialty-shape affordances indicate that inventory retrieval alone is insufficient; feasibility must be evaluated against realizable rectangular-brick approximations.",
+    "Inference: feature loss probably occurs at both the selection boundary and raw placement, because the structure plan can restate features but cannot bind them to regions or verify their realization.",
+    "Inference: diversity-aware search will improve the menu only if feasibility and quality are co-scored; diversity alone could produce five different but equally unbuildable ideas."
+  ],
+  "unresolved_questions": [
+    "How often is inventory_reasoning factually correct at the part/color/count level before it is discarded?",
+    "Which concepts are repeatedly suggested for identical versus materially different inventories?",
+    "What fraction of required features in prompt_metadata appear in the structure plan, first placement, post-repair placement, and human-perceived final model?",
+    "Can a cheap symbolic or layered sketch predict final human preference well enough to rank ideas before expensive exact placement?",
+    "What object families are genuinely buildable and attractive with the 85-piece inventory under skilled-human reference construction?",
+    "How much diversity is desirable before novelty starts displacing expected build quality?"
+  ],
+  "confidence": "High confidence in the diagnosed continuity and evaluator gaps because they are directly visible in live code. High confidence that one-pass prose ranking cannot certify geometric feasibility. Moderate confidence in the size of the expected quality gain from a canonical brief and provisional sketches because direct brick research supports construction-grounded representations, but no cited system uses this exact 17-shape, fixed-inventory, under-100-piece product setting.",
+  "expected_impact": "High expected impact on Problem A: fewer infeasible or repetitive suggestions, higher weighted feature retention, and stronger agreement between the clicked label and final model. Moderate-to-high impact on Problem B from the same intent artifact. The improvement should be most visible in objects whose identity depends on two to four spatially distinct features, such as a mug handle, hydrant side nozzles, or bench backrest and legs.",
+  "key_external_findings": [
+    {
+      "finding": "BrickGPT generates brick sequences rather than unconstrained prose and uses validity checks plus rollback during inference.",
+      "application": "A HackThe6ix suggestion should not be called feasible until at least a provisional construction state survives inventory and geometry checks. The transfer is direct at the brick-assembly level, though BrickGPT's learned data and physics model differ from this catalog."
+    },
+    {
+      "finding": "BrickNet argues that spatial relationships are defined by part connectivity and represents assemblies as connected graphs with relative transformations.",
+      "application": "Feature anchors and subassemblies can be linked through stable IDs and relations before absolute coordinates. This supports a persistent brief-to-plan-to-placement contract."
+    },
+    {
+      "finding": "Diverse Beam Search shows that ordinary high-probability sequence search tends to return minimally different candidates, while a diversity-augmented objective can improve the top selected result.",
+      "application": "Generate a larger idea pool and penalize semantic and silhouette near-duplicates before showing five suggestions. Transfer is algorithmic; prose diversity does not itself guarantee build diversity."
+    },
+    {
+      "finding": "Quality-diversity methods maintain the best candidate in behavior-defined cells, explicitly balancing exploration and quality.",
+      "application": "Archive suggestion candidates by descriptors such as footprint class, height class, symmetry, dominant color, object family, and required negative space, then retain the best feasible candidate in each cell. Transfer is from evolutionary design and must be adapted to expensive LLM/placement evaluation."
+    },
+    {
+      "finding": "Grounded planning research finds that language-only plans can be non-executable, while formalization followed by deterministic planning is a credible alternative; performance falls as descriptions become more natural.",
+      "application": "Convert natural-language intent into an explicit, checkable design brief and sketch contract before coordinate generation. LEGO feasibility is not equivalent to PDDL solvability, so only the representation-and-verification lesson transfers."
+    },
+    {
+      "finding": "Engineering traceability work links requirements to downstream artifacts for validation and change-impact analysis.",
+      "application": "Assign stable feature IDs and record which plan regions and bricks implement each requirement; this enables feature-retention scores and local repair. Transfer is structural rather than evidence of a particular LEGO quality gain."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/papers/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.pdf",
+      "source_type": "Peer-reviewed ICCV 2025 paper and official open-access proceedings",
+      "publication_or_update_date": "2025",
+      "supported_claim": "BrickGPT uses autoregressive next-brick generation, validity checks, physics-aware rollback, a 47,000-structure dataset, and physical assembly evaluation.",
+      "relevance": "Direct evidence that brick generation benefits from construction-state representation and verifier-guided rollback."
+    },
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/papers/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.pdf",
+      "source_type": "Peer-reviewed CVPR 2026 paper",
+      "publication_or_update_date": "2026",
+      "supported_claim": "A graph-backed program encodes connectivity and relative transformations for brick build sequences.",
+      "relevance": "Direct support for explicit connectivity and relational intermediate representations instead of disposable prose."
+    },
+    {
+      "title": "Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models",
+      "url": "https://arxiv.org/abs/1610.02424",
+      "source_type": "Research paper; AAAI 2018 version available",
+      "publication_or_update_date": "2016/2018",
+      "supported_claim": "Diversity-augmented decoding can avoid near-duplicate beams and improve top-1 selection in grounded generation tasks.",
+      "relevance": "Adjacent evidence for producing a diverse candidate set before reranking."
+    },
+    {
+      "title": "Quality Diversity: A New Frontier for Evolutionary Computation",
+      "url": "https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2016.00040/full",
+      "source_type": "Peer-reviewed survey",
+      "publication_or_update_date": "2016",
+      "supported_claim": "Quality-diversity algorithms aim to find high-performing examples across distinct behavioral niches and maintain an archive.",
+      "relevance": "Adjacent design-search basis for balancing novelty and expected build quality."
+    },
+    {
+      "title": "On the Limit of Language Models as Planning Formalizers",
+      "url": "https://arxiv.org/abs/2412.09879",
+      "source_type": "Research preprint",
+      "publication_or_update_date": "2024",
+      "supported_claim": "Large models can be more effective at formalizing planning problems for deterministic solvers than directly generating plans, but natural descriptions reduce reliability.",
+      "relevance": "Adjacent evidence for an explicit intermediate contract and deterministic feasibility check."
+    },
+    {
+      "title": "Traceability in Systems Engineering: An Avionics Case Study",
+      "url": "https://doi.org/10.1109/COMPSAC.2018.10345",
+      "source_type": "Peer-reviewed IEEE case study",
+      "publication_or_update_date": "2018",
+      "supported_claim": "Trace links among heterogeneous artifacts support requirements tracking, verification, and change impact analysis.",
+      "relevance": "Adjacent evidence for stable feature IDs linking suggestion intent to plan, placement, and validation."
+    }
+  ],
+  "contradicting_evidence": [
+    "The current model often emits deterministically legal coordinates, so raw placement and prose plans are not incapable of producing any build. The claim is a quality and accountability ceiling, not universal failure.",
+    "BrickGPT demonstrates end-to-end text-to-brick generation with a relatively small fine-tuned language model, showing that a canonical brief is not the only viable architecture. Its success also depends on domain data, sequential representation, and rollback, which the current general model lacks.",
+    "Diverse decoding can improve top-1 outputs in language and vision-language tasks, but may not help if all candidates share the same geometric blind spot or if the ranker cannot identify feasible construction.",
+    "Some iconic features can be strongly conveyed by color and silhouette alone; a detailed brief could overconstrain very small builds and reduce creativity. The schema should distinguish required anchors from optional expression."
+  ],
+  "transfer_limits": "BrickGPT uses a voxelized 20x20x20 domain, trained brick sequences, a much larger dataset, and physics checks; it is not conditioned on the exact HackThe6ix 85-piece inventory or 17-shape catalog. BrickNet spans thousands of part types and connection semantics, so its graph benefits may be larger than in an axis-aligned rectangular catalog. Quality-diversity and diverse decoding optimize abstract candidate spaces and do not supply a LEGO feasibility oracle. Planning-formalization and requirements-traceability results justify explicit contracts and trace links, but PDDL executability and avionics requirement satisfaction are not visual craftsmanship. All transfers therefore motivate experiments, not assumed gains.",
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "current_system": "Suggestion and structure planning use gemini-3.1-flash-lite; placement and repair use gemini-3.5-flash through Backboard according to the verified project snapshot.",
+    "relevant_current_capabilities": "Google documents both model IDs as supporting structured outputs, function calling, multimodal input, and thinking. Gemini 3.1 Flash-Lite is positioned for low-cost, high-volume extraction and lightweight processing; Gemini 3.5 Flash is positioned for stronger agentic, coding, and long-horizon reasoning.",
+    "implication": "Suggestion feasibility may benefit from escalating only the feasibility/ranking pass rather than paying for a stronger model on every raw idea. This must be measured on exact-inventory tasks."
+  },
+  "data_target_match": "Direct brick papers match the discrete interlocking assembly modality and text conditioning, but mismatch the supported part set, inventory conditioning, piece cap, coordinate convention, color inventory, and product quality rubric. Adjacent diversity and planning evidence has no direct part-set overlap. The best target-matched data is therefore a new internal benchmark containing exact inventories, candidate briefs, skilled-human or deterministic reference sketches, final models, and pairwise preferences.",
+  "source_quality_notes": "The ICCV and CVPR papers are peer-reviewed and have official project/code pages, but their authors evaluate their own systems and use learned datasets that do not match this product. The diversity and traceability sources are established peer-reviewed work but are transfer evidence. The PDDL paper is a preprint. Current-system claims come from live repository code and the supplied runtime snapshot. No source directly quantifies canonical-brief gains for fixed-inventory LEGO ideation.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Replace each disposable suggestion with a canonical DesignBrief that persists unchanged by ID: object label, required feature IDs, feature visual tests, silhouette and proportion bands, dominant/accent color budgets, part-category budgets, allowed rectangular approximations, forbidden claims, target piece range, fallback priorities, and provenance from inventory facts."
+    },
+    {
+      "priority": 2,
+      "change": "Generate 12-20 raw ideas cheaply, deduplicate by object family and silhouette descriptors, then feasibility-check 6-8 using a stronger model or deterministic heuristics before showing five. Do not expose a candidate with a required feature that has no plausible rectangular-brick realization."
+    },
+    {
+      "priority": 3,
+      "change": "Require a provisional layer sketch or feature-anchor graph for the top candidates. It may be coarse, but must allocate inventory and pass count, support, footprint, and negative-space checks before ranking."
+    },
+    {
+      "priority": 4,
+      "change": "Rank with an unaggregated objective vector: feasibility, expected semantic fidelity, predicted visual quality, inventory fit, diversity/novelty, and cost. Apply hard gates for inventory and required-feature feasibility before soft ranking."
+    },
+    {
+      "priority": 5,
+      "change": "Pass the selected DesignBrief, not only prompt_metadata, into structure, placement, validation, repair, logs, export metadata, and editor telemetry. Every downstream feature label must reference a stable feature_id."
+    },
+    {
+      "priority": 6,
+      "change": "Add a session-level suggestion archive containing normalized object family, descriptor vector, feasibility result, and shown/clicked/rejected status. Penalize near-duplicates across refreshes while allowing repetition when the inventory materially changes."
+    },
+    {
+      "priority": 7,
+      "change": "For the first experiment, keep the existing models and placement representation. This isolates continuity and search gains before a larger builder rewrite."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "Feasibility-gated all-LLM pipeline",
+      "strengths": "Lowest rewrite cost; adds persistent briefs, multiple sketches, and reranking around existing stages.",
+      "weaknesses": "Still relies on models to maintain discrete state and may produce semantically convincing but geometrically weak sketches.",
+      "dataset_needs": "Internal paired preference data and feature-retention labels.",
+      "failure_modes": "Correlated candidates, evaluator bias, expensive best-of-N."
+    },
+    {
+      "option": "Semantic brief plus deterministic/search-based sketch builder",
+      "strengths": "Turns feature anchors, budgets, symmetry, and layers into explicit constraints; rejects infeasible ideas before display; high debuggability.",
+      "weaknesses": "Requires a solver/object grammar library and may constrain novelty to encoded construction patterns.",
+      "dataset_needs": "Reference sketches, object-family grammars, and human-authored approximation policies.",
+      "failure_modes": "Brittle grammars, combinatorial search, visually dull feasible solutions."
+    },
+    {
+      "option": "Quality-diversity archive with render-critique-refine",
+      "strengths": "Searches multiple object and geometry niches; can optimize visual outcomes and preserve several Pareto alternatives.",
+      "weaknesses": "Highest inference and evaluator cost; critic reliability becomes the bottleneck.",
+      "dataset_needs": "Multi-view renders, pairwise human preferences, feature annotations, edit traces.",
+      "failure_modes": "Reward hacking, homogeneous archive descriptors, latency unsuitable for interactive refresh."
+    }
+  ],
+  "expected_signal": "After continuity is added, weighted required-feature recall should increase at every stage boundary; the selected suggestion should win more often in blind label-to-render matching; hallucinated affordance rate should fall; duplicate-family rate across refreshes should fall without reducing feasibility; and clicked-suggestion final models should receive higher pairwise human preference than prompt_metadata-only controls.",
+  "likely_ceiling": "A canonical brief and diversified idea search will saturate when exact placement still cannot realize the brief, when the rectangular catalog cannot express the anchor, or when the semantic/visual ranker is noisy. These changes do not by themselves solve raw coordinate state tracking, stability beyond the current validator, visual refinement, or lack of training examples.",
+  "implementation_effort": "Moderate for the near-term experiment: define the brief schema, persist it through API/UI/service, add feasibility heuristics and logging, and implement N-candidate deduplication/ranking. Moderate-to-high for provisional layer sketches. High for a deterministic builder or quality-diversity render loop.",
+  "latency_token_cost": "Raw idea expansion is cheap on Flash-Lite, but feasibility-checking 6-8 candidates and sketching 2-3 candidates adds roughly linear calls/tokens. Control cost with a funnel: 16 prose ideas -> 8 heuristic survivors -> 3 provisional sketches -> 1-5 displayed candidates. Cache inventory summaries and run offline evaluations through Batch API where available. Interactive production should cap expensive placement previews to the top 1-2 candidates until lift is demonstrated.",
+  "risks": [
+    "Overconstraining briefs may make all outputs formulaic or block creative rectangular approximations.",
+    "A model-authored feasibility score may merely repeat its own hallucination unless grounded by a sketch and deterministic checks.",
+    "Diversity pressure can select novelty at the expense of recognizability or expected build quality.",
+    "Persistent feature IDs can become cosmetic if validators never inspect the referenced geometry.",
+    "More candidate calls increase latency, cost, and exposure to provider nondeterminism.",
+    "A learned or VLM ranker may reward superficial color cues or canonical views rather than robust 3D resemblance."
+  ],
+  "dependencies": "A versioned DesignBrief schema; stable inventory digest; feature IDs; provisional sketch representation; deterministic inventory/support/overlap checks for sketches; render capture from fixed cameras; stage-linked telemetry; a small human-rated benchmark; and an archive/deduplication embedding or taxonomy.",
+  "sequencing": [
+    "Within 48 hours: log selected suggestion ID and all three existing fields; pass inventory_reasoning into structure and placement; remove named object examples from one A/B prompt arm; add a simple duplicate-family counter and feature-retention audit.",
+    "Within 1-2 weeks: introduce DesignBrief v1, stable feature IDs, deterministic affordance heuristics, 12-to-5 candidate funnel, and a coarse layer/anchor sketch for the top three ideas; run the paired benchmark before product rollout.",
+    "Then: add render-based pairwise ranking and localized feature repair only after human agreement and evaluator soundness are measured.",
+    "Longer term: choose between a deterministic/search builder and graph-backed generative builder based on oracle and marginal-gain experiments."
+  ],
+  "rollback_criteria": "Revert or simplify a new brief/search stage if, on at least 60 paired suggestion cases, it fails to improve weighted feature recall by 10 percentage points or blind human preference by 15 percentage points, while increasing median end-to-end suggestion latency by more than 2x or cost by more than 3x. Disable any diversity penalty that lowers hard feasibility pass rate by more than 5 percentage points.",
+  "anti_recommendations": [
+    "Do not lengthen inventory_reasoning while continuing to discard it; first persist a structured artifact and measure retention.",
+    "Do not rely on temperature increases as the diversity solution; measure semantic and geometric novelty and rerank feasibility.",
+    "Do not declare an idea feasible because its colors fit the inventory or because the model says it is feasible; require provisional allocation and geometry checks.",
+    "Do not generate five full expensive placements before proving that a cheap sketch or heuristic predicts final quality.",
+    "Do not add memory solely to reduce repetition before defining what counts as a duplicate and when inventory changes should reset the archive.",
+    "Do not expand the catalog as the first response to a hallucinated handle or dome; compare skilled-human references with the same 17 shapes first."
+  ],
+  "selective_generation_policy": "Hard-reject ideas with unavailable colors/parts, required moving or curved affordances lacking an approved rectangular approximation, or no supportable provisional sketch. If fewer than three ideas survive, show fewer with a transparent 'best fits this inventory' label. Fall back to simpler object families with strong silhouette cues. Escalate only the top ambiguous candidate to stronger feasibility reasoning. Abstain from promising a defining feature when the feature anchor cannot be allocated.",
+  "smallest_discriminating_experiments": [
+    {
+      "hypothesis": "Continuity loss is material.",
+      "experiment": "For the same selected suggestion and inventory, run placement with (A) current prompt_metadata only, (B) prompt_metadata plus inventory_reasoning, and (C) a canonical brief with feature IDs and budgets. Keep model, seed, target count, and validator fixed."
+    },
+    {
+      "hypothesis": "Ideas are linguistically feasible but geometrically infeasible.",
+      "experiment": "Have a skilled builder blind-rate 100 raw suggestions for realizability, then require a coarse layer sketch and deterministic inventory/support check. Compare model prose feasibility score against sketch pass and human feasibility."
+    },
+    {
+      "hypothesis": "Prompt examples drive repetition.",
+      "experiment": "A/B the current named examples against a rubric-only prompt over identical inventories and fixed seeds; measure duplicate object-family and descriptor rates."
+    },
+    {
+      "hypothesis": "Best-of-N plus diversity and feasibility improves the displayed menu.",
+      "experiment": "Compare current top-five from one call to 16 raw candidates deduplicated and feasibility-ranked, without changing downstream generation. Human judges select the better menu and estimate best-build opportunity."
+    },
+    {
+      "hypothesis": "A provisional sketch predicts final quality.",
+      "experiment": "For 50 concepts, correlate sketch feasibility/feature coverage with final human preference and feature recall; compare against prose inventory_reasoning alone."
+    }
+  ],
+  "variables_and_controls": "Changed variables are surviving artifact (prompt only vs rationale vs DesignBrief), raw candidate count, diversity penalty, feasibility gate, and sketch presence. Fix exact inventory JSON and digest, prompt rubric, target piece cap, downstream structure/placement/repair models, provider path, thinking level, tool results, validator version, render cameras, and seed. Randomize arm order and blind raters to treatment. Use the same concept across continuity arms and the same inventory across ideation arms. Record all provider/model versions because stable aliases can still be operationally updated.",
+  "dataset_and_slices": "Use at least 10 inventories: the current 85-piece inventory; brick-heavy, plate-heavy, sparse-color, monochrome, handle-hostile, tall-narrow, flat-wide, abundant 1x parts, abundant 2x/4x plates, and adversarial inventories missing colors implied by common objects. Include recurring objects (hydrant, bench, mug, mailbox, sign, crate), unseen everyday objects, simple animals/vehicles, and negative-space-dependent forms. Build a 60-case continuity set and a 100-inventory-refresh suggestion set. Exclude specialty pieces outside the supported catalog.",
+  "metrics_and_scoring": [
+    "Weighted feature retention at each boundary: sum of retained required-feature weights divided by total required weights, measured suggestion->brief->plan->first placement->post-repair->human-perceived final.",
+    "Anchor realization: required feature has assigned region, legal bricks, correct relative position, and passes a human/VLM visibility rubric from at least two fixed views.",
+    "Blind suggestion identification: given five labels and one render, percent of raters selecting the intended suggestion; compare to direct prompt alignment.",
+    "Inventory grounding precision: factual part/color/count claims divided by all inventory claims; and budget error by part/color.",
+    "Feasibility precision/recall: model/sketch gate versus skilled-human feasible reference; report false accepts and false rejects.",
+    "Diversity: unique normalized object families, pairwise semantic distance, silhouette-descriptor coverage, and duplicate rate within/across refreshes.",
+    "Quality vector: legality, semantic fidelity, visual appeal, creativity, proportions, color composition, inventory expressiveness, edit burden, latency, and cost reported separately.",
+    "Evaluator-gaming control: hide labels from visual-quality judges, rotate views, include color-swapped and feature-ablated decoys, and audit disagreement with skilled humans."
+  ],
+  "sample_size_or_confidence_method": "Use paired designs because each inventory/concept can run in every arm. Begin with 60 paired builds and 100 suggestion menus, report paired bootstrap 95% confidence intervals over cases and exact binomial intervals for pass/identification rates. For human comparisons, use at least three independent raters per case and report majority preference plus inter-rater agreement. Continue sequentially only with a predeclared rule until the interval excludes both no effect and the minimum useful lift; do not stop on a favorable point estimate.",
+  "success_thresholds": [
+    "At least +10 percentage points in weighted required-feature retention from selected suggestion to final model.",
+    "At least +15 percentage points in blind human pairwise preference for clicked-suggestion builds.",
+    "At least 80% precision for the feasibility gate and no more than 15% false rejection of skilled-human-feasible concepts.",
+    "At least 40% reduction in duplicate normalized object families across three refreshes, with deterministic feasibility pass rate no worse than control by more than 5 points.",
+    "At least 90% of final required-feature bricks retain valid feature IDs and trace links after repair.",
+    "Median suggestion-menu latency under the product budget and no more than 3x current suggestion-stage cost for the full funnel."
+  ],
+  "decision_enabled": "The continuity A/B decides whether to prioritize a persistent brief before replacing placement. The sketch-prediction experiment decides whether cheap pre-build feasibility is sufficient or full candidate placement is needed. The prompt-example A/B decides whether recurrence is prompt-induced. The diversity funnel experiment decides whether best-of-N is worth product latency. Opposing results would shift priority toward the placement representation, evaluator, or inventory expressivity rather than ideation continuity.",
+  "oracle_replacement_test": "Give a skilled LEGO designer the exact inventory and ask for five ranked DesignBriefs plus coarse layer/anchor sketches, then feed those artifacts into the unchanged structure and placement stages. In the reciprocal arm, use model suggestions but have the skilled designer produce the final placement. If human briefs substantially improve model builds, ideation/continuity is a large contributor. If human placement rescues weak model briefs, placement is dominant. If neither reaches the quality bar, catalog expressivity or the evaluator/renderer assumptions need investigation.",
+  "marginal_gain_curve": "Measure menu and final-build lift at 1, 4, 8, 16, and 32 raw ideas; 0, 1, 3, and 5 provisional sketches; and 1, 2, and 4 full placements. Plot feasibility, feature retention, preference, latency, and dollars against cumulative candidates. Stop increasing a tier when doubling candidates yields less than 2 percentage points preference or feature-retention lift, or when ranker error causes non-monotonic selection.",
+  "validator_soundness_and_completeness": "For suggestion feasibility, sample all accepted ideas plus a stratified set of rejects. Have two skilled builders independently attempt a constrained sketch and adjudicate disagreements. False accepts are ideas passed by the gate that cannot realize all required anchors with the inventory; false rejects are rejected ideas for which a legal recognizable reference is produced. For feature validation, compare automated/VLM anchor scores with blinded human judgments on normal, feature-ablated, color-cue-only, and rotated-view variants.",
+  "semantic_validation_required": "Schema and legality are insufficient. Validate primary object identity, every required feature ID, feature visibility from multiple views, relative anchor placement, silhouette/proportion bands, color-role fulfillment, allowed approximation policy, absence of forbidden specialty affordances, and suggestion-to-final consistency. Validate optional features separately so failure does not mask required-feature success.",
+  "objective_vector_and_pareto_status": "Keep hard feasibility and inventory compliance as gates. Report semantic fidelity, visual appeal, creativity/novelty, diversity contribution, proportions, color composition, inventory expressiveness, stability/buildability, edit burden, latency, and cost as an unaggregated vector. Use Pareto selection when candidates trade novelty against fidelity or part efficiency against detail; apply product stakeholder weights only after presenting the frontier. Never let a high novelty or color score compensate for an infeasible required feature.",
+  "representation_efficiency": "The current surviving suggestion artifact is token-cheap but constraint-poor: it carries no localized part budget or geometry, so downstream branching remains extremely high. DesignBrief v1 should remain compact—roughly one record per feature plus global proportion/color budgets—while a coarse layer/anchor sketch should encode occupancy or subassembly bounds, not every final brick. Measure prompt tokens per required feature, percent of constraints directly checkable, and final coordinate tokens per retained feature rather than tokens alone.",
+  "physical_and_assembly_implications": "A feasible suggestion must allocate ground contact, continuous vertical support, connection paths, negative spaces, and assembly-accessible subassemblies. A coffee mug handle needs an opening and two supported attachment points; a bench back cannot float behind the seat; hydrant side nozzles need legal lateral expression using only axis-aligned studs and supported stacks. Coarse sketches should be prefix-valid where possible and record whether a feature can be assembled without temporarily unsupported pieces. Current validation checks support and connectivity but not tipping stability, clutch legality beyond occupancy, or instruction accessibility.",
+  "feature_retention_and_edit_locality": {
+    "artifact": "A versioned DesignBrief with immutable brief_id and feature_id values, plus trace links from each feature to sketch regions, plan entries, bricks, validator findings, and repairs.",
+    "examples": [
+      "Fire hydrant: retain a red upright body, broad base, stepped cap approximation, two opposing side nozzles, and a darker cap/chain accent if inventory permits; specify side nozzles as required anchors rather than merely mentioning them in prose.",
+      "Park bench: retain a long horizontal seat, visually separate raised backrest, at least two leg/support regions, and brown seat/back color blocking with darker supports; preserve the seat-back gap and horizontal aspect ratio.",
+      "Coffee mug: retain an upright cup body, visible rim/open-top cue, and one side handle with negative space and two attachment anchors; explicitly allow a stepped square-bodied approximation and reject a solid side block labeled 'handle'."
+    ],
+    "locality_metric": "For each repair, count changed bricks outside the failed feature's traced region and report unaffected-region preservation. Prefer patches that improve the failed feature while changing no more than 10% of unrelated bricks unless a global proportion constraint is violated."
+  },
+  "failure_onset_and_propagation": "Earliest failure can occur at idea generation (unrealizable affordance or duplicate prior), ranking (appealing prose beats feasible concept), selection handoff (inventory reasoning deleted), structure planning (feature restated without anchor), placement (anchor omitted or geometrically collapsed), deterministic cleanup (feature bricks pruned), or repair (whole-model rewrite regresses correct regions). Stable feature IDs and stage snapshots reveal the first boundary where weighted retention drops and allow rollback to the last artifact satisfying required anchors.",
+  "real_world_build_validation": "For the top recurring objects, physically assemble at least 10 treatment and 10 control models. Record completion rate, build time, ambiguous or impossible steps, substitutions, temporary unsupported states, collapses/tipping, and whether builders identify the intended object before seeing its label. Photograph the final build from fixed views and compare digital versus physical feature visibility. Use the same inventory pieces where practical rather than unconstrained substitutions.",
+  "uncertain": []
+}

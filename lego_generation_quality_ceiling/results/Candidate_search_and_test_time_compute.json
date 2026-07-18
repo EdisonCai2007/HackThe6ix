@@ -1,0 +1,404 @@
+{
+  "item_name": "Candidate search and test time compute",
+  "category": "Inference search and selection",
+  "scope": "Investigation of best-of-N, diverse sampling, beam and tree search, self-consistency, verifier-guided generation, iterative refinement, local rollback, and rule-based or learned reranking at idea, semantic-plan, geometry, and repair stages. The analysis covers quality, scorer dependence, first-error onset, latency, token cost, adaptive stopping, abstention, and simpler-build fallbacks. It does not assume that more samples improve an open-ended design without a discriminating verifier.",
+  "relevance_to_current_system": {
+    "service": "src/generation/service.js generates one suggestion response, one structure plan, and one exact placement candidate. It may perform one JSON repair and one validation-driven placement repair, but does not preserve an N-best list, compare candidates, or refine semantically valid but weak designs.",
+    "repair_trigger": "AI placement repair is driven by floating, disconnected, no-ground, and overlap errors; a validator-valid but unrecognizable model receives no critique or retry.",
+    "logging": "server/generationRuntimeLogger.js records each AI request/response, stage, model, duration, and token metadata, but not candidate set, scorer components, selected-versus-rejected candidates, full Backboard tool transcript, final render score, human rating, edits, or abandonment.",
+    "provider_path": "server/backboardGenerationClient.js sends one message with tools and up to four tool rounds. It embeds the Gemini response schema as prompt text, does not set json_output, thinking, temperature, top_p, seed, or candidate count, and returns only the completed content."
+  },
+  "bottleneck_layer": "Search, evaluation, placement, repair, interaction, and provider orchestration.",
+  "ceiling_hypothesis": "Adaptive candidate generation will improve product quality only when diversity is introduced before expensive coordinate commitment and candidates are selected by independent legality, semantic-feature, geometric, and human-calibrated design scores. The hypothesis is weakened if oracle reranking cannot select substantially better candidates from N sampled plans or builds, showing that candidate coverage rather than selection is the limiting factor.",
+  "observed_project_evidence": [
+    {
+      "fact": "generateBuildSuggestions accepts one model response containing at most five ideas but performs no cross-response sampling, diversity history, feasibility build, or ranking beyond schema validation.",
+      "source": "src/generation/service.js"
+    },
+    {
+      "fact": "generateModel calls the structure model once and placement model once before deterministic validation.",
+      "source": "src/generation/service.js"
+    },
+    {
+      "fact": "A placement that passes schema and deterministic validation is returned immediately even if its feature fidelity or visual quality is poor.",
+      "source": "src/generation/service.js and src/generation/validator.js"
+    },
+    {
+      "fact": "The only local deterministic search-like behavior is inventory pruning in serialization order; remaining geometric errors can trigger a full-model AI repair prompt.",
+      "source": "src/generation/inventoryCleanup.js and src/generation/service.js"
+    },
+    {
+      "fact": "The runtime logger can support per-call latency and token accounting but cannot currently reconstruct an end-to-end candidate-selection decision.",
+      "source": "server/generationRuntimeLogger.js"
+    },
+    {
+      "fact": "The Backboard request uses tools. Current Backboard documentation says json_output is ignored when custom tools, RAG, or web search are active.",
+      "source": "server/backboardGenerationClient.js and Backboard Send Message documentation, verified 2026-07-17"
+    }
+  ],
+  "mechanisms": [
+    "Coverage: stochastic models may place a strong plan or build in their tail even when the first sample is mediocre; parallel samples increase the chance that at least one usable candidate exists.",
+    "Selection bottleneck: open-ended designs do not have a unique answer, so majority vote and self-consistency can prefer common generic objects rather than the most creative or buildable one.",
+    "Shared-plan correlation: many placements sampled from the same weak semantic plan may differ superficially while repeating the same missing features and proportions.",
+    "Proxy overoptimization: as N grows, selection increasingly finds candidates that exploit scorer blind spots such as labels, favorable camera angles, dense color matches, or generic CLIP cues.",
+    "Cost asymmetry: idea and plan calls are cheaper than long placement calls, so diversity earlier in the pipeline usually yields more semantic options per token.",
+    "Error propagation: an early support/body/anchor error constrains every later brick; full regeneration wastes correct regions while local rollback can preserve them.",
+    "Verifier granularity: final-only scoring identifies a bad model after full cost, whereas prefix legality and feature checkpoints can stop doomed branches early.",
+    "Difficulty heterogeneity: easy prompts need one candidate, moderately difficult prompts benefit from search, and requests outside the catalog or model support should simplify or abstain rather than consume uniform compute."
+  ],
+  "problem_a_impact": "Suggestion search has the largest low-cost opportunity because the system controls the object. Generate diverse idea/design-brief candidates, estimate inventory feasibility and achievable quality with a cheap coarse geometry or solver upper bound, then rank across novelty, feature realizability, color/shape fit, and predicted final quality. Sampling more prose without provisional construction or diversity scoring will likely multiply familiar mailboxes, hydrants, mugs, benches, and crates.",
+  "problem_b_impact": "For direct requests, diversify semantic approximations and feature allocations before exact placement, then generate a small number of geometry candidates for top plans. Use local critique and rollback for the first violated feature/subassembly. If all candidates fail required-feature or feasibility thresholds, offer a simpler approximation or explicit omissions instead of selecting the least-bad legal mass.",
+  "confirmed_facts": [
+    "BrickGPT provides direct spatial-generation evidence: without rejection or rollback it reports 37.2% validity and 12.8% stability; rejection without rollback reaches 100% validity but 24.0% stability; adding physics-informed rollback reaches 100% validity and 98.8% stability on its 250-prompt evaluation.",
+    "BrickGPT permits up to 100 physics-aware rollbacks, reports a median of two rollbacks, and a median full generation time of 40.8 seconds.",
+    "BrickNet found that nucleus sampling roughly doubled mean connectivity-valid actions relative to full-temperature ancestral sampling and suggests inference-time guidance for remaining collision failures.",
+    "BrickNet regenerates unparseable text-conditioned sequences for evaluation, showing that retry policy affects measured coverage even in a specialized model.",
+    "Large Language Monkeys reports repeated-sampling coverage growth over four orders of magnitude and a SWE-bench Lite increase from 15.9% at one sample to 56% at 250 for one model, but majority vote and reward-model selection plateau in domains without automatic verifiers.",
+    "Scaling LLM Test-Time Compute Optimally reports that the effective strategy varies by prompt difficulty and that adaptive compute allocation was more than four times as efficient as a best-of-N baseline on math reasoning.",
+    "S* combines parallel code candidates, sequential execution-feedback debugging, and adaptive distinguishing tests; it improves both coverage and selection across 12 models, but depends on executable semantics unavailable for aesthetic LEGO quality.",
+    "Scaling Laws for Reward Model Overoptimization demonstrates that optimizing imperfect proxy reward through best-of-N can eventually reduce a stronger gold reward."
+  ],
+  "plausible_inferences": [
+    "Inference: the highest quality gain per token will come from diverse idea plus typed-plan candidates, because current suggestion/planning calls are cheaper and semantic errors are more consequential than small coordinate variations.",
+    "Inference: exact placement best-of-N should be limited to the top one or two semantically distinct plans until a geometric scorer can reliably distinguish builds.",
+    "Inference: deterministic legality should be a gate, not a ranker, because recent project outputs are often legal but unsatisfying.",
+    "Inference: candidate search will multiply mediocrity when all samples share the same underspecified plan or scorer rewards generic compactness.",
+    "Inference: local rollback to the earliest defective feature/subassembly should preserve more correct geometry than full-model repair, especially after inventory cleanup.",
+    "Inference: a cascade with adaptive stopping and a score margin is preferable to fixed N because prompt difficulty and inventory feasibility vary widely."
+  ],
+  "unresolved_questions": [
+    "The oracle pass@N curve for strong human-rated HackThe6ix plans and placements.",
+    "Whether the current provider/model path produces meaningfully diverse outputs when called repeatedly, since sampling controls are not set or logged.",
+    "Which automated scorer best predicts human preference and required-feature fidelity on small rectangular-brick models.",
+    "The correlation between plan score, coarse geometry score, final render score, and user acceptance.",
+    "The first brick or subassembly where semantic failures become irreversible in current outputs.",
+    "The product's acceptable latency and provider-cost budgets for suggestion refresh versus final generation."
+  ],
+  "confidence": "High that candidate coverage can improve and that selection quality is decisive; high that BrickGPT supports verifier-guided rollback for physical constraints; medium that plan-stage diversity is the best product allocation until per-stage cost and oracle pass@N are measured. Transfer from math and code is limited by the absence of exact semantic/aesthetic verifiers.",
+  "expected_impact": "Medium-high near-term impact if a calibrated scorer can expose better plans already in the model distribution; high impact on validity/stability for prefix verification based on direct BrickGPT evidence; uncertain-to-medium impact on visual appeal because no direct best-of-N LEGO preference study exists. Gains will saturate quickly if generator coverage is weak.",
+  "key_external_findings": [
+    {
+      "finding": "Parallel sampling improves candidate coverage, but coverage only becomes product accuracy when a verifier can find the good sample.",
+      "application": "Measure oracle pass@N and selection@N separately; do not claim best-of-N gain from oracle coverage alone."
+    },
+    {
+      "finding": "Direct brick generation benefits strongly from fine-grained validity rejection and rollback to a stable prefix.",
+      "application": "Validate each proposed brick or subassembly, log first failure, and revise locally instead of waiting for final output."
+    },
+    {
+      "finding": "Adaptive compute allocation outperforms uniform best-of-N when task difficulty varies.",
+      "application": "Use one-pass fast paths, score-margin stopping, escalation for ambiguous cases, and abstention for infeasible requests."
+    },
+    {
+      "finding": "Execution-grounded selection can outperform self-critique, but LEGO design has only partial executable checks.",
+      "application": "Combine exact legality/stability checks with independent semantic geometry and human-calibrated visual scores; treat VLM critique as a fallible proxy."
+    },
+    {
+      "finding": "Proxy reward can be overoptimized as N grows.",
+      "application": "Cap N, keep objective components visible, use holdout human audits, score multiple views, and monitor proxy-human divergence."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV 2025 Best Paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "Brick-level rejection and physics-aware rollback provide large, separable validity and stability gains with modest median rollback count.",
+      "relevance": "Strongest direct structured spatial test-time search evidence."
+    },
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/html/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.html",
+      "source_type": "Peer-reviewed CVPR 2026 paper",
+      "publication_or_update_date": "2026-06",
+      "supported_claim": "Sampling policy changes valid-prefix survival; long-sequence collision remains a target for inference-time guidance.",
+      "relevance": "Current direct evidence for sampling and sequence survival."
+    },
+    {
+      "title": "Large Language Monkeys: Scaling Inference Compute with Repeated Sampling",
+      "url": "https://arxiv.org/abs/2407.21787",
+      "source_type": "Primary research preprint with released code",
+      "publication_or_update_date": "2024-12-30 revision",
+      "supported_claim": "Repeated sampling scales oracle coverage, while selection without automatic verification plateaus.",
+      "relevance": "Core evidence separating candidate coverage from selection."
+    },
+    {
+      "title": "Scaling LLM Test-Time Compute Optimally Can be More Effective than Scaling Parameters for Reasoning",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/1b623663fd9b874366f3ce019fdfdd44-Abstract-Conference.html",
+      "source_type": "Peer-reviewed ICLR 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Test-time strategies depend on prompt difficulty; adaptive allocation improves efficiency over fixed best-of-N.",
+      "relevance": "Evidence for adaptive product policy, with domain-transfer caveats."
+    },
+    {
+      "title": "S*: Test Time Scaling for Code Generation",
+      "url": "https://aclanthology.org/2025.findings-emnlp.865/",
+      "source_type": "Peer-reviewed Findings of EMNLP 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Parallel candidate coverage plus sequential execution-feedback refinement and discriminative selection can outperform either alone.",
+      "relevance": "Adjacent structured-generation evidence for hybrid search and scorer dependence."
+    },
+    {
+      "title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+      "url": "https://openreview.net/forum?id=1PL1NIMMrw",
+      "source_type": "Peer-reviewed ICLR 2023 paper",
+      "publication_or_update_date": "2023",
+      "supported_claim": "Sampling diverse reasoning paths and marginalizing answers improves tasks with a convergent correct answer.",
+      "relevance": "Useful boundary case; open-ended design lacks a majority-answer oracle."
+    },
+    {
+      "title": "Self-Refine: Iterative Refinement with Self-Feedback",
+      "url": "https://papers.nips.cc/paper_files/paper/2023/hash/91edff07232fb1b55a505a9e9f6c0ff3-Abstract-Conference.html",
+      "source_type": "Peer-reviewed NeurIPS 2023 paper",
+      "publication_or_update_date": "2023",
+      "supported_claim": "Iterative feedback and revision can improve one-step outputs across several tasks without extra training.",
+      "relevance": "Evidence for refinement, but not a substitute for external spatial verification."
+    },
+    {
+      "title": "Scaling Laws for Reward Model Overoptimization",
+      "url": "https://arxiv.org/abs/2210.10760",
+      "source_type": "Primary OpenAI research preprint",
+      "publication_or_update_date": "2022-10",
+      "supported_claim": "Best-of-N optimization against an imperfect proxy can eventually reduce gold-standard reward.",
+      "relevance": "Key warning for learned aesthetic or VLM rerankers."
+    },
+    {
+      "title": "Backboard API: Send Message",
+      "url": "https://docs.backboard.io/concepts/messages",
+      "source_type": "Official provider documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "The API documents per-message model selection, thinking, tools, and json_output; json_output is ignored when custom tools, RAG, or web search are active.",
+      "relevance": "Current orchestration controls and structured-output limitation."
+    },
+    {
+      "title": "Backboard API: Models",
+      "url": "https://docs.backboard.io/concepts/models",
+      "source_type": "Official provider documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "The Models API exposes tool, thinking, JSON-output, context, output-token, and price capability metadata.",
+      "relevance": "Supports capability-aware routing and cost policy."
+    }
+  ],
+  "contradicting_evidence": [
+    "Self-consistency gains on math and commonsense assume multiple reasoning paths converge on a correct answer; majority voting in suggestion generation can actively reduce novelty by favoring common ideas.",
+    "Large Language Monkeys shows that oracle coverage can scale far beyond what majority vote or reward models can select in non-verifiable domains; more candidates can create unused latent quality.",
+    "BrickGPT's large gains target legality and physical stability, not measured aesthetic quality, color fidelity, exact inventory, or user preference.",
+    "Self-Refine reports broad average improvement, but self-feedback shares the generator's blind spots and may rewrite correct geometry when feedback is not localized.",
+    "Reward-model overoptimization demonstrates that selecting the maximum proxy score from larger N can reduce true quality, so an uncalibrated VLM judge can worsen results.",
+    "A stronger single model or deterministic compiler may be cheaper than many weak placement samples when base-model success probability is near zero."
+  ],
+  "transfer_limits": [
+    "Code and formal proof have executable correctness tests; LEGO semantics and aesthetics are multi-objective and partly subjective.",
+    "Math best-of-N usually seeks one answer; LEGO design should preserve diverse valid Pareto options and cannot use answer agreement as correctness.",
+    "BrickGPT is trained for an eight-part voxel-like domain and checks physical constraints, not exact color inventory or human-designed MOC quality.",
+    "BrickNet's inference results use specialized LEGO pretraining and a broad part vocabulary; Backboard-hosted general models may have different controllability and sampling behavior.",
+    "Provider documentation exposes json_output, but the current product sends custom tools, so that mode is documented as ignored; schema-constrained multi-candidate decoding may require a different endpoint or two-phase call.",
+    "Reported latency and token economics from papers do not include this product's Backboard overhead, render scoring, or interactive user expectations."
+  ],
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "current_models_from_project_snapshot": {
+      "suggestion": "gemini-3.1-flash-lite",
+      "structure": "gemini-3.1-flash-lite",
+      "placement": "gemini-3.5-flash",
+      "repair": "gemini-3.5-flash",
+      "provider_path": "Google-hosted model IDs through Backboard"
+    },
+    "live_client_behavior": "The repository sends tools, model_name, memory off, and stream false; it supports up to four tool rounds but no explicit candidate count, sampling controls, thinking control, or N-best response.",
+    "backboard_documented_controls": "Per-message provider/model selection, tools, thinking, and json_output are documented. json_output is ignored with custom tools, RAG, or web search. The documented Send Message body does not expose temperature, top_p, seed, beam width, or candidate count.",
+    "model_catalog": "Backboard's Models API can filter supports_tools, supports_thinking, and supports_json_output and reports context, max output, and token pricing; live model-specific capability records were not queried because no API credential was used in this research run."
+  },
+  "data_target_match": {
+    "brickgpt": "High on sequential spatial validity and rollback; low on exact inventory/color and design preference.",
+    "bricknet": "High on LEGO sequence survival and decoding; low on specified-part-set conditioning and current provider models.",
+    "code_search": "High on structured artifacts, deterministic feedback, candidate coverage, and local debugging; low on subjective multi-view design selection.",
+    "reasoning_search": "Medium on adaptive compute and verifier search; low on spatial output and multi-objective creativity.",
+    "reward_overoptimization": "High on proxy-selection risk; exact turnover point will differ for LEGO scorers."
+  },
+  "source_quality_notes": "BrickGPT and BrickNet are recent peer-reviewed direct sources with author implementations. ICLR/EMNLP/NeurIPS sources are peer-reviewed but adjacent to LEGO design; Large Language Monkeys and reward-overoptimization evidence is primary with released or first-party code but not a LEGO benchmark. Backboard claims come from current official documentation and live repository inspection. No primary study directly measures best-of-N human preference for exact-inventory LEGO designs, so aesthetic-gain estimates remain inferential.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Build an offline N=4 plan experiment before changing production. Sample semantically diverse typed plans, not four paraphrases, and measure oracle pass@N versus automatic selection@N.",
+      "reason": "Determines whether the generator already contains better plans and whether the scorer can find them."
+    },
+    {
+      "priority": 2,
+      "change": "Create a staged scorecard: hard legality gate; required-feature and anchor score; multi-view silhouette/proportion/color score; structural margin; human-calibrated design preference; diversity and cost penalties.",
+      "reason": "Candidate search is meaningless without independent discriminative selection."
+    },
+    {
+      "priority": 3,
+      "change": "Allocate diversity early: generate 5-8 idea/design briefs for suggestion flow, retain 2-3 non-dominated feasible plans, and generate exact geometry only for the top 1-2 plans. For direct requests, sample 3-4 semantic approximations before placement.",
+      "reason": "Maximizes semantic coverage per token and avoids multiplying long correlated placement outputs."
+    },
+    {
+      "priority": 4,
+      "change": "Add prefix instrumentation and local rollback. Validate every brick/subassembly, record first error type and index, freeze approved features, and regenerate from the earliest affected subassembly boundary.",
+      "reason": "Transfers BrickGPT's strongest direct lesson while improving edit locality."
+    },
+    {
+      "priority": 5,
+      "change": "Use adaptive stopping: stop when one candidate clears all gates and beats the runner-up by a calibrated margin; escalate only ambiguous or difficult cases; cache and parallelize independent plans.",
+      "reason": "Controls interactive latency and cost."
+    },
+    {
+      "priority": 6,
+      "change": "Extend runtime logging with candidate_id, parent_id, stage, sampling settings, full tool events, scorer vector, rejection reason, selected flag, render IDs, final user action, edits, and total end-to-end cost.",
+      "reason": "Makes search gains and failure onset auditable."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "Hierarchical best-of-N cascade",
+      "strengths": "Cheap idea/plan diversity, controlled expensive placement, simple parallelism, and clear product deadlines.",
+      "weaknesses": "Early scorer errors can prune the eventual best geometry.",
+      "dataset_needs": "Plan/final quality pairs, human rankings, and per-stage costs.",
+      "failure_modes": "Correlated samples and proxy-biased pruning."
+    },
+    {
+      "option": "Verifier-guided beam or tree search over legal brick actions",
+      "strengths": "Prefix legality, early termination, local rollback, and anytime incumbents.",
+      "weaknesses": "Large branching factor and weak partial semantic scores.",
+      "dataset_needs": "Legal action traces, first-error labels, and partial-state preference data.",
+      "failure_modes": "Beam collapse and irreversible early body choices."
+    },
+    {
+      "option": "Large-neighborhood semantic repair",
+      "strengths": "Preserves correct features and focuses compute on weak subassemblies.",
+      "weaknesses": "Needs explicit feature locks and locality-aware constraints.",
+      "dataset_needs": "Human edit/repair traces and before-after feature labels.",
+      "failure_modes": "Local optimum or expanding repair that becomes full regeneration."
+    },
+    {
+      "option": "Learned multi-view preference reranker with rule ensemble",
+      "strengths": "Can capture design quality beyond legality and use renders.",
+      "weaknesses": "Expensive data, Goodhart risk, viewpoint bias, and distribution drift.",
+      "dataset_needs": "Blinded human pairwise preferences across diverse prompts/inventories and adversarial negatives.",
+      "failure_modes": "Scorer hacking and homogenized style."
+    }
+  ],
+  "expected_signal": "Oracle pass@N should rise with N before selection@N. A useful scorer narrows that gap, increases required-feature and human preference without reducing legality, and produces a positive score margin correlated with user acceptance. Local rollback should reduce tokens and unrelated brick edits. Adaptive policy should concentrate extra calls on difficult cases while keeping median latency near baseline.",
+  "likely_ceiling": "Search cannot create candidates outside the generator, plan representation, part catalog, or scorer's effective support. With a weak or correlated generator, pass@N saturates quickly. With an imperfect scorer, larger N eventually selects hacks. Search also cannot replace physical calibration, high-quality examples, or a semantic target that explains what should be built.",
+  "implementation_effort": "Offline N-sampling and logging are low-medium effort. A rule-based scorecard and multi-view rendering are medium. Plan-stage production cascade and adaptive stopping are medium-high. Prefix-constrained beam search, learned preference reranking, and local semantic rollback are high effort. Provider-level N-best or sampling control may require orchestration changes because the current endpoint does not document those controls.",
+  "latency_token_cost": "[uncertain] Exact product costs cannot be computed from available logs. Fixed best-of-N multiplies stage tokens and provider cost approximately by N, while parallel calls reduce wall-clock but not compute. A practical initial policy is 4 plan candidates, 2 finalists, and at most 1 local repair per finalist, with early stopping. Avoid N placement calls from one weak plan. Record p50/p95 end-to-end latency and marginal quality per dollar before choosing production limits.",
+  "risks": [
+    "Candidate multiplication without semantic diversity.",
+    "Aesthetics scorer gaming through text labels, camera views, color density, or generic silhouettes.",
+    "Majority voting suppressing novel suggestions.",
+    "Provider nondeterminism and unlogged sampling defaults making experiments irreproducible.",
+    "Latency spikes and rate-limit failures from parallel placement calls.",
+    "Local repairs regressing locked features or consuming inventory needed elsewhere.",
+    "Human ratings drifting by prompt class or evaluator fatigue.",
+    "Offline benchmark overfitting and loss of suggestion diversity in production.",
+    "Score aggregation hiding Pareto tradeoffs and selecting brittle builds."
+  ],
+  "dependencies": [
+    "A linked end-to-end log from suggestion or request through final user outcome.",
+    "A typed design brief with required features, anchors, tolerances, and relaxation priorities.",
+    "A benchmark with human pairwise preferences and reference or oracle builds.",
+    "Multi-view deterministic rendering and rule-based geometry metrics.",
+    "Incremental legality and stability checks with first-error localization.",
+    "Provider capability and pricing snapshots plus explicit sampling/retry metadata."
+  ],
+  "sequencing": [
+    "First add candidate IDs, scorer vectors, tool traces, final outcomes, and current single-sample baseline metrics.",
+    "Run offline oracle pass@N at idea, plan, and placement stages to find where diversity has coverage.",
+    "Calibrate a multi-objective scorer against held-out human preferences and audit disagreement cases.",
+    "Deploy a low-N plan-stage cascade with strict cost/latency caps and shadow evaluation.",
+    "Add prefix validation and local subassembly rollback for placement failures.",
+    "Only after selection is reliable, explore wider beam/tree search or a learned preference model."
+  ],
+  "rollback_criteria": "Disable a candidate expansion if selected quality does not beat single-sample baseline by at least 5 percentage points on required-feature rate or 55% blinded preference, if p95 latency exceeds the product limit, or if cost per accepted quality gain exceeds the agreed budget. Reduce N or retrain the scorer if proxy score rises while held-out human preference falls, or if high-score audit false positives exceed 10%.",
+  "anti_recommendations": [
+    "Do not launch N expensive placements from the same weak plan before measuring plan diversity and oracle coverage.",
+    "Do not use deterministic legality as the selection score; it is a gate and already fails to predict user satisfaction.",
+    "Do not use self-consistency majority vote for creative suggestions without a diversity objective; commonness is not quality.",
+    "Do not let the same model generate, critique, and select without independent rule, render, or human calibration.",
+    "Do not optimize one CLIP/VLM score across large N without multi-view and human holdout audits.",
+    "Do not add unbounded repair loops; use first-error localization, iteration caps, and score-improvement thresholds."
+  ],
+  "selective_generation_policy": "Fast path: one plan and one placement when feasibility confidence is high and all semantic/legality gates pass with margin. Escalation path: sample additional plans, then at most two geometry finalists when scores are ambiguous. Repair path: roll back only the earliest defective subassembly and stop after no meaningful score gain. Fallback: simplify optional features, lower piece count, or choose an inventory-suitable object. Abstain when no candidate meets minimum required-feature, legality, and robustness thresholds.",
+  "smallest_discriminating_experiments": [
+    {
+      "experiment": "Per-stage oracle pass@N",
+      "design": "For 60 paired prompt-inventory cases, sample N in {1,2,4,8} independently at idea, plan, and placement while holding later stages to an oracle or fixed method.",
+      "diagnosis": "Shows which stage contains latent quality and where samples are correlated."
+    },
+    {
+      "experiment": "Selection gap",
+      "design": "Compare automatic winner, generator self-choice, human winner, and oracle top score within the same candidate sets.",
+      "diagnosis": "Separates coverage failure from scorer failure."
+    },
+    {
+      "experiment": "Rollback locality",
+      "design": "Inject or identify the first feature/connection error in 30 models and compare full regeneration, full-model repair, and subassembly rollback.",
+      "diagnosis": "Measures recovery probability, token cost, and feature preservation."
+    },
+    {
+      "experiment": "Adaptive versus fixed compute",
+      "design": "Compare N=1, fixed N=4, and score-margin adaptive N<=4 under equal average cost.",
+      "diagnosis": "Tests whether difficulty-aware allocation improves quality/latency frontier."
+    },
+    {
+      "experiment": "Proxy stress test",
+      "design": "Create candidates with swapped feature labels, favorable single views, excess color match, symmetry without resemblance, and legal generic masses.",
+      "diagnosis": "Measures scorer vulnerability before large-N optimization."
+    }
+  ],
+  "variables_and_controls": "Fix prompts, exact inventories, models, plan schema, target piece counts, max output tokens, render cameras, validator version, and total stage budgets. Log provider defaults and request metadata; use seed when exposed. Randomize candidate order, blind human raters to method and scores, and separate independent samples from sequential revisions. Compare methods under both equal-call and equal-token or dollar budgets.",
+  "dataset_and_slices": "Use 60 core cases, half inventory-driven and half direct requests, plus 20 scorer-adversarial cases. Slice by prompt difficulty, piece budget, symmetry, negative space, thin appendages, color criticality, inventory scarcity, common versus novel object, and currently repetitive suggestion families. Include known weak valid builds and expert-designed references. Exclude impossible specialty mechanisms from ordinary quality averages but retain them for fallback/abstention evaluation.",
+  "metrics_and_scoring": [
+    "Coverage: oracle pass@N for required-feature threshold, human top-quartile quality, legality, and stability.",
+    "Selection: selected@N, regret to human/oracle winner, pairwise accuracy, score margin calibration, and diversity-adjusted quality.",
+    "Semantics/design: feature recall, anchor/proportion error, multi-view silhouette, color zones, symmetry, human recognizability, appeal, craftsmanship, and novelty.",
+    "Search: first-error index, valid-prefix area, rollback depth, recovery probability, candidates explored, duplicate rate, and quality-over-time curve.",
+    "Product: p50/p95 latency, tokens, provider cost, error/rate-limit rate, abstention, user acceptance, manual edits, regeneration, and abandonment.",
+    "Gaming controls: labels hidden from visual scorers, multi-view minimum scores, adversarial negatives, scorer ensembles, and held-out human audits."
+  ],
+  "sample_size_or_confidence_method": "Use paired bootstrap 95% intervals over 60 prompt-inventory units for early N curves and human preference. With N levels tested on the same units, report within-unit marginal gains and saturation. Use at least three blinded ratings per finalist and agreement statistics. Expand to 120 if the 95% interval for a 5-point product effect overlaps zero; use sequential stopping rules fixed before inspection.",
+  "success_thresholds": [
+    "Oracle pass@4 improves at least 15 percentage points over pass@1 at the selected stage.",
+    "Automatic selection captures at least 70% of the oracle/human top-candidate gain at N=4.",
+    "Selected candidates earn at least 60% blinded preference over N=1, excluding ties, with a 95% interval above 50%.",
+    "Required-feature rate improves at least 10 points without lowering legality by more than 2 points.",
+    "Adaptive N matches or exceeds fixed N=4 quality at no more than 75% of its average token cost.",
+    "Local rollback preserves at least 90% of previously passing required features and changes 50% fewer unrelated bricks than full repair."
+  ],
+  "decision_enabled": "If plan pass@N rises most, allocate candidates there; if placement pass@N rises only with fixed strong plans, add a small geometry N. If oracle coverage rises but automatic selection does not, stop scaling N and improve the scorer. If neither rises, improve model, representation, data, or deterministic construction. If local rollback beats regeneration, make feature/subassembly locks mandatory. If adaptive compute matches fixed N at lower cost, deploy it; otherwise retain the single-pass fast path.",
+  "oracle_replacement_test": "For each stage, substitute a skilled-human or ground-truth oracle while sampling the target stage: human ranks idea candidates while later plan/build is oracle; human-authored plan fixes intent while placements are sampled; human/oracle final ranking measures placement coverage. Compare oracle winner quality with automatic winner quality to quantify maximum search gain and scorer regret independently.",
+  "marginal_gain_curve": "Measure N={1,2,4,8} for ideas/plans and N={1,2,4} for expensive placements; measure repair passes {0,1,2,3} and beam width under fixed deadlines. Plot oracle coverage, selected quality, human preference, tokens, latency, and proxy-human divergence. Stop at the earliest N where incremental human gain is below 2 points or confidence-adjusted cost per gain exceeds policy.",
+  "validator_soundness_and_completeness": "Before using validation as a search gate, label generated and mutated candidates with expert physical/legal ground truth. Estimate false accepts and rejects for collision, connection, support, stability, and sequence feasibility. Search can amplify validator blind spots because it systematically seeks high-scoring edge cases, so re-audit error rates at each larger N.",
+  "semantic_validation_required": [
+    "All required features are recognizable and correctly located without reading feature labels.",
+    "The candidate preserves the selected suggestion's design brief, inventory rationale, silhouette, color accents, and declared fallbacks.",
+    "Proportions, symmetry or intentional asymmetry, negative space, and color composition meet prompt-specific tolerances.",
+    "Local refinement does not regress locked or already-passing features.",
+    "A simpler fallback is compared against the nominal object rather than hidden as a success."
+  ],
+  "objective_vector_and_pareto_status": {
+    "objectives": [
+      "legality",
+      "typed connection and stability",
+      "required-feature fidelity",
+      "silhouette and proportion",
+      "color composition",
+      "novelty and cross-refresh diversity",
+      "inventory suitability",
+      "edit locality",
+      "instruction complexity",
+      "latency, tokens, and provider cost"
+    ],
+    "tradeoffs": "More candidates improve coverage but increase selection hacking and cost; novelty can conflict with feasibility; closer silhouette can conflict with stability; detailed models can conflict with latency and instruction simplicity.",
+    "pareto_status": "Gate hard legality and minimum semantics, then retain a small Pareto frontier rather than one maximum score. Use human-calibrated product weights and expose a simpler robust option when it is non-dominated."
+  },
+  "representation_efficiency": "Candidate search should operate on the shortest representation that exposes the relevant decision: idea briefs for object diversity, typed semantic plans for feature/proportion diversity, coarse occupancy for silhouette, and incremental brick actions for local repair. Sampling full verbose brick JSON to explore idea space wastes tokens. Record tokens per distinct plan, per valid final brick, duplicate rate, and valid-prefix survival so added compute is measured as new information rather than raw output count.",
+  "physical_and_assembly_implications": "Use per-action checks for part identity, collision, typed connection, and remaining inventory; periodic checks for center-of-mass/contact margin; finalist checks for force-based stability and build order. Every search node should represent a valid or intentionally staged prefix, and rollback should return to the last stable accessible prefix. Final-state legality does not prove handling robustness, insertion clearance, visibility, or reversibility.",
+  "feature_retention_and_edit_locality": "Assign stable IDs to features and subassemblies, record pass/fail and anchors at each candidate, and freeze approved regions. A repair proposal must declare its edit set and cannot change unrelated bricks without an explicit expanded rollback. Rank repairs by semantic gain minus changed-brick count and reject regressions in locked-feature minimum score.",
+  "failure_onset_and_propagation": "Log first parse, inventory, collision, connection, stability, and semantic-feature failure by stage and brick. Trace dependent later bricks and features to compute rollback depth. Prefer rollback to the earliest causal action, not the final detected symptom; preserve alternative branches before that point. Measure recovery probability versus depth to determine when local refinement should give way to a new plan.",
+  "real_world_build_validation": "Physically build a stratified sample of selected and rejected near-tie candidates. Measure completion, build time, instruction errors, forced disassembly, weak joints, collapse, substitutions, and digital-to-physical differences. This checks whether search is exploiting digital validators and whether the selected candidate is genuinely better than alternatives.",
+  "uncertain": [
+    "latency_token_cost"
+  ]
+}

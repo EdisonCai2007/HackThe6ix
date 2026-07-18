@@ -1,0 +1,257 @@
+{
+  "item_name": "Multi view critique and quality evaluation",
+  "category": "Semantic and aesthetic feedback",
+  "scope": "Evaluation and critique of legal HackThe6ix models from normalized multi-view renders. It covers semantic fidelity, recognizable silhouette, proportion, symmetry, color composition, detail, creativity, diversity, inventory use, edit burden, local repair, evaluator calibration, and human preference. It excludes replacing the deterministic legality validator and does not claim that image metrics establish physical stability.",
+  "relevance_to_current_system": "brickScene.js renders the 17 supported rectangular parts as box bodies with cylindrical studs, fixed material parameters, ten known colors, transparent treatment for color 43, and visual overlays for invalid or selected bricks. cameraFraming.js derives one perspective-camera distance from the largest model dimension, but there is no canonical render suite or saved evaluation image contract. validator.js reports inventory legality, grid and rotation validity, cell overlap, immediate support, connected components, ground contact, and inventory usage; it does not score recognizability or aesthetics. Therefore a model can pass every current hard check while missing the requested object's defining features.",
+  "bottleneck_layer": "evaluation, search, interaction, and repair",
+  "ceiling_hypothesis": "If legal candidates are rendered from canonical views and ranked by a human-calibrated hybrid rubric, then selection and bounded local repair will improve blinded human preference and requested-feature coverage without reducing legality; if preference does not improve, candidate generation or representation rather than missing critique is the dominant ceiling.",
+  "observed_project_evidence": [
+    "Direct observation: createBrickScene maintains brick objects, selection outlines, and invalid overlays but exposes no batch-render or evaluation API.",
+    "Direct observation: cameraFrameForModelSize changes distance, near/far planes, and zoom bounds from maximum dimension; this is useful for normalization but does not fix azimuth, elevation, lighting, background, resolution, or projection across candidates.",
+    "Direct observation: validateModel has no semantic feature coverage, silhouette, proportion, symmetry, color-composition, novelty, diversity, or preference fields.",
+    "Direct observation: generated bricks carry IDs and may carry semantic feature labels, creating a usable bridge from critique regions to local brick edits.",
+    "Interpretation: current repair is triggered by hard validation, so a technically legal but visually poor result has no reason to change."
+  ],
+  "mechanisms": [
+    "A single attractive view can hide a flat profile, rear-side defects, accidental asymmetry, missing depth, or unsupported visual claims.",
+    "Global image-text embeddings compress object, relation, count, and feature errors into one score; they may reward nominal category resemblance while overlooking missing wheels, handles, petals, or proportions.",
+    "An uncalibrated VLM can inherit prompt-language bias, infer absent features from the rubric, prefer verbose explanations, or judge from text rather than pixels.",
+    "A scalar reward exposed to generation invites proxy optimization: oversized iconic colors or front-view facades can raise the score while degrading the actual model.",
+    "Global repair prompts can move or replace correct regions because the critique is not attached to brick IDs, feature anchors, invariants, or an edit budget.",
+    "Without pairwise human anchors, automatic-score changes cannot be interpreted as product-quality changes."
+  ],
+  "problem_a_impact": "Suggestion quality needs two linked evaluations: whether the proposed object is a strong use of the inventory and whether the resulting build realizes the suggestion's promised anchors. A multi-view rubric can measure suggestion-to-build feature retention, but the evaluator must be blind to flattering inventory_reasoning text and inspect only the chosen brief, inventory, model data, and renders.",
+  "problem_b_impact": "For direct requests, feature-question probes and human pairwise ratings can expose nominal category matches that omit explicit attributes. Canonical side, rear, top, and isometric views distinguish a genuinely three-dimensional crafted model from a legal front-facing stack.",
+  "confirmed_facts": [
+    "T3Bench evaluates text-to-3D outputs from multi-view images and separates perceived quality from text alignment; its reported automatic metrics were designed against human judgments.",
+    "TIFA decomposes a prompt into visual questions and reports better human correlation than coarse embedding metrics for fine-grained faithfulness.",
+    "VQAScore was introduced because CLIP-style scores can conflate compositional prompts; it uses a VQA model's probability of a positive answer.",
+    "BrickGPT evaluates validity, physical stability, CLIP text similarity, and DINOv2 image similarity separately rather than treating legality as quality.",
+    "BrickNet 2026 evaluates rendered structures using VQAScore, Perception Encoder, and SigLIP 2, yet still reports invalid-placement rate separately.",
+    "Official Gemini documentation verified 2026-07-17 lists gemini-3.5-flash as a stable GA model accepting image inputs and supporting structured outputs.",
+    "Recent judge studies show that model-human agreement can vary materially and that percent agreement alone can hide score-scale misalignment."
+  ],
+  "plausible_inferences": [
+    "Inference: a fixed eight-view contact sheet should reveal most silhouette and depth failures of the current axis-aligned catalog more reliably than one user-controlled view.",
+    "Inference: feature-specific binary or ordinal probes will be more diagnostic than a single CLIP-like score for small LEGO builds because requested features are discrete and countable.",
+    "Inference: semantic brick labels can support safe repair only after verifying that labels correspond to visible geometry rather than trusting self-reported model metadata.",
+    "Inference: automatic evaluation will be most useful for rejecting clearly poor candidates and prioritizing human review, not for replacing human aesthetic preference."
+  ],
+  "unresolved_questions": [
+    "What human preference agreement is achievable for this product's intentionally blocky aesthetic?",
+    "Which camera elevation best exposes plate-layer detail without hiding the silhouette?",
+    "Does Backboard preserve multi-image ordering and structured evaluator outputs identically to the native Gemini API?",
+    "How often are semantic feature labels accurate enough to seed localization?",
+    "What latency and cost does an eight-view evaluator add through the deployed provider?",
+    "Can a local non-generative vision encoder rank these simple renders as well as a hosted VLM after calibration?"
+  ],
+  "confidence": "High confidence that canonical multi-view evaluation and a human anchor are missing and necessary; moderate confidence that current VLM/VQA metrics will produce a useful ranking after calibration; low confidence in any uncalibrated absolute aesthetic score.",
+  "expected_impact": "High diagnostic impact and moderate-to-high selection impact if the generator already produces diverse candidates. Repair impact is moderate because a critic cannot invent good geometry when all candidates share the same planning error.",
+  "key_external_findings": [
+    "Direct 3D evidence: T3Bench uses multi-view renders and explicitly separates quality from text alignment, supporting separate score dimensions and view-consistency checks.",
+    "Direct brick evidence: BrickNet reports VQAScore, PE, SigLIP 2, and invalid placement as distinct measures; model scale showed diminishing returns, illustrating why evaluator and representation effects must be separated.",
+    "Direct brick evidence: BrickGPT's rejection and physics rollback raised validity and stability dramatically while CLIP/DINO remained separate, demonstrating that physical correctness and semantic appearance are non-substitutable.",
+    "Adjacent visual evidence: TIFA's decomposed questions make missing attributes, counts, colors, and relations interpretable; transfer requires LEGO-specific question templates and multi-view aggregation.",
+    "Judge evidence: model judges require calibration against blinded humans, analysis beyond raw agreement, and adversarial controls for judging without relevant visual evidence."
+  ],
+  "primary_sources": [
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/html/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.html",
+      "source_type": "Peer-reviewed CVPR paper",
+      "publication_or_update_date": "2026-06",
+      "supported_claim": "Brick generation evaluation uses invalid-placement rate plus VQAScore, PE, and SigLIP 2 on renders; connectivity representation and model scale have separable effects.",
+      "relevance": "Closest current direct LEGO generation and evaluation evidence."
+    },
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "Validity, stability, CLIP alignment, and DINO similarity are evaluated separately; multi-view images are used in data creation.",
+      "relevance": "Direct text-to-brick baseline and evidence that legality is not visual quality."
+    },
+    {
+      "title": "T3Bench: Benchmarking Current Progress in Text-to-3D Generation",
+      "url": "https://arxiv.org/abs/2310.02977",
+      "source_type": "Research paper and public benchmark",
+      "publication_or_update_date": "2023-10",
+      "supported_claim": "Multi-view render metrics can separately estimate perceived 3D quality, view consistency, and text alignment with human-correlation studies.",
+      "relevance": "Direct text-to-3D evaluation precedent, though not discrete brick geometry."
+    },
+    {
+      "title": "TIFA: Accurate and Interpretable Text-to-Image Faithfulness Evaluation with Question Answering",
+      "url": "https://openaccess.thecvf.com/content/ICCV2023/html/Hu_TIFA_Accurate_and_Interpretable_Text-to-Image_Faithfulness_Evaluation_with_Question_Answering_ICCV_2023_paper.html",
+      "source_type": "Peer-reviewed ICCV paper",
+      "publication_or_update_date": "2023-10",
+      "supported_claim": "Prompt decomposition into VQA probes gives interpretable feature-level faithfulness signals and improves correlation over coarse metrics.",
+      "relevance": "Useful mechanism for LEGO feature-coverage questions with transfer caveats."
+    },
+    {
+      "title": "Evaluating Text-to-Visual Generation with Image-to-Text Generation",
+      "url": "https://eccv.ecva.net/virtual/2024/poster/2239",
+      "source_type": "Peer-reviewed ECCV paper",
+      "publication_or_update_date": "2024",
+      "supported_claim": "VQAScore improves compositional text-image alignment measurement over CLIPScore across human-rated benchmarks.",
+      "relevance": "Candidate automatic semantic-alignment component, not a complete aesthetic metric."
+    },
+    {
+      "title": "Judging the Judges: Evaluating Alignment and Vulnerabilities in LLMs-as-Judges",
+      "url": "https://aclanthology.org/2025.gem-1.33/",
+      "source_type": "Peer-reviewed ACL workshop paper",
+      "publication_or_update_date": "2025-07",
+      "supported_claim": "Judge alignment varies, large score deviations can coexist with agreement, and calibration needs more than percent agreement.",
+      "relevance": "Supports human calibration and judge-vulnerability audits."
+    },
+    {
+      "title": "Gemini 3.5 Flash model documentation",
+      "url": "https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash",
+      "source_type": "First-party model documentation",
+      "publication_or_update_date": "2026-06-24",
+      "supported_claim": "Stable model ID gemini-3.5-flash accepts image input and supports structured outputs.",
+      "relevance": "Current capability snapshot for a possible evaluator using the project's placement model family."
+    }
+  ],
+  "contradicting_evidence": [
+    "T3Bench reports human correlation for smooth text-to-3D assets, but blocky LEGO recognizability and intentional abstraction may reorder metric performance.",
+    "VQAScore and TIFA improve semantic alignment measurement, but neither measures creativity, construction elegance, or whether a design is satisfying to build.",
+    "BrickNet obtains useful render-based semantic metrics while invalid-placement rate remains substantial, showing that perceptual scores do not enforce legality.",
+    "A critic cannot improve candidate selection if generator outputs lack meaningful diversity; best-of-N may merely select among near-duplicates."
+  ],
+  "transfer_limits": [
+    "Text-to-image benchmarks usually judge one view and do not reason over a shared 3D object; scores must aggregate canonical views and penalize cross-view contradictions.",
+    "Smooth-mesh image-quality metrics may punish visible studs or reward photorealistic lighting unrelated to LEGO design quality.",
+    "Generic VLMs may know prototypical objects but not exact stud geometry, inventory legality, or valid attachment; deterministic model data must remain authoritative.",
+    "BrickNet and BrickGPT use broader or different part sets, sequence formats, and evaluation prompts than the 17-part exact-inventory deployment task.",
+    "Human aesthetic preferences may depend on age, LEGO experience, and whether the goal is play, display, or faithful miniaturization."
+  ],
+  "capability_snapshot": "Verified 2026-07-17 from first-party Google documentation: gemini-3.5-flash is stable GA, accepts text, image, video, audio, and PDF inputs, outputs text, and supports structured outputs and thinking. Google structured-output documentation still requires application-level semantic validation. [uncertain] Backboard-specific support for ordered multi-image payloads, media-resolution controls, response schemas, token accounting, and reproducible seeds was not established from the repository or public evidence and must be probed before architectural commitment.",
+  "data_target_match": "BrickNet and BrickGPT are useful for metric patterns but are not drop-in calibration sets. The deployment calibration set must use the current renderer, 17 shapes, exact inventory limits, 10-100-piece scale, suggestion and direct-request prompts, and deliberately legal-but-poor counterexamples. Include deterministic car and daisy builds, AI outputs, skilled same-inventory references, and controlled mutations such as removing a wheel, flattening depth, swapping colors, breaking symmetry, or bloating a feature.",
+  "source_quality_notes": "BrickNet and BrickGPT are peer-reviewed direct-domain sources with released artifacts. T3Bench, TIFA, and VQAScore are public research benchmarks but transfer from general visual generation. Gemini capability claims come from first-party current documentation. Judge-vulnerability work is peer-reviewed but largely language-domain; its calibration lesson is stronger than any exact numeric transfer.",
+  "near_term_recommendations": [
+    "Add a deterministic render harness producing transparent-background masks plus RGB at fixed resolution from front, rear, left, right, top, and four upper isometric azimuths; normalize camera target, FOV or orthographic scale, background, exposure, light rig, and model centering.",
+    "Define a rubric with independent fields: category recognizability, explicit feature coverage, silhouette, proportions, three-dimensionality, symmetry or justified asymmetry, color blocking, detail economy, creativity, inventory use, and visible defects.",
+    "Compute deterministic measures from model JSON: legality, inventory usage, feature-tag coverage, footprint and axis proportions, color distribution, bilateral occupancy difference, component/support errors, and brick-diff size.",
+    "Use a VLM to answer feature-specific questions from the contact sheet and produce evidence by view; calibrate each rubric dimension against blinded human pairwise ratings before using it for ranking.",
+    "Keep the evaluator prompt and aggregate weights hidden from generation; use paraphrased rubrics, negative-control renders, prompt-blind trials, and human audits of the largest score gains.",
+    "Represent critique as issue objects with feature, affected view, candidate brick IDs or spatial region, severity, confidence, evidence, invariants, allowed edit radius, and maximum changed bricks.",
+    "Accept a repair only if hard validation passes, targeted issue score improves, protected-feature scores do not regress beyond tolerance, and the edit stays within budget; otherwise retain the prior model."
+  ],
+  "longer_term_architecture_options": [
+    "Hybrid evaluator service: deterministic geometry analyzers plus calibrated VQA/VLM probes plus a small learned preference model trained only after enough pairwise LEGO ratings exist.",
+    "Feature-anchor graph: connect requested features to expected regions, proportions, colors, symmetry partners, and responsible brick IDs so critique and repair operate on semantically bounded subassemblies.",
+    "Candidate-search loop: generate diverse semantic plans and placements, reject illegal candidates, rank with the calibrated hybrid evaluator, and perform at most one or two locality-constrained repair passes.",
+    "Active calibration: route evaluator-low-confidence or judge-disagreement cases to humans and periodically refresh the calibration set, keeping a frozen holdout to detect reward overfitting."
+  ],
+  "expected_signal": "Automatic-human rank correlation should rise; human pairwise preference for evaluator-selected candidates should beat random or first-sample selection; explicit feature coverage and three-dimensionality should improve; legality should remain unchanged; repair brick-diff size and protected-feature regressions should fall.",
+  "likely_ceiling": "Evaluation cannot create missing design diversity, repair a fundamentally weak intermediate representation, or exceed the expressivity of the inventory. VLM scores will also saturate because LEGO aesthetics and clever construction are only partly visible in renders.",
+  "implementation_effort": "Near term: medium, requiring a headless deterministic render path, mask extraction, rubric schema, score storage, and a small labeling tool. Calibration: medium, requiring approximately dozens of paired builds and multiple raters. Longer-term preference modeling and feature-anchor repair: high.",
+  "latency_token_cost": "Deterministic geometry metrics are negligible. Rendering nine views is local GPU/CPU work and should be batched. One contact-sheet VLM call per candidate adds image tokens and provider latency; best-of-4 with critique can multiply generation plus evaluation cost several-fold. Cache renders and evaluator responses by model hash, use a cheap first-stage filter, and reserve VLM/human review for finalists.",
+  "risks": [
+    "The generator may overfit to iconic front-view cues or the exact evaluator rubric.",
+    "Lighting, projection, or framing changes may move scores independently of geometry.",
+    "Prompt text can cause the VLM to hallucinate expected features into ambiguous renders.",
+    "An aggregate score can conceal a severe defect in one dimension.",
+    "Local repair can still break connection semantics or visual balance outside the edited region.",
+    "Human raters may disagree systematically by expertise or target use case.",
+    "Raw rendered images and prompts sent to a provider create data-governance considerations."
+  ],
+  "dependencies": [
+    "Stable deterministic render settings and a model-content hash.",
+    "A frozen prompt, inventory, and reference-build calibration suite.",
+    "A human pairwise-rating rubric and rater metadata for experience level.",
+    "Per-brick semantic-feature provenance or a post-hoc region-to-brick mapping.",
+    "End-to-end telemetry linking candidate, render, scores, repairs, and user outcome."
+  ],
+  "sequencing": [
+    "First freeze render settings and create legal-but-semantically-degraded mutations with known expected rubric changes.",
+    "Second collect blinded human pairwise labels and establish inter-rater reliability by dimension.",
+    "Third compare deterministic, embedding, VQA, and VLM scores on the same pairs; select only dimensions with stable human correlation.",
+    "Fourth use the evaluator for offline candidate selection, with weights frozen on a development split and performance reported on a hidden holdout.",
+    "Fifth trial one bounded repair pass with protected-feature regression tests.",
+    "Only then expose evaluator-selected candidates in an online randomized product experiment."
+  ],
+  "rollback_criteria": "Do not ship evaluator-based selection if the 95% bootstrap interval for human preference improvement includes zero, if legality drops by more than 1 percentage point, if protected-feature regression exceeds 5%, if p95 latency exceeds the agreed product budget, or if holdout gains disappear after prompt paraphrase or lighting changes. Disable local repair independently if median changed bricks exceed the edit budget or human preference worsens.",
+  "anti_recommendations": [
+    "Do not use CLIP, SigLIP, or a single VLM score as the product objective without LEGO-specific human calibration.",
+    "Do not show only the best front view to the evaluator.",
+    "Do not feed the evaluator's exact wording or weights into the generator.",
+    "Do not ask a critic to regenerate the whole model for a local missing feature.",
+    "Do not train a reward or preference model before collecting de-duplicated, blinded, same-inventory pairwise labels and holding out object families.",
+    "Do not merge physical legality, semantic fidelity, and aesthetics into one pass/fail number."
+  ],
+  "selective_generation_policy": "If hard validation fails, reject or deterministically clean before visual scoring. If VLM confidence is low, judges disagree, or views disagree, present the highest legal deterministic-score candidate or ask for human choice rather than auto-repair. If all candidates miss a mandatory feature, fall back to a simpler brief explicitly stating the compromise.",
+  "smallest_discriminating_experiments": [
+    {
+      "name": "Metric sanity mutations",
+      "design": "Start from deterministic car and daisy references; create paired legal mutations that remove one requested feature, flatten depth, distort proportions, swap a key color, break symmetry, or add irrelevant bulk. Test whether each metric ranks the reference above the known degradation."
+    },
+    {
+      "name": "View-set ablation",
+      "design": "Compare front-only, four cardinal, and nine-view contact sheets on the same degraded pairs. Measure human-agreement gain and cost."
+    },
+    {
+      "name": "Calibrated candidate selection",
+      "design": "Generate four legal candidates per task; compare first sample, random legal sample, automatic hybrid winner, and human-oracle winner using a separate blinded human panel."
+    },
+    {
+      "name": "Bounded local repair",
+      "design": "For candidates with one localized failed feature, compare no repair, global repair, and issue-object local repair while measuring target improvement, legality, protected features, and brick diff."
+    }
+  ],
+  "variables_and_controls": "Change one factor per paired experiment: view set, metric family, selection policy, or repair policy. Fix prompt, inventory, candidate pool, renderer version, camera/light settings, evaluator model/version, rubric, random seeds where supported, and human presentation order. Randomize left/right candidate order and view order; keep human raters blind to method, model, and automatic score. Use object-family-separated development and holdout splits.",
+  "dataset_and_slices": "Initial suite: 24 tasks, split evenly between inventory suggestions and direct requests; include deterministic car and daisy anchors plus objects with countable features such as bench, hydrant, mug, animal, flower, and vehicle. Cross three inventory regimes: abundant coherent colors, scarce but feasible, and adversarial/mismatched. Include piece-count bands 10-25, 26-50, and 51-100; symmetric and intentionally asymmetric objects; low-relief and genuinely 3D references; legal-good, legal-poor, and illegal controls. Exclude copyrighted instruction-image imitation as a target.",
+  "metrics_and_scoring": {
+    "automatic_deterministic": [
+      "Hard legality and inventory compliance",
+      "Requested semantic-label coverage with provenance checks",
+      "Normalized dimensions and target proportion error",
+      "Per-view silhouette area, compactness, and occupancy balance",
+      "Bilateral occupancy/color symmetry error when symmetry is requested",
+      "Color-block entropy and key-feature color contrast",
+      "Brick count, inventory utilization, and edit distance"
+    ],
+    "vlm_assisted": [
+      "Feature-specific yes/no/ordinal VQA probes with cited view evidence",
+      "Category recognizability and three-dimensionality rubric",
+      "Pairwise preference explanation used for audit, not as ground truth",
+      "Confidence and cross-view consistency"
+    ],
+    "human_required": [
+      "Overall pairwise preference",
+      "Recognizability without seeing the original label, then with the prompt",
+      "Aesthetic composition, creativity, clever use of constraints, and acceptable intentional asymmetry",
+      "Whether repair preserved already-correct features"
+    ],
+    "gaming_controls": [
+      "Hidden holdout prompts and paraphrased rubrics",
+      "Prompt-blind and image-withheld judge controls",
+      "Randomized views, neutral lighting, and mask-based geometry checks",
+      "Human audit of largest automatic gains and automatic-human disagreements",
+      "Report every dimension, not only the weighted aggregate"
+    ]
+  },
+  "sample_size_or_confidence_method": "Use all known mutations for sanity checks. For candidate selection, begin with 24 tasks and at least three generation seeds, producing 72 paired task-level observations; obtain at least three independent blinded ratings per comparison. Report task-clustered bootstrap 95% intervals for win rate and Spearman/Kendall correlation with human ranks. Expand until the interval around preference lift is narrower than plus or minus 10 percentage points rather than relying on a fixed nominal sample alone.",
+  "success_thresholds": [
+    "At least 90% of known one-defect mutations are ranked in the expected direction by the hybrid evaluator, with no rubric dimension below 80%.",
+    "Evaluator-human rank correlation at least 0.60 on the hidden holdout and no more than 0.10 absolute drop across suggestion versus direct-request slices.",
+    "Hybrid-selected candidates achieve at least 60% blinded human win rate over first-sample selection, with the 95% interval lower bound above 50%.",
+    "Mandatory-feature coverage improves by at least 15 percentage points without more than 1-point legality loss.",
+    "Local repair improves the target feature in at least 60% of cases, changes no more than 20% of bricks at median, and regresses protected features in no more than 5% of cases."
+  ],
+  "decision_enabled": "Sanity and calibration decide whether any automatic scorer is trustworthy. View ablation selects the lowest-cost sufficient render set. Candidate-selection results decide whether test-time search is worthwhile. Local-repair results decide whether critique should enter generation or remain ranking-only. Failure of the human-oracle winner to beat current output would implicate candidate diversity or the catalog rather than evaluation.",
+  "oracle_replacement_test": "Have skilled raters inspect all canonical views and choose the best of the exact same candidate pool using the frozen rubric. Compare current first sample, automatic winner, and human-oracle winner. A large human-oracle gap with a small automatic gap means evaluator quality is limiting; a small oracle gap means generation diversity is limiting. Separately supply gold feature-region and brick-ID annotations to the repair step to isolate localization from edit execution.",
+  "marginal_gain_curve": "Measure human win rate and feature coverage for N={1,2,4,8} legal candidates; evaluator view sets={1,4,9}; and repair passes={0,1,2}. Plot quality against total generation/evaluation latency and cost. Stop increasing N or passes when the task-clustered confidence interval for incremental human win rate includes zero or when the Pareto frontier is dominated.",
+  "validator_soundness_and_completeness": "Sample legal passes, validator failures, and visually suspicious edge cases for expert inspection and, where practical, physical assembly. Estimate false accepts separately for collisions/support/connectedness and false rejects for valid overhangs. Visual evaluator development must not silently redefine validator truth.",
+  "semantic_validation_required": "After schema and hard validation, verify object category, every mandatory prompt or suggestion anchor, feature count and placement, silhouette across views, proportions, true depth, requested symmetry/asymmetry, color roles, detail economy, and absence of irrelevant bulk. Verify semantic feature labels against visible geometry rather than accepting self-description.",
+  "objective_vector_and_pareto_status": "Retain an objective vector of legality, physical proxy, recognizability, mandatory-feature coverage, silhouette/proportion, depth, symmetry intent, color composition, creativity, diversity, inventory utilization, edit burden, latency, and cost. Hard legality is a gate. Use Pareto analysis when one candidate is more faithful but another is more creative or cheaper; learn stakeholder weights only after collecting preferences rather than inventing a universal scalar.",
+  "representation_efficiency": "Evaluation should hash compact model JSON and derive geometry metrics without sending the full construction history to a VLM. Use one labeled contact sheet plus a concise feature rubric rather than nine independent calls. Track image tokens, evaluator output tokens, and score variance by repeated call because long multimodal context availability does not imply reliable spatial aggregation.",
+  "physical_and_assembly_implications": "Multi-view critique can expose apparent floating regions, weak overhangs, and inaccessible-looking placements but cannot establish force balance, clutch, or assembly order. Keep deterministic legality and future physical/sequence analysis separate; include warning overlays only in diagnostic renders, not aesthetic scoring renders.",
+  "feature_retention_and_edit_locality": "Before repair, freeze a protected set of high-confidence features and their brick IDs, region bounds, colors, and pairwise relations. The repair request receives only the issue subgraph plus boundary connectors and legal remaining inventory. Compare pre/post feature scores and model brick diff; reject any repair that moves protected anchors, changes too many unrelated bricks, or worsens human preference on audited samples.",
+  "failure_onset_and_propagation": "Log the first stage where a promised feature disappears: suggestion brief, structure plan, initial placement, deterministic cleanup, validation repair, visual repair, or editor change. At brick level, record the first placement or deletion associated with the failed feature, downstream affected brick IDs, rollback depth, and whether recovery preserved other anchors.",
+  "real_world_build_validation": "[uncertain] No current physical-build study is present. For evaluator validation, physically build a stratified sample of at least 12 final models and record completion, substitutions, collapses, hidden/inaccessible placements, instruction ambiguity, time, and whether render-based preference survives physical inspection. This is a proposed minimum, not an established sample-size guarantee.",
+  "uncertain": [
+    "capability_snapshot",
+    "real_world_build_validation"
+  ]
+}

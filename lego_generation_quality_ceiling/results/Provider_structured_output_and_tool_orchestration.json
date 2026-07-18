@@ -1,0 +1,348 @@
+{
+  "item_name": "Provider structured output and tool orchestration",
+  "category": "Provider and agent execution layer",
+  "scope": "Examines the live Backboard adapter's translation of Gemini-style requests, schema handling, inventory retrieval and validation tools, thread/memory behavior, missing traces, and the strongest comparable native Gemini schema-plus-tool path. It specifies instrumentation and causal A/B tests. It does not claim that Backboard causes quality loss from architecture inspection alone, does not test credentials or production traffic, and does not recommend removing Backboard before matched evidence exists.",
+  "relevance_to_current_system": "server/backboardGenerationClient.js converts each Gemini-style request into a Backboard POST /threads/messages call. It preserves the system text and requested model name, but moves generationConfig.responseSchema into ordinary prompt text, replaces the inline inventory with an inventory ID and retrieval instruction, exposes get_inventory_summary and validate_generated_model tools, and loops for up to four REQUIRES_ACTION rounds. It does not pass responseMimeType, maxOutputTokens, seed, thinking configuration, or a provider-native response schema parameter. server/generationRuntimeLogger.js logs the original AI request, final response text, duration, and final Backboard metadata, but not each Backboard response, tool call, arguments, tool output, validator feedback, or revision between rounds. generationServer.js defaults Backboard memory to off; the client does not reuse thread_id across stage calls, so each completion is a fresh thread even when the same client instance serves structure then placement.",
+  "bottleneck_layer": "Provider translation, inventory grounding, tool orchestration, structured output, verification, telemetry, and evaluation.",
+  "ceiling_hypothesis": "The Backboard translation can plausibly reduce schema adherence or inventory grounding because native schema constraints and inline inventory become prompt instructions and optional tool behavior, while generation parameters are dropped. However, because tool execution is unobserved and recent outputs are often legal, causation is unconfirmed. If matched traces show retrieval and validation are reliably invoked and a fixed-model native path does not improve inventory, schema, semantic, or spatial outcomes, the provider-layer hypothesis should be deprioritized.",
+  "observed_project_evidence": [
+    {
+      "type": "direct observation",
+      "evidence": "responseSchemaText serializes generationConfig.responseSchema into natural-language prompt content; no native schema field is sent to Backboard."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "requestContent parses the user JSON and replaces payload.inventory with an inventory_id and instruction to call get_inventory_summary."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "Two OpenAI-style custom tools are sent: get_inventory_summary and validate_generated_model. Inventory and validation logic execute locally and are deterministic."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The adapter loops while Backboard returns REQUIRES_ACTION, collects all tool calls, submits outputs, and caps tool rounds at four."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The initial Backboard body contains content, system_prompt, tools, llm_provider, model_name, memory, stream, and optional assistant_id. It omits generationConfig.maxOutputTokens, responseMimeType, seed, candidate count, and thinking controls."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The logged response metadata retains final threadId, messageId, reported provider/model, context usage, and aggregate tokens, but local logs do not record tool-call rounds or validator results."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "completeWithMetadata omits thread_id on every initial POST; therefore structure, placement, suggestion, and repair calls do not share conversation history. memory defaults to off, and generationServer passes no persistent thread state."
+    },
+    {
+      "type": "documented provider constraint",
+      "evidence": "Backboard documents json_output=true as JSON object mode, but states it is automatically ignored when custom tools are active. The current client does not set json_output in any case."
+    }
+  ],
+  "mechanisms": [
+    "Schema weakening: prompt-embedded schema can encourage JSON but does not constrain decoding; malformed or extra fields remain possible and consume repair calls.",
+    "Semantic/schema conflation: even a JSON object mode would only guarantee generic JSON, not the full nested schema or domain-valid values.",
+    "Retrieval omission: the model can answer without calling get_inventory_summary because tool choice is not forced, leaving it with only an inventory ID and instruction.",
+    "Retrieval timing or stale-state error: an inventory call may occur after claims are formed, use a wrong ID, or have results mis-copied into later counts.",
+    "Validator omission: the model can emit final placement without calling validate_generated_model, or call it and ignore returned errors.",
+    "Revision failure: the model may receive validator errors but rewrite unrelated geometry, fail to change the invalid state, or regress semantics.",
+    "Parameter drift: native output caps and future thinking/seed controls are silently lost in translation, changing latency, diversity, and reasoning relative to the authored request.",
+    "Isolation: no stage shares tool-grounded state or prior reasoning; each stage must independently retrieve inventory and reconstruct context.",
+    "Observability gap: final legality cannot distinguish inline grounding, successful retrieval, accidental count correctness, deterministic cleanup, or validator-guided revision."
+  ],
+  "problem_a_impact": "Suggestion and structure calls may skip inventory retrieval or use it shallowly, yielding objects that fit common language priors rather than exact shapes/counts. Even perfect retrieval would not fix the current disposable suggestion artifact, but retrieval failures would further weaken feasibility and could explain claimed specialty affordances. The smallest proof is tool-call and claim-level tracing, not architecture speculation.",
+  "problem_b_impact": "Placement and repair depend on exact counts and geometry. Optional retrieval or validation can increase inventory errors, missed repair opportunities, and uncontrolled rewrites. Yet six of seven recent parseable placements were deterministically legal, so the provider layer cannot be assumed to be the dominant source of mediocre semantics or visual quality.",
+  "confirmed_facts": [
+    "The live Backboard adapter embeds the full response schema as prompt text rather than sending provider-native schema configuration.",
+    "The live adapter removes inline inventory and instructs the model to retrieve it through a custom tool.",
+    "Backboard custom tools follow an OpenAI-style function schema and can return parallel or chained REQUIRES_ACTION rounds.",
+    "Backboard's documented json_output mode is ignored when custom tools are active, so it cannot supply its JSON object guarantee in the current tool-equipped message design.",
+    "Gemini 3 models support combining structured outputs with function calling; Gemini GenerateContent supports a response schema, tools, seed, candidate count, thinking configuration, and returned modelVersion/responseId.",
+    "Google recommends the Interactions API for agentic, multi-turn workflows and documents stateful function calling via previous_interaction_id, while stateless mode requires preserving full model steps.",
+    "The current runtime logger omits tool calls and outputs even though the adapter sees them.",
+    "BFCL finds that stateful multi-step decision-making and memory remain open challenges even when single-turn function calling is strong."
+  ],
+  "plausible_inferences": [
+    "Inference: the current path likely has lower formal schema adherence than direct native Gemini because decoding is not schema-constrained, but the magnitude must be measured.",
+    "Inference: inline inventory will improve grounding consistency and reduce tool latency for these small inventories because the application already possesses the exact summary; retrieval may add little value unless context size or access control requires it.",
+    "Inference: unobserved validator use could explain some legality success, but deterministic post-generation validation/cleanup and model capability are alternative explanations.",
+    "Inference: isolated stage calls make repeated retrieval necessary and prevent thought/state continuity, but deliberate isolation may also reduce error propagation; persistence should be tested, not assumed beneficial.",
+    "Inference: direct Gemini native schema-plus-tools is the fairest fixed-model control because it removes the translation layer without changing the underlying Google model family.",
+    "Inference: the missing maxOutputTokens translation may contribute to latency/cost variance and truncation behavior, although observed Backboard provider-side defaults are not logged."
+  ],
+  "unresolved_questions": [
+    "What percentage of each stage's Backboard calls invoke get_inventory_summary, and before which model statements?",
+    "What percentage of placement calls invoke validate_generated_model, how many errors are returned, and what exact model delta follows?",
+    "Does Backboard pass the requested model ID unchanged to Google or map it to a provider-specific version in every call?",
+    "Which Gemini native API and decoding controls Backboard uses behind its abstraction for these model IDs?",
+    "What output cap, thinking level, sampling parameters, and seed behavior apply downstream when not present in the Backboard body?",
+    "Can Backboard expose a strict schema mode while custom tools are active in a newer endpoint, despite json_output being ignored on documented messages?",
+    "How do Backboard token accounting and cost compare with direct Gemini for multi-round tool use?",
+    "Do persistent Backboard threads improve grounding or instead propagate early spatial mistakes across stages?"
+  ],
+  "confidence": "High confidence in the translation, isolation, and logging observations from live code and in the documented Backboard/Gemini API surface. Moderate confidence that these mechanisms can weaken output because function-calling research establishes multi-turn fragility. Low confidence that they currently cause the observed visual ceiling; no intermediate traces or matched A/B outcomes exist.",
+  "expected_impact": "Instrumentation has very high diagnostic impact and low model risk. Native schema should strongly reduce parse/schema repair overhead. Inline or forced inventory grounding may reduce inventory/count errors and latency. A fixed-model native path could produce moderate placement improvements if the adapter currently drops important controls or tools are skipped. Expected direct impact on aesthetics is low unless improved grounding changes composition or the new path is paired with semantic/visual evaluation.",
+  "key_external_findings": [
+    {
+      "finding": "Backboard documents tool calls as explicit REQUIRES_ACTION responses containing call IDs, function names, and arguments, followed by submitted outputs and possible further rounds.",
+      "application": "The application can log a complete trace locally without relying on hidden provider internals. This is the smallest measurement needed to test retrieval and validator behavior."
+    },
+    {
+      "finding": "Backboard's JSON output mode is disabled when custom tools are active.",
+      "application": "The current all-in-one Backboard request cannot combine its generic JSON guarantee with inventory/validation tools; prompt-embedded schema and local parsing remain the only format controls unless orchestration is split."
+    },
+    {
+      "finding": "Gemini 3 natively combines structured outputs with tools, and native function calling exposes tool-choice modes and stateful/stateless continuation contracts.",
+      "application": "A direct Gemini arm can preserve response schema while retrieving inventory and validating, using the same underlying model ID."
+    },
+    {
+      "finding": "BFCL evaluates serial, parallel, abstention, and multi-turn function use and finds state tracking and long-horizon decision-making remain challenging.",
+      "application": "Do not infer reliable inventory retrieval or validator revision from single-turn tool support flags; measure the exact trajectory."
+    },
+    {
+      "finding": "JSONSchemaBench shows structured decoding must be evaluated across real schema complexity and is distinct from downstream semantic validity.",
+      "application": "Report parse, schema, inventory, geometry, and feature success separately in the A/B."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "Backboard API: Send Message",
+      "url": "https://docs.backboard.io/concepts/messages",
+      "source_type": "First-party provider documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "Defines /threads/messages, memory modes, response metadata, json_output, and the limitation that JSON output is ignored when custom tools are active.",
+      "relevance": "Directly describes the current endpoint's structured-output boundary."
+    },
+    {
+      "title": "Backboard API: Tool Calling",
+      "url": "https://docs.backboard.io/concepts/tool-calling",
+      "source_type": "First-party provider documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "Documents REQUIRES_ACTION, tool_calls, parallel/chained rounds, tool_call_id, and tool-output submission.",
+      "relevance": "Defines the trace events the local adapter can instrument."
+    },
+    {
+      "title": "Backboard API: Models",
+      "url": "https://docs.backboard.io/concepts/models",
+      "source_type": "First-party provider documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "Models API exposes provider, prices, context, supports_tools, supports_thinking, and supports_json_output capability flags.",
+      "relevance": "Enables runtime verification of requested Backboard model capabilities instead of relying on static assumptions."
+    },
+    {
+      "title": "Gemini API: Structured outputs",
+      "url": "https://ai.google.dev/gemini-api/docs/structured-output",
+      "source_type": "First-party Google API documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "Gemini 3 supports structured outputs combined with built-in tools and function calling, using a supported JSON Schema subset.",
+      "relevance": "Defines the strongest comparable native format-and-tool path."
+    },
+    {
+      "title": "Gemini API: Function calling",
+      "url": "https://ai.google.dev/gemini-api/docs/function-calling",
+      "source_type": "First-party Google API documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "Documents stateful and stateless function calling, tool-choice modes, structured output with function calling, and tool response matching.",
+      "relevance": "Supports deterministic orchestration and trace design for the native arm."
+    },
+    {
+      "title": "Gemini API: GenerateContent",
+      "url": "https://ai.google.dev/api/generate-content",
+      "source_type": "First-party Google API reference",
+      "publication_or_update_date": "2026-06; verified 2026-07-17",
+      "supported_claim": "Request supports tools, response schema/JSON schema, seed, candidate count, max output tokens, and thinking config; response includes modelVersion, responseId, candidates, and usage.",
+      "relevance": "Defines fixed-model, fixed-seed controls and native telemetry."
+    },
+    {
+      "title": "The Berkeley Function Calling Leaderboard: From Tool Use to Agentic Evaluation of Large Language Models",
+      "url": "https://proceedings.mlr.press/v267/patil25a.html",
+      "source_type": "Peer-reviewed ICML 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Function use must be evaluated across serial/parallel calls, abstention, and stateful multi-step settings; memory and dynamic long-horizon decisions remain challenging.",
+      "relevance": "Strong measured evidence that tool support flags do not guarantee correct orchestration."
+    },
+    {
+      "title": "Generating Structured Outputs from Language Models: Benchmark and Studies",
+      "url": "https://arxiv.org/abs/2501.10868",
+      "source_type": "Research paper and JSONSchemaBench benchmark",
+      "publication_or_update_date": "2025",
+      "supported_claim": "10,000 real-world schemas and the official JSON Schema test suite expose differing constrained-decoding coverage and efficiency.",
+      "relevance": "Supports direct schema-compliance measurement rather than assuming prompt text is equivalent to native enforcement."
+    }
+  ],
+  "contradicting_evidence": [
+    "Six of seven recent parseable placement outputs passed the deterministic validator, which is compatible with reliable retrieval/validation or with capable unassisted generation; it weakens any claim that the provider layer obviously breaks legality.",
+    "The adapter does implement the documented multi-round tool protocol correctly at a high level and submits all tool outputs in each round, so missing local logs do not imply tools are unused.",
+    "Backboard reports the final model provider and name, token usage, thread ID, and context usage, providing some useful telemetry even though the trajectory is absent.",
+    "Native structured output guarantees format under a supported schema but not correct inventory counts, legal geometry, or attractive design; a native path can remain mediocre.",
+    "Fresh isolated threads can reduce contamination and stale assumptions. Persisting state is not automatically better when each request already includes the necessary prompt and inventory tool."
+  ],
+  "transfer_limits": "BFCL functions are diverse real-world APIs, not inventory retrieval plus 3D validation; its failure patterns motivate exact testing but do not quantify this adapter. JSONSchemaBench tests schema grammars, not model values or spatial reasoning. Google and Backboard documentation specify interfaces, not achieved reliability. Direct Gemini and Backboard may differ in rate limits, hidden safety wrappers, model routing, billing, and thought handling that cannot be inferred from public docs. The A/B must separate practical total-path performance from causal effects of schema, retrieval, and orchestration.",
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "backboard_current_path": {
+      "endpoint": "POST https://app.backboard.io/api/threads/messages followed by POST /threads/tool-outputs",
+      "model_request": "llm_provider=google and model_name from the authored request",
+      "tools": ["get_inventory_summary", "validate_generated_model"],
+      "memory": "off by default",
+      "threading": "new thread per completeWithMetadata call because thread_id is not reused",
+      "structured_output": "response schema embedded as prompt text; json_output is not set and documented json_output would be ignored with custom tools",
+      "dropped_authored_controls": ["responseMimeType", "maxOutputTokens", "seed", "candidateCount", "thinking configuration"],
+      "trace_available_in_code_but_not_logged": ["REQUIRES_ACTION response", "tool_calls", "parsed arguments", "tool outputs", "round count", "validator feedback"]
+    },
+    "native_gemini_comparator": {
+      "recommended_surface": "Direct Gemini API using GenerateContent for controlled stateless calls or Interactions for stateful agentic workflows",
+      "capabilities": ["responseSchema or responseJsonSchema", "function calling", "structured outputs with tools on Gemini 3", "tool choice modes", "seed", "max output tokens", "thinking level", "responseId", "modelVersion", "usage metadata"],
+      "models": ["gemini-3.1-flash-lite", "gemini-3.5-flash"]
+    },
+    "unverified_mapping": "[uncertain] Public documentation does not reveal the exact downstream Google endpoint, model revision, decoding settings, or seed used internally by Backboard for each request; record reported values and ask Backboard for pass-through details rather than assuming parity."
+  },
+  "data_target_match": "Provider A/B data can be perfectly target matched because the same internal inventory fixtures, prompts, schemas, tool implementations, and expected validators can be replayed through both paths. Remaining mismatch arises from unavoidable provider nondeterminism and any unexposed Backboard model mapping. Use exact raw request/response archives and hash all artifacts.",
+  "source_quality_notes": "Backboard and Google documentation are first-party and current but describe contract behavior, not reliability. Backboard documentation explicitly exposes the JSON-with-tools limitation, which is directly relevant. BFCL is peer-reviewed ICML work with scalable AST evaluation, but its domains differ. JSONSchemaBench is a research benchmark covering many schemas; its results should not be treated as a guarantee for this schema/provider version. Live code is the authority for what HackThe6ix actually sends and logs.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Instrument every Backboard round before changing providers. Emit request_id/run_id/stage, response status, thread/run/message IDs, tool round, call ID/name/arguments, dispatch timestamps, output digest and redacted payload, validator errors, post-tool response, and final revision diff."
+    },
+    {
+      "priority": 2,
+      "change": "Add explicit trace assertions: inventory retrieval must occur before an inventory-dependent stage finalizes; placement must validate the exact candidate hash before finalizing; final output must differ appropriately after invalid validation feedback."
+    },
+    {
+      "priority": 3,
+      "change": "Run a direct Gemini comparator with the same model ID, system prompt, translated user content, tool schemas/results, native responseSchema, thinking level, max output tokens, and seed."
+    },
+    {
+      "priority": 4,
+      "change": "Run a native factorial ablation: inline inventory versus retrieval tool and prompt-only JSON versus native response schema. This isolates grounding transport from schema enforcement."
+    },
+    {
+      "priority": 5,
+      "change": "For production, prefer inline exact inventory for these small summaries or force retrieval deterministically in application orchestration; do not ask the model to decide whether prerequisite state is needed. Keep deterministic final validation authoritative."
+    },
+    {
+      "priority": 6,
+      "change": "Query Backboard's Models API at startup/deployment for the requested model's tools, thinking, JSON output, context, and price flags, and log the returned model metadata. Fail closed on a capability mismatch."
+    },
+    {
+      "priority": 7,
+      "change": "Preserve authored max-output and thinking controls where the provider supports them, or log an explicit translation warning when a field is dropped."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "Instrumented Backboard with split format/tool phases",
+      "strengths": "Retains unified provider layer and captures tool traces; could retrieve/validate in separate turns then request JSON-only output where json_output applies.",
+      "weaknesses": "Splitting phases adds turns and may still lack schema-level enforcement beyond generic JSON.",
+      "dataset_needs": "Matched trace corpus and provider regression suite.",
+      "failure_modes": "State mismatch between phases, extra latency, hidden provider changes."
+    },
+    {
+      "option": "Direct native Gemini stage runner",
+      "strengths": "Full schema, tool, seed, thinking, modelVersion, responseId, and output-cap controls; cleanest fixed-Google-model path.",
+      "weaknesses": "Loses Backboard abstraction/memory features and requires native tool-loop implementation and provider-specific code.",
+      "dataset_needs": "Same internal evaluation and trace suite.",
+      "failure_modes": "Gemini API version drift, schema-subset incompatibility, local orchestration bugs."
+    },
+    {
+      "option": "Provider-neutral deterministic orchestrator with provider adapters",
+      "strengths": "Application controls prerequisites, schemas, validation, traces, retries, and model routing; providers only generate typed stage artifacts.",
+      "weaknesses": "Highest engineering effort and adapter maintenance.",
+      "dataset_needs": "Cross-provider contract tests and golden traces.",
+      "failure_modes": "Lowest-common-denominator schemas, adapter divergence, duplicated provider features."
+    }
+  ],
+  "expected_signal": "If the provider layer is material, the native fixed-model arm should increase schema-valid pass@1, exact inventory usage, prerequisite retrieval/validation compliance, and validator-guided correction while reducing repair calls. If only parse/schema metrics improve, the orchestration layer is a reliability/cost issue but not the visual ceiling. If traces show near-100% timely retrieval and validation with responsive revisions, deprioritize the grounding hypothesis.",
+  "likely_ceiling": "Perfect tool use and native schema still cannot score resemblance, proportions, creativity, color composition, or attractiveness, and cannot make raw coordinates an efficient spatial representation. A provider change will saturate once syntax and inventory grounding are reliable. Further gains require persistent intent, better representations, candidate search, and semantic/visual evaluators.",
+  "implementation_effort": "Low for logging events already visible in the adapter and adding hashes/counters. Moderate for a native Gemini tool loop and paired replay harness. Moderate for a provider translation contract that rejects dropped controls. High for a provider-neutral orchestrator and complete cross-provider regression infrastructure.",
+  "latency_token_cost": "Backboard retrieval and validation can add one or more network/tool rounds up to the configured maximum of four; each continuation reuses context and consumes tokens. Inline inventory removes a round but adds a small, repeated prompt payload. Native schema can reduce parse-repair calls. Direct Gemini pricing is documented, while Backboard pass-through and platform costs must be measured from invoices/model metadata. Report wall-clock by segment, tokens per round, and total successful-build cost, not only final-call tokens.",
+  "risks": [
+    "Logging full inventories or model payloads can expose user data; use digests and explicit redaction/storage policy.",
+    "A practical current-vs-native comparison can conflate schema, inventory transport, and orchestration unless factorial ablations are run.",
+    "Backboard may not expose seed control, preventing exact sample pairing; repeated randomized blocks are needed.",
+    "Native schema subsets can reject or reinterpret unsupported JSON Schema features; validate the schema at startup and in CI.",
+    "Forcing validation through a model tool can waste tokens when the application already validates deterministically after generation.",
+    "Persistent threads can propagate mistakes or stale inventory; bind every tool result and artifact to inventory and candidate digests.",
+    "Provider-returned model aliases can change; log modelVersion or reported model identity for every result."
+  ],
+  "dependencies": "A versioned trace schema; request, inventory, schema, prompt, tool, validator, and candidate digests; redaction policy; exact model/version capture; a direct Gemini API credential/path; deterministic tool outputs; fixed-seed support where exposed; cached stage artifacts; semantic/visual evaluation labels; and cost tables or invoice reconciliation.",
+  "sequencing": [
+    "Within 48 hours: log every Backboard REQUIRES_ACTION/tool-output round and whether inventory/validation prerequisites were met; add dropped-generation-config warnings.",
+    "Next: replay a small fixed suite through current Backboard and a direct native Gemini path using the same model and translated content; separate syntax, inventory, geometry, semantics, latency, and cost.",
+    "Then: run native schema and inventory-transport factorial ablations to identify the causal component of any lift.",
+    "Only after evidence: choose whether to keep Backboard with stricter orchestration, split phases, or route generation stages natively.",
+    "Finally: keep provider conformance canaries in CI/offline monitoring so model or API changes cannot silently alter schema/tool behavior."
+  ],
+  "rollback_criteria": "Do not migrate the production path unless at least 100 paired stage cases show either >=50% fewer parse/schema repairs or >=10 percentage points higher exact-inventory/legal-and-semantic pass@1, with no >2-point validity regression and acceptable latency/cost. Roll back if native tool error rate exceeds 1%, P95 latency rises >50% without >=10-point quality lift, or model-version/trace completeness falls below 99%. Deprioritize Backboard-causation work if timely retrieval and validation exceed 95% and the matched native arm improves semantic quality by <5 points.",
+  "anti_recommendations": [
+    "Do not blame Backboard for mediocre geometry without tool traces and a fixed-model comparison.",
+    "Do not enable Backboard json_output expecting schema enforcement while custom tools are present; documentation says the setting is ignored.",
+    "Do not compare current Backboard retrieval against native inline inventory and attribute the total difference solely to provider quality; run the factorial controls.",
+    "Do not add memory as a grounding fix before measuring retrieval; memory is not an authoritative inventory store and can become stale.",
+    "Do not rely on final deterministic validity as proof that validate_generated_model was called or its feedback was followed.",
+    "Do not preserve optional model choice for prerequisite retrieval when the application can deterministically inject the exact inventory.",
+    "Do not switch models at the same time as switching provider paths in the causal A/B."
+  ],
+  "selective_generation_policy": "Fail closed when inventory retrieval is required but absent, the retrieved inventory digest does not match the request, or validation was run on a different candidate hash. After one unresponsive invalid revision, stop model tool rounds and use local deterministic cleanup/repair policy rather than looping blindly. Use inline inventory for small summaries; use retrieval only when size/access policy justifies it. Fall back to the currently better validated provider arm per stage, not a single global provider flag.",
+  "smallest_discriminating_experiments": [
+    {
+      "hypothesis": "Inventory retrieval is skipped or misused.",
+      "experiment": "Instrument 100 existing-path calls; report retrieval call rate, order, ID/digest correctness, and final count accuracy. No provider migration is required."
+    },
+    {
+      "hypothesis": "Prompt-embedded schemas reduce adherence.",
+      "experiment": "On direct Gemini with fixed model/prompt/inventory/seed, compare prompt-only schema text against responseSchema. Repeat over suggestion, structure, and placement schemas and piece-count buckets."
+    },
+    {
+      "hypothesis": "Backboard translation/orchestration weakens output independent of schema.",
+      "experiment": "Compare Backboard and native Gemini using the exact same translated system/user content, prompt-only schema, retrieval tools, model ID, and deterministic tool outputs. Use repeated trials because Backboard exposes no documented seed field."
+    },
+    {
+      "hypothesis": "The strongest practical native path is better.",
+      "experiment": "Compare current Backboard against native Gemini with responseSchema plus function calling, identical model and authored stage prompt, exact inventory, fixed native seed, and matched thinking/output cap. This estimates total product lift but is not a single-cause experiment."
+    },
+    {
+      "hypothesis": "Inventory tools add avoidable risk/latency.",
+      "experiment": "Within native Gemini, compare inline inventory, forced retrieval, and auto retrieval while holding schema/model/seed fixed."
+    },
+    {
+      "hypothesis": "Validator feedback is not used effectively.",
+      "experiment": "Feed fixtures with one known error, log validation candidate hash and post-tool diff, and compare no tool, optional tool, forced tool, and application-controlled validate-then-repair."
+    }
+  ],
+  "variables_and_controls": "Causal experiments change one of provider path, schema enforcement, inventory transport, tool-choice policy, or thread persistence. Fix requested and returned model identity, system prompt, translated user content, response schema, exact inventory and digest, target count, tool schemas and deterministic outputs, validator version, thinking level, output cap, and stage artifacts. Use the same seed in native arms; because the documented Backboard message schema has no seed, use repeated paired inventory/prompt blocks, randomize arm order, and report provider nondeterminism rather than claiming bitwise parity. Separate an adapter-parity comparison from the practical best-path comparison.",
+  "dataset_and_slices": "Use at least 100 calls per schema/tool arm across suggestion, structure, placement, and repair. Stratify placements at 10, 20, 40, 60, 80, and 100 pieces; inventories by size, scarcity, plate/brick balance, and colors; and tool cases by no-error, inventory exceeded, missing combination, overlap, floating brick, disconnected component, malformed tool arguments, wrong inventory ID, and multi-error feedback. Include recurring semantic objects and exact legal fixtures. Exclude provider outages from quality metrics but report them separately.",
+  "metrics_and_scoring": [
+    "Grounding: retrieval call rate, prerequisite order, inventory ID/digest match, exact count-use error, unsupported combination rate, and claims made before retrieval.",
+    "Tool use: call/argument parse success, correct tool selection, rounds, parallel calls, tool error handling, validator invocation rate, candidate-hash match, and termination status.",
+    "Revision: validator errors before/after, responsive change rate per error, unchanged-invalid rate, new-error rate, semantic feature preservation, and brick edit locality.",
+    "Structure: JSON parse, exact schema validation, extra/missing fields, type/enum errors, and semantic value correctness.",
+    "Outcome: deterministic validity, weighted feature retention, blind human preference, and failure stage.",
+    "Efficiency: request/tool/final latency segments, P50/P95 wall time, input/output/thinking tokens each round, retries, dollar cost, and successful semantic build per dollar.",
+    "Reliability: HTTP/provider failure rate, max-round exhaustion, empty content, reported model mismatch, and trace completeness."
+  ],
+  "sample_size_or_confidence_method": "Start with 100 paired cases per principal two-arm comparison and three repeats per case where cost permits. Use paired bootstrap 95% intervals for continuous/score deltas, McNemar analysis for binary schema/validity outcomes, and hierarchical bootstrap over case and repeat. For rare tool failures, report exact binomial intervals. Use a preregistered sequential extension to 200 cases if the interval overlaps both zero and the minimum useful effect. Report outages and censored timeouts separately.",
+  "success_thresholds": [
+    "Trace completeness >=99% for all local tool events and candidate hashes.",
+    "Inventory retrieval and correct digest before finalization >=99% when retrieval mode is required.",
+    "Placement validator invoked on the exact final-candidate precursor >=95% in optional-tool testing or 100% when application-forced.",
+    "Native schema reduces parse/schema failures and repair calls by at least 50% relative, with no semantic regression.",
+    "Provider migration requires >=10-point lift in legal-and-semantic pass@1 or >=15-point human preference, or equivalent reliability savings that justify cost.",
+    "No provider arm may exceed 1% unhandled tool/protocol errors or regress deterministic legality by more than 2 points.",
+    "Inline inventory is preferred if it matches/exceeds grounding accuracy and cuts median stage latency by >=15% without material token-cost increase."
+  ],
+  "decision_enabled": "Trace-only results decide whether retrieval/validator hypotheses remain plausible. Schema ablation decides whether native constrained decoding is worth adopting independent of provider. Inventory transport ablation decides inline versus retrieval. Adapter-parity A/B isolates translation/orchestration. Practical best-path A/B decides migration value. A null semantic result with strong schema lift means keep the provider issue scoped to reliability/cost, while a semantic lift after only grounding changes justifies deterministic inventory injection.",
+  "oracle_replacement_test": "Bypass model tool choice: inject the exact inventory summary before generation and deterministically validate the first candidate, then give the exact error list back for one revision. Run this application-controlled oracle through both Backboard and native Gemini with the same model. If quality converges, tool selection/orchestration was the provider-layer bottleneck. If native remains better under identical oracle state, schema/translation/model-routing differences remain. If neither improves semantics, prioritize representation/evaluation.",
+  "marginal_gain_curve": "Plot quality and cost for zero/one/two validation revisions, auto versus forced retrieval, prompt-only versus native schema, and tool-round caps 1-4. For provider paths, plot pass@1, post-revision success, latency, and dollars. Stop additional rounds when the incremental legal-and-semantic lift is <2 points, new-error rate rises, or median added latency exceeds the product budget. Separate oracle best after N rounds from the actually selected final output.",
+  "validator_soundness_and_completeness": "The local validator is deterministic for encoded catalog/count/grid/overlap/support/connectivity rules, but audit a stratified sample against independent expert or physical ground truth to detect implementation gaps. Inject known errors to verify every error class is surfaced through both tool paths unchanged. Estimate false accepts for tipping instability, illegal real-world connections, semantic failure, and instruction infeasibility, which are outside its current scope; do not attribute those to tool unreliability.",
+  "semantic_validation_required": "After schema and tool success, validate that inventory facts influenced the design, the final model matches the prompt/selected suggestion, required features and proportions survive validator-guided revision, and the build is visually coherent. A perfectly traced tool path can still return a legal red stack labeled fire hydrant. Provider comparisons must therefore include independent semantic and visual scores.",
+  "objective_vector_and_pareto_status": "Report schema adherence, exact grounding, deterministic legality, semantic fidelity, visual quality, tool reliability, revision locality, latency, tokens, cost, privacy, and operational complexity separately. A native path may dominate on schema but lose on latency or platform features; Backboard may dominate on abstraction but lose on traceability. Use Pareto comparison before selecting weights and never trade exact inventory/legality for convenience.",
+  "representation_efficiency": "Replacing inline inventory with a tool reduces initial prompt tokens but can add full inventory tokens in a later round plus conversation overhead. Prompt-embedding the response schema duplicates a large schema in ordinary text and still needs parsing/repair. Measure total tokens across all rounds, schema tokens, inventory tokens, tokens per brick, cache hits, and parse-survival by output length. Native schema may reduce textual instruction overhead but does not shorten the brick array itself.",
+  "physical_and_assembly_implications": "Tool orchestration can guarantee that the correct digital inventory and encoded support/connectivity checks are consulted, but it cannot guarantee clutch legality, tipping stability, handling margin, assembly accessibility, or prefix-valid instructions unless those checks are added. Candidate hashes are essential: validation feedback applied to a different rewritten model provides no physical assurance. Preserve the exact validated candidate or revalidate every revision.",
+  "feature_retention_and_edit_locality": "Log stable feature IDs and compute brick-level diffs from the candidate submitted to validation to each revision. Attribute changed bricks to validator error regions and required feature regions. A tool-use success is not merely calling validation; it must fix cited errors while preserving required features and minimizing unrelated changes. Compare optional-model tool orchestration with application-controlled local patching.",
+  "failure_onset_and_propagation": "Possible earliest failures are translation (dropped config), inventory sanitization, no retrieval, wrong retrieval arguments, misunderstood tool output, placement error, no validation, validation on wrong candidate, ignored feedback, or final schema parse. Each can propagate into deterministic cleanup or full repair, masking its origin. The trace must identify first divergence and allow rollback to the exact pre-tool candidate and inventory digest.",
+  "real_world_build_validation": "Provider-path finalists should be physically built on a matched subset after digital and semantic gates. Record completion, time, substitutions, instruction ambiguity, collapses/tipping, and object identification. Provider success should be attributed only if the exact exported model and inventory match the traced validated candidate; otherwise digital-to-physical or export differences are confounders.",
+  "uncertain": [
+    "capability_snapshot"
+  ]
+}

@@ -1,0 +1,378 @@
+{
+  "item_name": "Deterministic search and buildable assembly",
+  "category": "Construction algorithms and verification",
+  "scope": "Investigation of how an AI-authored semantic target can become at most 100 legal, inventory-bounded rectangular brick and plate placements. It compares constraint programming, CP-SAT, SAT/SMT, MILP, graph and beam search, packing, procedural grammars, program synthesis, constrained decoding, and hybrids. It distinguishes occupancy legality, typed connections, static stability, handling robustness, and assembly sequence. It does not claim a solver can invent a good target or replace semantic and visual evaluation.",
+  "relevance_to_current_system": {
+    "validator": "src/generation/validator.js already supplies deterministic catalog, inventory, integer-grid, quarter-turn, rectangular occupancy, minimal support, vertical connectedness, ground-contact, and 100-piece checks. These predicates can be reused as solver constraints and incremental pruning tests.",
+    "cleanup": "src/generation/inventoryCleanup.js greedily retains early legal part/color instances and removes unsupported, absent, or over-count pieces. It does not reallocate inventory by feature value, refill lost volume, or optimize the remaining structure.",
+    "service": "src/generation/service.js asks one model to emit all exact placements, then performs cleanup and at most one AI buildability repair. Deterministic logic is a post-hoc filter rather than a constructor, and repair is triggered by legal errors rather than resemblance.",
+    "fit": "Because all current parts are axis-aligned integer cuboids with two rotations and exact counts, a bounded candidate-placement CP/search prototype is technically tractable if the semantic planner supplies envelopes, feature anchors, and a finite workspace."
+  },
+  "bottleneck_layer": "Multiple layers: semantic planning, deterministic placement, physical verification, assembly planning, and evaluation.",
+  "ceiling_hypothesis": "For a fixed high-quality semantic target and bounded workspace, an incremental constraint-guided placer will achieve higher legal-completion and feature-retention rates than one-shot LLM coordinates at comparable piece counts. The hypothesis is weakened if a skilled-human target plus solver cannot improve resemblance or if candidate placement domains explode before 100 pieces despite strong anchors and decomposition.",
+  "observed_project_evidence": [
+    {
+      "fact": "Each part maps to a small integer cuboid and quarter-turn orientation, making collision and inventory constraints discrete.",
+      "source": "src/generation/partCatalog.js and src/generation/validator.js"
+    },
+    {
+      "fact": "The validator treats a non-ground brick as supported when any one bottom cell has an occupied cell immediately below.",
+      "source": "src/generation/validator.js"
+    },
+    {
+      "fact": "Connectedness is an undirected final-state graph over vertical stud-area overlap; it does not require every instruction prefix to be stable or reachable.",
+      "source": "src/generation/validator.js"
+    },
+    {
+      "fact": "Inventory cleanup keeps pieces in sequence order until each part/color count is exhausted, regardless of feature importance or replacement value.",
+      "source": "src/generation/inventoryCleanup.js"
+    },
+    {
+      "fact": "The service calls a placement model once, validates afterward, and uses an AI rewrite for floating, disconnected, no-ground, or overlap errors. There is no solver objective, search frontier, legal-action mask, or prefix stability analysis.",
+      "source": "src/generation/service.js"
+    },
+    {
+      "interpretation": "High validator pass rate alongside poor user judgment implies that a legality-only solver would reproduce the same quality ceiling more reliably unless it optimizes a semantic target.",
+      "basis": "Verified project snapshot"
+    }
+  ],
+  "mechanisms": [
+    "Constraint propagation advantage: exact counts, integer poses, rotations, support, non-overlap, and symmetry can eliminate impossible placements before full models are serialized.",
+    "Candidate-domain explosion: allowing every part at every cell and every sequence position creates a huge symmetric search space; bounded feature envelopes, interchangeable-part count variables, and subassemblies are required.",
+    "Objective misspecification: a solver that minimizes collisions and count violations can return a compact legal tower because legality does not encode resemblance.",
+    "Weak support proxy: one cell of support ignores torque, center of mass, shear/clutch forces, and handling disturbances.",
+    "Final-state bias: a connected stable-looking final graph can have impossible or unstable construction prefixes and blocked insertion directions.",
+    "Greedy cleanup damage: removing later over-count parts can disproportionately delete eyes, handles, feet, or structural ties while preserving low-value body filler.",
+    "Search-scorer coupling: beam, A*, MCTS, local search, or CP heuristics are only useful if partial states receive feature- and shape-aware scores that correlate with final quality.",
+    "Symmetry duplication: naively instantiating mirrored bricks doubles variables and branching; representing one half plus a mirror constraint or orbit can reduce search and improve composition."
+  ],
+  "problem_a_impact": "A deterministic feasibility pass can expose when a linguistically attractive suggestion cannot be realized from the inventory. However, it must receive the suggestion's retained feature map, color/part budget, and coarse silhouette; otherwise it can only prove that some connected legal object exists. Ranking suggestions by best achievable solver score or upper bound would couple ideation to construction.",
+  "problem_b_impact": "For direct requests, deterministic construction can enforce legal inventory use and preserve prioritized feature anchors while choosing the closest feasible approximation. When exact resemblance is impossible, the solver can return a Pareto set or an explicit relaxation trace rather than silently dropping defining features.",
+  "confirmed_facts": [
+    "Automatic Generation of Constructable Brick Sculptures converts a voxelized mesh to larger legal bricks, repairs structural weaknesses, supports size/count and color constraints, and outputs building instructions.",
+    "Budget-Aware Sequential Brick Assembly uses a learned next-position score plus deterministic convolutional invalid-position filtering; it enforces no-overlap, no-isolation, and vertical assembly and supports brick-type budgets.",
+    "Brick-by-Brick formulates sequential construction with fixed connection rules and no overlap and uses an action-validity predictor to filter a large variable action space.",
+    "BrickGPT checks every proposed brick for format, library membership, bounds, and collision, then performs static-equilibrium analysis and rolls back to a stable prefix. Its ablation reports 100% validity but only 24.0% stability without rollback, versus 100% validity and 98.8% stability with rejection and rollback.",
+    "BrickGPT's force model includes gravity, vertical forces, shear forces from knob connections, and torque equilibrium; reported stability analysis averages about 0.35 seconds for structures below 200 bricks.",
+    "MiniZinc exposes global k-dimensional non-overlap constraints such as diffn_k and geost; Google OR-Tools CP-SAT provides open-source integer and Boolean constraint modeling and optional interval/no-overlap primitives.",
+    "General assembly-sequence planning literature explicitly evaluates stability, graspability, assemblability, insertion direction, and obstruction, which final-state connectedness does not establish."
+  ],
+  "plausible_inferences": [
+    "Inference: a staged CP-SAT or finite-domain constraint model, fed a small candidate placement set per feature/subassembly, is the best first solver family for the current catalog because variables are integer/Boolean and constraints combine counts, implications, non-overlap, support, symmetry, and weighted soft objectives.",
+    "Inference: monolithic SAT or MILP over every grid cell and sequence position will be harder to engineer and scale than CP-SAT plus domain-specific generation; pure graph search is useful as an anytime construction layer after candidate pruning.",
+    "Inference: for up to 100 pieces, subassembly decomposition and symmetry breaking are more important than the brand of solver.",
+    "Inference: a solver-generated legal model will improve user quality only when the AI supplies a labeled target containing required features, silhouettes, proportions, negative space, color regions, and relaxation priorities.",
+    "Inference: physical build validation should be tiered: cheap stud-contact/center-of-mass heuristics for all candidates, stronger force analysis for finalists, and human builds for benchmark calibration."
+  ],
+  "unresolved_questions": [
+    "The solve-time distribution for 10-100 pieces under realistic HackThe6ix grids and inventories.",
+    "Whether the current prompt suite needs exact voxel targets, multi-view silhouettes, or only feature envelopes to guide search.",
+    "Calibrated clutch-force and friction parameters for the exact physical pieces and whether builds assume a baseplate.",
+    "How often digitally legal current outputs fail physical handling or human assembly.",
+    "Whether CP-SAT, MiniZinc/Chuffed, a custom beam search, or a hybrid yields the best anytime frontier on this product's targets.",
+    "How to score aesthetic part rhythm, purposeful seams, and negative space without a learned human-preference model."
+  ],
+  "confidence": "High that deterministic incremental construction can dominate post-hoc legality repair; high that current support/connectedness are weaker than static stability and assembly feasibility; medium that CP-SAT is the best first implementation because no product-specific benchmark has compared solvers. Confidence in physical parameters and 100-piece solve times is low until measured.",
+  "expected_impact": "High impact on deterministic legality, exact inventory, reproducibility, and local repair; medium-high impact on resemblance when paired with an expressive semantic target; low direct impact on creativity and visual appeal without a calibrated objective. A solver is enabling infrastructure, not a standalone quality solution.",
+  "key_external_findings": [
+    {
+      "finding": "Direct LEGO systems succeed by separating target geometry or learned scores from constraint satisfaction rather than asking one component to do both.",
+      "application": "Make the AI author the target and priorities; make deterministic search own exact inventory, placement, and connection predicates."
+    },
+    {
+      "finding": "Incremental legal-action masking reduces invalid branching in both Brick-by-Brick and Budget-Aware Sequential Brick Assembly.",
+      "application": "Generate candidate placements only at exposed compatible studs within semantic envelopes and reject collision/inventory violations before scoring."
+    },
+    {
+      "finding": "BrickGPT's validity and stability ablations show that collision rejection and physics rollback solve different failure classes.",
+      "application": "Keep occupancy legality, typed connection validity, and physical stability as separate gates and metrics."
+    },
+    {
+      "finding": "Constructable sculpture systems can honor part-count and color constraints, but begin from an explicit voxel/mesh target.",
+      "application": "The missing input for HackThe6ix is not a generic solver but a semantic geometric target that makes resemblance computable."
+    },
+    {
+      "finding": "Assembly planning requires more than a final pose: obstruction, insertion direction, graspability, and prefix stability determine whether a sequence is executable.",
+      "application": "Represent instruction steps as a dependency/search problem and validate prefixes, not a decorative integer field."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV 2025 Best Paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "Per-brick rejection and physics-informed rollback separately improve validity and stability; nonlinear force analysis is practical for sub-200-brick candidates.",
+      "relevance": "Closest direct evidence for constrained decoding, rollback, and physical verification."
+    },
+    {
+      "title": "BrickGPT official repository",
+      "url": "https://github.com/AvaLovelace1/BrickGPT",
+      "source_type": "Official open-source implementation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "Inference and stability code are reproducible; full physics uses optional but recommended Gurobi, with a less accurate connectivity fallback.",
+      "relevance": "Current implementation and licensing/dependency status."
+    },
+    {
+      "title": "Automatic Generation of Constructable Brick Sculptures",
+      "url": "https://diglib.eg.org/items/82e2ee53-fa57-4929-ac81-85acd0d9f855",
+      "source_type": "Peer-reviewed Eurographics 2013 paper",
+      "publication_or_update_date": "2013",
+      "supported_claim": "Voxel-to-legal-brick merging, structural repair, inventory limits, color handling, and instruction output can be deterministic.",
+      "relevance": "Foundational direct LEGO construction algorithm."
+    },
+    {
+      "title": "Legolization: Optimizing LEGO Designs",
+      "url": "https://www.cs.columbia.edu/~yonghao/siga15/luo-Legolization.pdf",
+      "source_type": "Peer-reviewed ACM TOG / SIGGRAPH Asia 2015 paper",
+      "publication_or_update_date": "2015-11",
+      "supported_claim": "Force-based stability gives an ordered strength metric and threshold and can guide iterative brick-layout refinement.",
+      "relevance": "Direct physical-stability objective beyond connectivity."
+    },
+    {
+      "title": "Budget-Aware Sequential Brick Assembly with Efficient Constraint Satisfaction",
+      "url": "https://arxiv.org/abs/2210.01021",
+      "source_type": "TMLR 2024 paper and author preprint",
+      "publication_or_update_date": "2024",
+      "supported_claim": "A learned score can be combined with deterministic convolution-based legality masks and brick-type budgets in sequential assembly.",
+      "relevance": "Direct evidence for hybrid learned objective plus hard constraints."
+    },
+    {
+      "title": "Brick-by-Brick: Combinatorial Construction with Deep Reinforcement Learning",
+      "url": "https://proceedings.neurips.cc/paper/2021/hash/2d4027d6df9c0256b8d4474ce88f8c88-Abstract.html",
+      "source_type": "Peer-reviewed NeurIPS 2021 paper",
+      "publication_or_update_date": "2021-12",
+      "supported_claim": "Sequential brick assembly has a variable, mostly invalid action space and benefits from learned validity filtering.",
+      "relevance": "Direct search/action-space evidence."
+    },
+    {
+      "title": "CP-SAT Solver",
+      "url": "https://developers.google.com/optimization/cp/cp_solver",
+      "source_type": "Official Google OR-Tools documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "CP-SAT is an actively documented open-source integer/Boolean constraint solver with programmatic APIs.",
+      "relevance": "Credible implementation candidate for a product prototype."
+    },
+    {
+      "title": "MiniZinc Handbook: Packing constraints",
+      "url": "https://docs.minizinc.dev/en/stable/lib-globals-packing.html",
+      "source_type": "Official MiniZinc documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "diffn_k and geost model k-dimensional non-overlap and bounded packing as global constraints.",
+      "relevance": "Solver-independent reference for packing formulation."
+    },
+    {
+      "title": "Assembly Planning by Subassembly Decomposition Using Blocking Reduction",
+      "url": "https://arxiv.org/abs/1907.03835",
+      "source_type": "Peer-reviewed robotics paper and author preprint",
+      "publication_or_update_date": "2019-07",
+      "supported_claim": "Disassembly interference graphs and subassembly decomposition expose obstruction and parallelizable assembly structure.",
+      "relevance": "Adjacent evidence for accessibility and subassembly planning."
+    }
+  ],
+  "contradicting_evidence": [
+    "The current validator already passes most sampled outputs, so replacing LLM placement with a legality-only solver may yield little or no perceived improvement.",
+    "BrickGPT achieves high validity and stability with autoregressive generation plus rejection/rollback rather than a global CP or MILP solver; constrained decoding may be simpler than full optimization.",
+    "Budget-Aware Sequential Brick Assembly relies on a learned score and voxel setting; its deterministic mask alone does not supply recognizable targets.",
+    "Exact global optimization can be slower and more brittle than heuristic or beam search when candidate domains are large and aesthetic objectives are nonlinear.",
+    "Physics solvers depend on uncertain material and clutch parameters and can give false confidence if the baseplate, friction, tolerances, or disturbances differ from deployment."
+  ],
+  "transfer_limits": [
+    "Voxel-to-brick papers receive explicit target geometry; language-to-LEGO must first decide what geometry and semantic exaggerations should exist.",
+    "BrickGPT uses eight one-layer brick types, a 20x20x20 grid, generated/converted data, and a baseplate. HackThe6ix has brick/plate height differences, exact colors, and different support semantics.",
+    "Budget-aware assembly predicts novel voxel structures rather than matching an arbitrary prompt and exact user inventory, so its learned scores cannot be reused directly.",
+    "General assembly planners reason about rigid parts, grasping, and continuous motion; human LEGO insertion has clutch, flex, occlusion, finger access, and sometimes temporary support.",
+    "OR-Tools and MiniZinc provide general primitives, not a ready LEGO formulation, semantic objective, or guarantee of acceptable solve time."
+  ],
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "brickgpt": "Official repository remains available with model/demo links. Gurobi is optional but recommended for physics; disabling it selects a simpler, less accurate connectivity method.",
+    "or_tools": "Official CP-SAT documentation and open-source APIs are current and suitable for integer/Boolean prototypes.",
+    "minizinc": "Current handbook exposes k-dimensional packing globals, enabling rapid model comparison across compatible solvers.",
+    "current_product": "The live Node.js pipeline has deterministic validators and cleanup but no solver dependency or incremental search."
+  },
+  "data_target_match": {
+    "brickgpt": "High on text-conditioned rectangular-brick generation, sequence length, and stability; low on exact part/color inventory and mixed layer heights.",
+    "constructable_sculptures": "High on occupancy packing, inventory/count constraints, and instructions; medium-low on small stylized semantic objects.",
+    "budget_aware_assembly": "High on finite brick budgets and legal next actions; low on user-prompt fidelity and exact catalog/color conditioning.",
+    "assembly_planning": "High on sequence/accessibility concepts; low on LEGO-specific human handling and clutch physics."
+  },
+  "source_quality_notes": "The main evidence consists of peer-reviewed direct LEGO/brick papers and first-party solver documentation. BrickGPT and BrickNet have author implementations, but full BrickGPT physics has a commercial Gurobi dependency. Older constructable-sculpture and Legolization work is foundational and uses larger mesh-derived sculptures. No source benchmarks the exact 17-shape, 100-piece, exact-color HackThe6ix task, so solver-family ranking remains a prototype decision.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Convert validateModel predicates into incremental functions that can test adding, moving, or removing one brick and return legal exposed attachment sites.",
+      "expected_gain": "Enables constrained decoding and local search before introducing a global solver."
+    },
+    {
+      "priority": 2,
+      "change": "Require the semantic planner to emit bounded feature envelopes, required/optional occupancy, anchors, symmetry/proportion constraints, color zones, part budgets, and relaxation priorities.",
+      "expected_gain": "Gives search a resemblance objective and finite domains."
+    },
+    {
+      "priority": 3,
+      "change": "Prototype CP-SAT on one subassembly at a time with pre-enumerated candidate placements. Use count variables for interchangeable part/color groups, no-overlap implications, support/connection clauses, symmetry breaking, and weighted soft target coverage.",
+      "expected_gain": "Tests exact inventory and placement feasibility without a monolithic 100-piece formulation."
+    },
+    {
+      "priority": 4,
+      "change": "Add an anytime beam or large-neighborhood repair layer over solver-valid states. Rank partial states by feature coverage, target occupancy/silhouette, color, structural margin, and remaining inventory feasibility.",
+      "expected_gain": "Produces useful candidates under latency limits and supports local repair."
+    },
+    {
+      "priority": 5,
+      "change": "Add cheap physical heuristics now: contact-stud count, center-of-mass projection over support polygon, articulation/weak-cut detection, and removal sensitivity; reserve stronger force analysis and physical builds for finalists.",
+      "expected_gain": "Separates legal support from handling robustness at manageable cost."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "CP-SAT compiler plus large-neighborhood search",
+      "strengths": "Exact hard constraints, proof of infeasibility for bounded models, weighted objectives, local re-solving, and open-source implementation.",
+      "weaknesses": "Requires strong candidate pruning; 3D non-overlap and connectivity formulations can become large.",
+      "dataset_needs": "No training data for legality, but semantic targets and preference-calibrated objective weights are needed.",
+      "failure_modes": "Timeouts, symmetric equivalent solutions, and legal but ugly optima."
+    },
+    {
+      "option": "Incremental constrained decoder with beam search",
+      "strengths": "Natural anytime behavior, direct reuse of a generative model, prefix validity, and local rollback.",
+      "weaknesses": "No global optimality and beam collapse when partial scoring is weak.",
+      "dataset_needs": "Legal build sequences and partial-state quality labels.",
+      "failure_modes": "Greedy early commitments and feature starvation late in the sequence."
+    },
+    {
+      "option": "MILP or nonlinear physical co-optimization",
+      "strengths": "Can combine layout, forces, and continuous stability margins.",
+      "weaknesses": "Complex formulations, commercial-solver risk, and harder latency control.",
+      "dataset_needs": "Calibrated physical parameters and physical validation data.",
+      "failure_modes": "False precision and unacceptable solve times."
+    },
+    {
+      "option": "Procedural family-specific builders",
+      "strengths": "Fast, robust, and high-quality for known object families.",
+      "weaknesses": "Limited open-world creativity and maintenance burden.",
+      "dataset_needs": "Curated templates, parameter ranges, and inventory substitution rules.",
+      "failure_modes": "Repetitive suggestions and poor handling of novel requests."
+    }
+  ],
+  "expected_signal": "Hard-constraint failures and AI repair calls should approach zero for solver-constructed candidates. With a valid semantic target, required-feature recall, silhouette agreement, and human preference should rise. Stability heuristics should correlate with expert weak-joint labels, and generated instruction prefixes should require fewer disassemblies. If only legality improves, the target/scorer rather than construction was limiting quality.",
+  "likely_ceiling": "Deterministic search saturates at the quality of its target, candidate parts, and objective. It cannot infer taste or semantic importance from legality constraints, and a limited catalog still bounds realizable curvature and connection directions. Approximate physical models and instruction planners also leave a digital-to-physical gap.",
+  "implementation_effort": "Incremental legality and exposed-site enumeration is medium effort. A bounded CP-SAT subassembly prototype is medium-high. Production multi-objective compilation, large-neighborhood repair, typed connections, physical calibration, and instruction planning are high effort. A full global force-layout optimization is very high effort and not justified before the semantic target is validated.",
+  "latency_token_cost": "Deterministic search adds CPU time but can reduce placement-model and repair tokens. Candidate enumeration and solver time grow with grid volume, part types, and weak anchors; subassemblies, symmetry breaking, warm starts, and time limits are essential. BrickGPT reports about 0.35 seconds per sub-200-brick stability analysis and 40.8 seconds median full generation with rollback, but these numbers do not transfer directly. An interactive policy should return an incumbent and score gap at fixed deadlines.",
+  "risks": [
+    "A legality solver may entrench the existing valid-but-bad objective.",
+    "Search domains may explode if the AI supplies loose or contradictory feature envelopes.",
+    "One scalar objective can hide important Pareto tradeoffs and produce brittle layouts.",
+    "Symmetry constraints can make exact inventory infeasible or suppress intentional asymmetry.",
+    "Physical heuristics can false-accept weak clutch or false-reject creative cantilevers.",
+    "Commercial Gurobi dependence can complicate deployment and reproducibility.",
+    "Instruction sequencing can be computationally harder than final layout and may require redesign, not just reordering.",
+    "Local search may change user-approved features unless constraints are locked."
+  ],
+  "dependencies": [
+    "A typed semantic target and quality score validated against human judgments.",
+    "A finite workspace and candidate placement generator per feature/subassembly.",
+    "Incremental validator APIs with explicit connector/contact information.",
+    "Reference builds and oracle targets for solver benchmarking.",
+    "Physical assumptions, baseplate policy, and expert labels for weak versus robust builds.",
+    "End-to-end telemetry for solver time, objective components, relaxations, and user outcomes."
+  ],
+  "sequencing": [
+    "Instrument current first-error and physical-failure gaps and define the semantic objective.",
+    "Refactor validation into incremental legal-action generation and run a constrained-decoding baseline.",
+    "Build a CP-SAT subassembly prototype on bounded symmetric objects with oracle targets.",
+    "Compare CP-SAT, beam search, and hybrid anytime frontiers under equal wall-clock budgets.",
+    "Add local large-neighborhood repair, feature locks, and explicit relaxation explanations.",
+    "Calibrate stability and assembly-sequence checks on physical builds before using them as product gates."
+  ],
+  "rollback_criteria": "Stop or narrow the solver effort if oracle-target experiments fail to improve human preference over direct placement, if more than 20% of feasible 40-piece cases lack an incumbent within the interactive deadline, or if solve time grows superlinearly without quality gains after decomposition. Revert a physical gate if expert-labeled false rejects exceed 10% or false accepts exceed 5%; keep it as a warning until recalibrated.",
+  "anti_recommendations": [
+    "Do not begin with a global 100-piece SAT/MILP model over an unbounded grid; first bound candidates through semantic envelopes and subassemblies.",
+    "Do not optimize only occupancy fill, compactness, connection count, or inventory utilization; each can reward generic masses.",
+    "Do not equate one-cell support with stability or final connectedness with assembly feasibility.",
+    "Do not add a commercial physics solver before cheap heuristics and physical ground truth show sufficient marginal value.",
+    "Do not discard failed solver states; log unsatisfied semantic constraints and relaxation order to diagnose plan quality."
+  ],
+  "selective_generation_policy": "Use hard gates for supported inventory, non-overlap, minimum connection, and ground contact. Run bounded search with a deadline and return only candidates above semantic and robustness thresholds. If infeasible, relax optional details in planner-specified order, then offer a simpler object or lower piece count. Abstain when required features conflict or no stable, buildable incumbent exists; never hide a semantic relaxation behind a generic 'valid' result.",
+  "smallest_discriminating_experiments": [
+    {
+      "experiment": "Oracle-target constructor comparison",
+      "design": "On 20 expert-authored semantic targets, compare direct LLM coordinates, incremental legal-action beam search, CP-SAT subassembly compilation, and a hybrid under equal wall-clock budgets.",
+      "diagnosis": "Tests whether deterministic placement adds quality when intent is held constant."
+    },
+    {
+      "experiment": "Objective ablation",
+      "design": "Add legality, then labeled occupancy, feature anchors, symmetry/proportion, color, and structural margin one at a time.",
+      "diagnosis": "Identifies which semantic target components prevent legal but generic optima."
+    },
+    {
+      "experiment": "Physical gap audit",
+      "design": "Expert-inspect and physically build 30 validator-valid models spanning contact count and overhangs; compare current support, cheap heuristics, and force analysis.",
+      "diagnosis": "Measures whether stronger physics is currently a meaningful ceiling."
+    },
+    {
+      "experiment": "Sequence feasibility audit",
+      "design": "Attempt to build 20 final models in generated step order and in an optimized disassembly-derived order.",
+      "diagnosis": "Separates final geometry from instruction-sequence failure."
+    }
+  ],
+  "variables_and_controls": "Fix target, inventory, part catalog, coordinate bounds, piece cap, render views, and wall-clock or node budget. Warm-start all applicable solvers from the same plan or LLM candidate. Use the same hard constraints and unaggregated objective components. Randomize method order for human evaluation and record solver seed, version, timeout, optimality gap, and every relaxed constraint.",
+  "dataset_and_slices": "Use 60 prompt-inventory targets with 20 expert-authored oracle targets. Slice by 10-20, 21-40, 41-70, and 71-100 pieces; symmetric versus asymmetric; broad base versus cantilever; dense versus negative-space silhouette; feature-rich versus simple; scarce inventory; mixed brick/plate height; and objects that need thin appendages. Exclude truly unsupported specialty mechanisms from the main solver comparison but retain them as abstention tests.",
+  "metrics_and_scoring": [
+    "Legality: exact counts, supported parts, collision, grid, rotation, connectedness, and ground contact.",
+    "Semantics: required-feature recall, weighted anchor error, labeled occupancy and multi-view silhouette, proportion, negative space, and color-zone agreement.",
+    "Search: time to first feasible, best score over time, nodes/actions, optimality gap or bound, infeasibility rate, and relaxation count.",
+    "Physical: contact area, support polygon margin, center-of-mass margin, weakest cut/articulation score, force-analysis stability, disturbance survival, and physical build outcome.",
+    "Assembly: valid/stable prefix curve, insertion/access failures, hidden placements, disassembly count, completion time, and human instruction errors.",
+    "Human quality: blinded recognizability, appeal, craftsmanship, and edit preference, with labels hidden."
+  ],
+  "sample_size_or_confidence_method": "Use paired comparisons on 60 cases and paired bootstrap 95% intervals by prompt-inventory unit. For physical builds, start with 30 stratified models and report Wilson intervals for binary completion/collapse outcomes. Expand slices whose intervals are too wide to distinguish a 10-point difference. Search-time curves should report medians, tails, and performance profiles rather than only means.",
+  "success_thresholds": [
+    "At least 95% deterministic legal completion for feasible oracle targets within the product deadline.",
+    "At least 10 percentage points absolute required-feature improvement or 15% relative silhouette improvement over direct placement.",
+    "At least 60% human preference over direct placement with a paired 95% interval above 50%.",
+    "At least 90% physical build completion with no collapse in the calibration sample before stability becomes a product claim.",
+    "At least 50% reduction in full-model AI repair calls and 50% fewer unrelated bricks changed in local repair."
+  ],
+  "decision_enabled": "If CP-SAT dominates beam search under the same target and deadline, invest in compiler coverage; if beam search has better anytime quality, use CP-SAT as a local feasibility/repair engine. If both improve legality but not semantics, prioritize the target and scorer. If oracle targets produce strong models but AI targets do not, the planner is the ceiling. If force analysis adds little beyond cheap heuristics on physical ground truth, defer it. If sequence optimization materially improves completion, make build order a design constraint rather than post-processing.",
+  "oracle_replacement_test": "A skilled designer provides a legal semantic target with feature envelopes and a reference final model but no placements to the solver. Compare: AI target plus solver, human target plus solver, human final model, and AI direct placement. The human-target-to-human-final gap estimates construction/search ceiling; the AI-target-to-human-target gap estimates planning/representation ceiling.",
+  "marginal_gain_curve": "Plot quality, feasibility, and solve time against candidate placements per feature, beam width, CP-SAT timeout, large-neighborhood iterations, subassembly size, and piece count. Report best-score-over-time and marginal quality per second. Stop expanding compute when human preference and semantic metrics plateau or proxy scores rise without physical/human gains.",
+  "validator_soundness_and_completeness": "Build an expert-labeled corpus of valid, illegal, weak, stable, and unassemblable models plus controlled mutations. Compare current occupancy rules, typed connection rules, cheap stability heuristics, nonlinear force analysis, and physical build outcomes. Report separate confusion matrices for final legality, static stability, handling robustness, and sequence feasibility; no single 'buildable' label should hide these distinctions.",
+  "semantic_validation_required": [
+    "The solved occupancy and silhouette realize required feature regions and preserve feature importance under relaxation.",
+    "Anchors, relative order, symmetry or intentional asymmetry, proportions, and negative spaces meet declared tolerances.",
+    "Color and part choices support recognizability and do not merely maximize inventory usage.",
+    "The final result remains accountable to the selected suggestion or direct request after deterministic substitutions.",
+    "A solver infeasibility or relaxation trace is surfaced when the exact request cannot be represented."
+  ],
+  "objective_vector_and_pareto_status": {
+    "hard_constraints": [
+      "part and color inventory",
+      "piece cap",
+      "grid and rotation",
+      "non-overlap",
+      "minimum typed connection",
+      "ground contact"
+    ],
+    "soft_objectives": [
+      "required and optional feature coverage",
+      "silhouette and labeled occupancy",
+      "anchor and proportion error",
+      "color composition",
+      "symmetry",
+      "structural margin",
+      "inventory expressiveness",
+      "piece count",
+      "assembly complexity",
+      "edit locality",
+      "latency"
+    ],
+    "pareto_status": "Maintain non-dominated feasible candidates rather than one opaque weighted sum. Product weights can select among the frontier, while the UI may prefer a simpler robust build over a marginally closer but fragile one."
+  },
+  "representation_efficiency": "A solver should not create a variable for every part at every grid cell by default. Pre-enumerate candidate placements at semantic anchors and exposed connection sites, represent interchangeable inventory as counts, share mirrored placements through symmetry orbits, and solve subassemblies locally. Constraint locality is strongest when occupancy, connection endpoints, feature membership, and subassembly scope are explicit; raw coordinates force repeated global checks.",
+  "physical_and_assembly_implications": "Use separate levels: occupancy legality; compatible typed connector endpoints and engaged-stud count; static equilibrium under gravity, normal, shear, clutch, and torque assumptions; robustness under small disturbances, removal sensitivity, and weak-cut analysis; and assembly feasibility with stable prefixes, insertion direction, hand clearance, visibility, graspability, temporary support, and reversibility. A final connected model can fail any later level.",
+  "feature_retention_and_edit_locality": "Attach every decision variable or candidate placement to semantic feature and subassembly IDs. Lock approved features, penalize moved anchors and changed unrelated bricks, and use large-neighborhood search around the violated feature or weak connection. Cleanup should remove the lowest-value replaceable placements, not the latest occurrences in serialization order.",
+  "failure_onset_and_propagation": "Log the first partial state where no legal continuation can satisfy remaining inventory and required features. Use forward checking to detect inventory or anchor starvation before the last bricks. Roll back to the smallest subassembly containing the failing constraint, preserve the incumbent and unaffected locks, and expand the neighborhood only when the local model proves infeasible.",
+  "real_world_build_validation": "For calibrated finalists, record whether a human can complete the model in generated order, build time, wrong orientation or part selection, forced disassembly, temporary support, substitutions, collapse, flex, weak connections, and digital-to-physical mismatch. Apply small standardized handling disturbances and compare outcomes with predicted stability margins. Robot-oriented reachability is optional and should not be conflated with human buildability.",
+  "uncertain": []
+}

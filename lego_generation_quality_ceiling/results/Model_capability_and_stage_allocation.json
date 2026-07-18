@@ -1,0 +1,352 @@
+{
+  "item_name": "Model capability and stage allocation",
+  "category": "Model behavior and inference allocation",
+  "scope": "Assesses capability classes needed for suggestion, structure planning, exact placement, semantic repair, and visual critique; verifies the current Google model IDs and relevant API features as of 2026-07-17; and defines stage-isolated model and test-time-compute experiments. It does not infer LEGO quality from general benchmark scores alone and does not treat a model swap as a substitute for missing representations, search, or evaluators.",
+  "relevance_to_current_system": "src/generation/modelConfig.js supports separate structure, placement, and repair models, while suggestionModel is resolved separately. The verified deployment uses gemini-3.1-flash-lite for suggestion and structure planning and gemini-3.5-flash for placement and repair. generationPrompts.js asks the placement model to simultaneously interpret the object, follow inventory and a prose structure plan, allocate parts, track 3D occupancy/support/connectivity, emit up to 100 brick records, and serialize long JSON. service.js generates one initial placement and invokes repair primarily for parse or deterministic legality failures. This existing stage separation makes model allocation A/B tests possible without an architectural rewrite, but the current logs lack semantic and visual outcome labels.",
+  "bottleneck_layer": "Model capability interacting with intent, representation, placement, verification, search, and evaluation.",
+  "ceiling_hypothesis": "The low-cost Flash-Lite model is adequate for broad idea expansion and simple schema filling but underpowered for inventory-grounded feasibility and long-horizon spatial planning, while 3.5 Flash has stronger relevant capability but remains limited on spatial benchmarks and is overloaded by raw one-shot coordinate placement. Stage-specific escalation and thinking/candidate allocation should yield measurable gains, but those gains will plateau unless the system adds checkable intermediate state and semantic/visual evaluators.",
+  "observed_project_evidence": [
+    {
+      "type": "direct observation",
+      "evidence": "Suggestion, structure, placement, and repair are separate calls and accept independent model IDs, so a single-stage swap can hold all other stages fixed."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The structure schema contains semantic features, budgets, and prose strategy but no coordinates, occupancy grid, connection graph, or constraint program."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "The placement schema contains a long array of exact brick records. The model must maintain inventory counts, non-overlap, support, connectivity, semantics, and serialization in one response."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "One initial placement candidate is generated. Repair is triggered by malformed JSON or validator errors, not low semantic or visual scores."
+    },
+    {
+      "type": "diagnostic project evidence",
+      "evidence": "Six of seven recent parseable placements passed deterministic validation, yet results remained mediocre. Model capability is therefore not well measured by legality alone."
+    },
+    {
+      "type": "direct observation",
+      "evidence": "Current request generation sets response schema and output limits but does not explicitly set thinking level, seed, candidate count above one, or a visual input for critique."
+    }
+  ],
+  "mechanisms": [
+    "Capability-stage mismatch: lightweight extraction/classification optimization does not imply strong discrete spatial planning, exact accounting, or feasibility judgment.",
+    "State-tracking overload: absolute coordinates require the model to remember all prior footprints and heights while emitting later bricks; a locally plausible token can violate a distant count or collision constraint.",
+    "Long-output exposure: the probability of at least one semantic, arithmetic, or spatial mistake grows with brick-array length even when JSON syntax is constrained.",
+    "Planning-to-placement mismatch: the plan is linguistic, so a stronger placement model still must invent an unrepresented geometric state rather than execute a checkable plan.",
+    "Repair objective mismatch: a capable repair model receives legality errors but no independent evidence that a handle vanished, a silhouette is weak, or color blocking is poor.",
+    "No visual loop: text-only placement cannot inspect how legal geometry renders, so multimodal critique capability is unused.",
+    "Test-time compute misallocation: expensive reasoning is not explicitly targeted at hard feasibility or placement cases, and only one candidate is sampled before validation.",
+    "Evaluator bottleneck: stronger candidates cannot be reliably selected when the only authoritative score is deterministic legality."
+  ],
+  "problem_a_impact": "Flash-Lite suggestion and planning may produce fluent but shallow feasibility reasoning, especially for negative space, side attachments, and silhouette approximation. A stronger feasibility/ranking pass could improve which opportunities are selected, but it cannot restore discarded suggestion reasoning or rank final visual quality without a persistent brief and evaluator.",
+  "problem_b_impact": "Direct requests stress exact composition because the model cannot choose an easier object. Stronger spatial/planning and repair capability may improve proportions, feature coverage, and long JSON consistency, particularly at 30-100 pieces, but raw coordinate generation and absent visual feedback are likely to cap marginal gains.",
+  "confirmed_facts": [
+    "Google lists gemini-3.1-flash-lite and gemini-3.5-flash as current model codes supporting structured outputs, function calling, multimodal input, and thinking as of 2026-07-17.",
+    "Google's release notes state that gemini-3.1-flash-lite became GA on 2026-05-07 and gemini-3.5-flash became GA on 2026-05-19.",
+    "Google positions 3.1 Flash-Lite for speed, cost efficiency, high volume, classification, extraction, and lightweight processing; 3.5 Flash is positioned for stronger agentic, coding, and long-horizon reasoning.",
+    "The Gemini 3.5 Flash model card reports only 33.6% normalized score on Blueprint-Bench 2 agentic spatial reasoning, below GPT-5.5 at 36.2% in the same self-reported comparison; this is evidence that frontier general models remain imperfect on an adjacent spatial task.",
+    "SpatialWorld reports that the strongest evaluated model achieved only 17.4% average task success on its interactive spatial benchmark, demonstrating continued difficulty with active spatial exploration and long-horizon planning across frontier systems.",
+    "3DSRBench reports that state-of-the-art multimodal models remain limited in 3D spatial reasoning.",
+    "JSONSchemaBench separates formal schema compliance from the model's semantic correctness and evaluates 10,000 real-world schemas across constrained-decoding systems.",
+    "BrickGPT improves brick-sequence generation with an efficient validity check and physics-aware rollback, showing that verification and representation can matter more than simply enlarging a general model."
+  ],
+  "plausible_inferences": [
+    "Inference: upgrading suggestion generation itself may increase eloquence more than feasibility; the stronger model should first be tested on explicit feasibility scoring and canonical-brief production.",
+    "Inference: 3.5 Flash at high thinking is a plausible low-rewrite improvement for structure and difficult placement, but its general spatial benchmark score predicts substantial residual failure.",
+    "Inference: a Pro-class model may improve plan completeness and local repair, yet could underperform a cheaper model plus verifier-guided search on easy or medium cases.",
+    "Inference: long JSON syntax failures should fall with native schema enforcement, while inventory/count/spatial mistakes may not, because schema constraints do not execute domain semantics.",
+    "Inference: visual critique should use a strong multimodal model on fixed multi-view renders, but the critic's score must be calibrated against humans to avoid rewarding color/name cues.",
+    "Inference: semantic repair will be more effective when given feature-specific failures and a locality contract than when asked to rewrite a full model."
+  ],
+  "unresolved_questions": [
+    "What are per-stage pass@1 curves for current models on the exact 17-shape inventories?",
+    "Does 3.1 Flash-Lite retrieve and use exact inventory counts as reliably as 3.5 Flash under the Backboard tool path?",
+    "How does thinking level affect geometry, not merely output length, for these model IDs?",
+    "Does gemini-3.1-pro-preview materially beat 3.5 Flash on exact placement after controlling prompt, seed, provider path, and schema mode?",
+    "At what piece count do semantic and spatial errors accelerate for each representation and model?",
+    "Can the same model accurately critique a render produced from its own placement, or is an independent critic needed?",
+    "How stable are fixed-seed outputs across provider infrastructure and model revisions in production?"
+  ],
+  "confidence": "High confidence in current model/API availability and broad capability positioning from first-party Google documentation. High confidence that broader spatial and tool-use benchmarks show residual limitations. Moderate confidence in stage-allocation recommendations because no public benchmark matches exact-inventory brick placement. Low confidence in any claim that one named model will be best without the proposed paired evaluation.",
+  "expected_impact": "Near-term stage allocation could deliver moderate improvement: better feasibility briefs, fewer omitted required features, improved placement consistency, and more useful local repairs. Native structured output can substantially reduce parse/schema repair overhead. Expected gains are lower for aesthetics unless candidates are rendered and ranked. The largest model-only gains should appear on medium-difficulty builds where the current model has non-trivial success but room to improve; very easy cases waste escalation and very hard cases may remain unsolved.",
+  "key_external_findings": [
+    {
+      "finding": "Google's model cards show a large capability spread between an efficiency model and a stronger Flash model, but even 3.5 Flash remains low on an adjacent agentic spatial benchmark.",
+      "application": "Use Flash-Lite for cheap breadth and routine formatting; allocate 3.5 Flash or Pro-class reasoning to feasibility, spatial planning, exact placement, and hard repair. Do not infer LEGO success from HLE, coding, or long-context scores."
+    },
+    {
+      "finding": "SpatialWorld, SpatialBench, and 3DSRBench find that frontier multimodal models remain weak on symbolic spatial reasoning, causal inference, planning, or interactive spatial tasks.",
+      "application": "Treat rendered visual critique and text-coordinate planning as measurable capabilities, not assumed general intelligence. The transfer is adjacent because these benchmarks do not manipulate studs, inventory, or brick sequences."
+    },
+    {
+      "finding": "JSONSchemaBench demonstrates that constrained decoding can guarantee or improve structural compliance across complex schemas, but schema compliance is a separate axis from value correctness.",
+      "application": "Use native structured outputs to remove syntax noise, then separately score inventory, geometry, features, and appearance."
+    },
+    {
+      "finding": "Test-time-compute research finds that optimal allocation depends on prompt difficulty; verifier/search strategies can outperform naive best-of-N and sometimes larger models, but gains diminish on the hardest problems.",
+      "application": "Measure candidates and repair passes against a domain evaluator and escalate adaptively rather than sending every stage to the largest model. Transfer is from math/code, where verifiers are stronger than current visual-quality scoring."
+    },
+    {
+      "finding": "BrickGPT uses a small domain-adapted model plus sequential brick representation and rollback to produce stable builds.",
+      "application": "A general-model swap should be benchmarked against representation and verifier improvements; domain structure can dominate scale."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "Gemini 3.5 Flash Model Card",
+      "url": "https://deepmind.google/models/model-cards/gemini-3-5-flash/",
+      "source_type": "First-party model card",
+      "publication_or_update_date": "2026-05-19",
+      "supported_claim": "Reports reasoning, coding, tool-use, multimodal, long-context, and Blueprint-Bench 2 spatial results, including 33.6% normalized spatial score.",
+      "relevance": "Current first-party capability evidence for the placement and repair model."
+    },
+    {
+      "title": "Gemini 3.1 Flash-Lite Model Card",
+      "url": "https://deepmind.google/models/model-cards/gemini-3-1-flash-lite/",
+      "source_type": "First-party model card",
+      "publication_or_update_date": "2026-03-03",
+      "supported_claim": "Defines the model as fast and cost-efficient for high-volume, latency-sensitive tasks and provides reasoning, multimodal, coding, and long-context results.",
+      "relevance": "Current first-party capability evidence for suggestion and structure planning."
+    },
+    {
+      "title": "Gemini API Release Notes",
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "source_type": "First-party API documentation",
+      "publication_or_update_date": "verified 2026-07-17",
+      "supported_claim": "gemini-3.1-flash-lite and gemini-3.5-flash are GA model IDs released in May 2026.",
+      "relevance": "Date-sensitive availability verification."
+    },
+    {
+      "title": "What's new in Gemini 3.5 Flash",
+      "url": "https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5",
+      "source_type": "First-party developer documentation",
+      "publication_or_update_date": "2026",
+      "supported_claim": "Documents minimal/low/medium/high thinking levels, medium default, thought preservation, structured outputs with tools, 1M input and 65K output, and current tool support.",
+      "relevance": "Defines controllable inference-allocation knobs for stage A/B tests."
+    },
+    {
+      "title": "SpatialWorld: Benchmarking Interactive Spatial Reasoning of Multimodal Agents",
+      "url": "https://spatial-world.github.io/",
+      "source_type": "Research project page with paper, code, and data",
+      "publication_or_update_date": "2026",
+      "supported_claim": "Strongest evaluated model achieved 17.4% average task success on interactive spatial tasks.",
+      "relevance": "Adjacent evidence that frontier multimodal agents still struggle with long-horizon spatial reasoning."
+    },
+    {
+      "title": "3DSRBench: A Comprehensive 3D Spatial Reasoning Benchmark",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/papers/Ma_3DSRBench_A_Comprehensive_3D_Spatial_Reasoning_Benchmark_ICCV_2025_paper.pdf",
+      "source_type": "Peer-reviewed ICCV 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Broad evaluations find continuing limitations in 3D spatial reasoning for state-of-the-art multimodal models.",
+      "relevance": "Adjacent capability evidence for spatial understanding and visual critique."
+    },
+    {
+      "title": "Generating Structured Outputs from Language Models: Benchmark and Studies",
+      "url": "https://arxiv.org/abs/2501.10868",
+      "source_type": "Research paper and JSONSchemaBench benchmark",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Evaluates six constrained-decoding systems on 10,000 real-world JSON schemas and the official JSON Schema Test Suite.",
+      "relevance": "Separates formal schema survival from domain-semantic correctness."
+    },
+    {
+      "title": "Scaling LLM Test-Time Compute Optimally Can be More Effective than Scaling Parameters for Reasoning",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/1b623663fd9b874366f3ce019fdfdd44-Abstract-Conference.html",
+      "source_type": "Peer-reviewed ICLR 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Optimal test-time strategy depends on difficulty; adaptive allocation improved efficiency over best-of-N and can outperform a much larger model on some tasks.",
+      "relevance": "Adjacent basis for adaptive thinking, candidate, and repair budgets."
+    },
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/papers/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.pdf",
+      "source_type": "Peer-reviewed ICCV 2025 paper",
+      "publication_or_update_date": "2025",
+      "supported_claim": "Domain-specific next-brick generation combined with validity checking and physics-aware rollback improves buildability.",
+      "relevance": "Direct brick evidence that model size is only one component of success."
+    }
+  ],
+  "contradicting_evidence": [
+    "Current 3.5 Flash placements often pass deterministic validation, so the model already performs substantial coordinate and count tracking; failure is concentrated in semantics and design quality rather than universal spatial incapacity.",
+    "Gemini 3.5 Flash's 33.6% Blueprint-Bench 2 score is competitive with or better than several other frontier models, so a stronger model can matter even if it does not solve the task.",
+    "BrickGPT shows that a 1B domain-adapted model can generate buildable brick sequences when paired with suitable data, representation, and rollback; general model scale is not necessary for all capability gains.",
+    "Test-time scaling can outperform larger models on some math/code tasks, but the hardest tasks showed little benefit; exact LEGO geometry may fall into that regime until a better verifier and representation exist.",
+    "Structured outputs can make JSON syntactically reliable even for smaller models, reducing one reason to allocate a costly model to repair; semantic correctness remains separate."
+  ],
+  "transfer_limits": "Blueprint-Bench reconstructs floor plans rather than composing interlocking bricks. SpatialWorld and 3DSRBench test perception and reasoning over scenes, not exact inventory allocation or long coordinate emission. JSONSchemaBench measures grammar/schema coverage, not whether values satisfy inventory, geometry, or aesthetics. Test-time-compute results are primarily math/code with objective verifiers; HackThe6ix currently lacks an equally sound semantic/visual verifier. BrickGPT's domain data, voxel grid, learned representation, and physics solver differ substantially. These benchmarks identify capability classes and likely saturation mechanisms, not a direct leaderboard for this product.",
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "gemini_3_1_flash_lite": {
+      "model_id": "gemini-3.1-flash-lite",
+      "status": "GA according to Gemini API release notes",
+      "input_output_limits": "1,048,576 input tokens and 65,536 output tokens",
+      "features": ["structured outputs", "function calling", "thinking", "multimodal input", "context caching"],
+      "positioning": "Low-cost, high-volume, latency-sensitive lightweight processing",
+      "published_text_price": "$0.25 input and $1.50 output per 1M tokens on the cited model card/developer guide"
+    },
+    "gemini_3_5_flash": {
+      "model_id": "gemini-3.5-flash",
+      "status": "GA according to Gemini API release notes",
+      "input_output_limits": "1M input tokens and up to 65K output tokens",
+      "features": ["structured outputs with tools", "function calling", "thinking levels minimal/low/medium/high", "multimodal input", "thought preservation", "Batch API"],
+      "positioning": "Stronger Flash model for agentic, coding, advanced reasoning, and long-horizon tasks",
+      "published_standard_price": "$1.50 input and $9.00 output per 1M tokens"
+    },
+    "gemini_3_1_pro_preview": {
+      "model_id": "gemini-3.1-pro-preview",
+      "status": "Preview in current Gemini API pricing/documentation",
+      "features": ["advanced reasoning", "multimodal input", "structured outputs", "function calling", "thinking"],
+      "published_standard_price": "$2 input and $12 output per 1M tokens for prompts <=200K; higher above 200K"
+    },
+    "api_note": "The current GenerateContent API supports responseSchema/responseJsonSchema, tools, thinking configuration, candidateCount, and an integer seed. Google recommends default sampling parameters for Gemini 3.x and using thinking_level rather than legacy thinking_budget."
+  },
+  "data_target_match": "No public model benchmark matches the exact part catalog, 85-piece inventory, counts, colors, connectivity definition, maximum 100-brick output, semantic features, or Three.js visual-quality target. Direct BrickGPT/BrickNet work matches brick assembly but not inventory or representation. The required deployment benchmark must therefore be built from exact fixtures and logs, stratified by piece count, topology, feature count, negative space, symmetry, and inventory scarcity.",
+  "source_quality_notes": "Google model cards and API docs are first-party and current, but benchmark tables are vendor-selected/self-reported and can conflict across marketing pages; availability claims use the API release notes and model pages. ICCV/ICLR/PMLR sources are peer-reviewed. SpatialWorld has public paper/code/data but its maturity and exact peer-review status should be checked before treating its number as canonical. JSONSchemaBench is a research benchmark, not provider certification. No source supplies a causal correlation coefficient between these benchmarks and exact-inventory brick design.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Build a stage-level evaluation harness before swapping defaults. Cache fixed upstream artifacts and compare only one stage at a time on exact inventories with fixed seeds, schemas, tools, and downstream evaluators."
+    },
+    {
+      "priority": 2,
+      "change": "Keep Flash-Lite for broad raw suggestion generation, but A/B 3.5 Flash medium and high for feasibility screening, canonical brief generation, and structure planning."
+    },
+    {
+      "priority": 3,
+      "change": "A/B placement on 3.5 Flash medium versus high and gemini-3.1-pro-preview high. Use native structured output and identical inventories. Measure semantics and geometry, not parse rate alone."
+    },
+    {
+      "priority": 4,
+      "change": "Add a strong multimodal critique pass over fixed multi-view renders for the top two placements. Require feature-by-feature evidence and calibrate against humans before it selects production outputs."
+    },
+    {
+      "priority": 5,
+      "change": "Change repair input from whole-build legality errors to localized feature and geometry deltas; test 3.5 Flash versus Pro only on cases where the critic/validator identifies a specific repairable region."
+    },
+    {
+      "priority": 6,
+      "change": "Use adaptive escalation: Flash-Lite or 3.5 low for easy stages, 3.5 medium by default, high or Pro only when confidence, feasibility, or first-pass score is below threshold."
+    },
+    {
+      "priority": 7,
+      "change": "Generate two to four placement candidates only after an evaluator achieves adequate human agreement; otherwise best-of-N adds cost without reliable selection."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "Stage-specialized all-LLM pipeline",
+      "model_policy": "Efficiency model for breadth and extraction; stronger reasoning model for brief/plan/placement/repair; multimodal model for critique.",
+      "strengths": "Minimal representation rewrite and flexible model routing.",
+      "weaknesses": "Long raw-coordinate state remains implicit; correlated failures and high cost.",
+      "dataset_needs": "Stage-specific exact-inventory benchmark and preference data.",
+      "failure_modes": "Benchmark overfitting, evaluator self-bias, model-version drift."
+    },
+    {
+      "option": "LLM semantic planner plus deterministic/search builder",
+      "model_policy": "Use strong reasoning only to formalize intent and constraints; algorithms handle placements; model performs semantic local repair.",
+      "strengths": "Reduces need for raw spatial memory and guarantees encoded constraints.",
+      "weaknesses": "Engineering-heavy and limited by solver objective/grammar expressivity.",
+      "dataset_needs": "Reference plans, feature grammars, solver heuristics, human designs.",
+      "failure_modes": "Feasible but unattractive search optima; missing construction techniques."
+    },
+    {
+      "option": "Domain-adapted graph/sequential brick generator with verifier-guided search",
+      "model_policy": "Fine-tuned brick model for placement, general model for language and visual critique.",
+      "strengths": "Matches direct brick research and makes connection state local.",
+      "weaknesses": "Highest data/training burden and domain gap from available public datasets.",
+      "dataset_needs": "Licensed LDraw sequences converted to the supported catalog, inventory-conditioned examples, stability and preference labels.",
+      "failure_modes": "Dataset bias, conversion errors, weak novel-object generalization."
+    }
+  ],
+  "expected_signal": "A genuine model-capability gain should improve a stage's oracle-scored output while all other artifacts remain fixed: better feasibility precision for suggestions, higher plan-to-brief feature recall for structure, higher legal-and-semantic pass@1 for placement, greater feature recovery with lower unrelated edit distance for repair, or higher human agreement for visual critique. Parse-only gains indicate structured decoding, not spatial intelligence.",
+  "likely_ceiling": "Model scaling saturates when the task state is absent or non-local, the only validator measures legality, candidates are not searched/ranked, or requested geometry is inexpressible. Schema enforcement cannot guarantee correct values. More thinking can repeat the same flawed representation; more candidates can remain homogeneous; a stronger critic can still reward superficial cues. Architecture and evaluator improvements are needed beyond the measured marginal gain.",
+  "implementation_effort": "Low-to-moderate for model and thinking-level routing because stage IDs already exist. Moderate for deterministic replay, seed control, cost accounting, and stage-oracle datasets. Moderate-to-high for calibrated multi-view critique and localized repair. High for a new intermediate representation, solver, or domain fine-tuning.",
+  "latency_token_cost": "Flash-Lite is materially cheaper than 3.5 Flash in published list pricing; 3.5 Flash output is $9/M versus $1.50/M for Flash-Lite, while Pro preview is $12/M for prompts <=200K. High thinking adds output/thinking tokens and time. Candidate count scales generation cost approximately linearly, while sequential repairs also re-input prior state. Use Batch API at 50% standard model cost for offline evaluations and adaptive escalation in production. Log actual Backboard billing separately because pass-through pricing may differ.",
+  "risks": [
+    "Vendor benchmark scores may not predict exact-inventory placement and may encourage unjustified model upgrades.",
+    "Preview Pro behavior, limits, prices, or model IDs can change; pin and log exact returned model versions.",
+    "Fixed seeds reduce but may not eliminate infrastructure nondeterminism; conclusions need repeated trials and intervals.",
+    "High thinking can increase latency and token spend without improving spatial state or may trigger more tool calls.",
+    "A critic using the same model family as the generator can share blind spots and select self-consistent errors.",
+    "Stronger full-model repair can improve a failed region while regressing correct regions unless locality is measured.",
+    "Best-of-N can amplify evaluator bias or superficial reward hacking."
+  ],
+  "dependencies": "Exact model/version logging; native schema and tool traces; fixed-seed support in the compared path; a stage artifact cache; deterministic validators; canonical feature IDs; fixed multi-view rendering; human reference ratings; token/cost telemetry; and a difficulty taxonomy based on piece count, features, topology, inventory scarcity, and negative space.",
+  "sequencing": [
+    "First, add outcome metrics and deterministic replay so stage comparisons are interpretable.",
+    "Second, test structured-output path separately from model swaps to isolate syntax effects.",
+    "Third, A/B suggestion feasibility and structure on Flash-Lite versus 3.5 Flash at matched prompts and seeds.",
+    "Fourth, A/B placement thinking levels and Pro-class escalation using fixed briefs/plans and strong downstream scoring.",
+    "Fifth, calibrate a multimodal critic against humans before enabling best-of-N selection or semantic repair.",
+    "Finally, plot marginal gain curves and route only difficult cases to expensive models; pursue representation/search redesign where curves plateau."
+  ],
+  "rollback_criteria": "Do not promote a stronger model or higher thinking level unless a paired benchmark shows at least +10 percentage points on the stage's primary semantic/spatial metric or +15 points in final human preference, with deterministic validity no worse by more than 2 points. Revert if median stage latency exceeds 2x or model cost exceeds 3x for less than 5 points of useful lift, or if localized repair changes more than 20% of unrelated bricks without higher final preference.",
+  "anti_recommendations": [
+    "Do not replace every stage with the most expensive model before stage isolation; capability needs differ and cheap breadth remains useful.",
+    "Do not use general coding, HLE, or long-context scores as proof of LEGO spatial quality; run the exact task benchmark.",
+    "Do not count schema-valid JSON as a successful placement; keep syntax, legality, semantics, and aesthetics separate.",
+    "Do not add best-of-N until the selector is validated against humans and ablated-feature decoys.",
+    "Do not spend high thinking on parse repair that native constrained output can eliminate.",
+    "Do not assume a Pro-class swap fixes discarded intent, missing occupancy state, or absent visual feedback."
+  ],
+  "selective_generation_policy": "Route simple low-feature, low-piece cases through 3.5 low/medium or Flash-Lite where validated. Escalate to 3.5 high when the feasibility score is marginal, the plan has three or more spatially separated required features, or the first placement fails semantic/geometry gates. Escalate to Pro preview only for benchmark-proven slices. Generate additional candidates only when critic confidence and selector agreement exceed threshold. Abstain or fall back to a simpler object when all candidates fail hard feasibility or required-feature coverage.",
+  "smallest_discriminating_experiments": [
+    {
+      "capability": "Suggestion feasibility and instruction following",
+      "experiment": "Replay identical inventories through Flash-Lite, 3.5 Flash medium, and 3.5 Flash high, then score factual inventory claims, prohibited-affordance rate, diversity, and skilled-human feasibility."
+    },
+    {
+      "capability": "Structure planning",
+      "experiment": "Feed the same canonical briefs and inventories to each model; use a human or formal-plan oracle to score feature completeness, budgets, contradictions, and feasibility without invoking placement."
+    },
+    {
+      "capability": "Exact placement",
+      "experiment": "Freeze high-quality briefs/plans and compare model/thinking arms on exact placements. Score schema, legality, inventory, feature anchors, silhouette, and human preference."
+    },
+    {
+      "capability": "Long structured output",
+      "experiment": "Cross piece-count buckets 10, 20, 40, 60, 80, and 100 with the same object grammar and inventory; compare native schema versus prompt-only JSON while holding model fixed."
+    },
+    {
+      "capability": "Semantic repair",
+      "experiment": "Inject one known feature deletion, color error, overlap, or disconnected region into otherwise correct fixtures. Compare full rewrite versus locality-constrained patch across models."
+    },
+    {
+      "capability": "Visual critique",
+      "experiment": "Show fixed multi-view renders plus feature briefs to candidate critics, including feature-ablated and color-cue decoys; measure ranking agreement with blinded skilled humans."
+    }
+  ],
+  "variables_and_controls": "Change only stage model, thinking level, native schema mode, candidate count, or repair strategy in each experiment. Fix upstream artifacts by caching exact JSON, exact inventory and digest, prompt text, tool definitions/results, response schema, target count, random seed, camera views, validator version, downstream model, and evaluator rubric. Randomize arm order and repeat each seed. Log requested model, provider-returned model/version, response ID, finish reason, and all token counts. Do not compare Backboard and native paths in the same experiment unless provider path is the intended changed variable.",
+  "dataset_and_slices": "Use 120 fixed cases: 40 simple (one to two features, <=20 pieces), 40 medium (three to four features, 21-40 pieces), and 40 hard (negative space, symmetry/asymmetry constraints, scarce inventory, or 41-100 pieces). Cross six recurring object families with unseen categories and adversarial inventories. Include valid human-authored placements, single-defect repair fixtures, and feature-ablated render decoys. Maintain separate suggestion, structure, placement, repair, and critique test sets to avoid tuning leakage.",
+  "metrics_and_scoring": [
+    "Suggestion: inventory-grounding precision, feasible-idea precision/recall, duplicate-family rate, and best-opportunity human score.",
+    "Structure: weighted brief-feature recall, contradiction count, budget error, and human/formal feasibility.",
+    "Placement: JSON/schema success, deterministic legal pass@1, inventory exactness, weighted anchor realization, silhouette/proportion metrics, connectedness, and human pairwise preference.",
+    "Repair: defect fixed rate, new-defect rate, required-feature preservation, unrelated-brick edit distance, and final preference.",
+    "Critique: pairwise ranking accuracy against human majority, calibration, feature-ablation sensitivity, view robustness, and self-generation bias.",
+    "Efficiency: median/P95 latency, time to first/final token, input/output/thinking tokens, tool rounds, dollar cost, retries, and success per dollar/second.",
+    "Scaling: pass@k and selected@k, not only oracle best-of-k, because selector quality determines usable gain."
+  ],
+  "sample_size_or_confidence_method": "Use at least 60 paired cases for an initial two-arm stage decision and the 120-case suite for multi-model comparisons. Run three fixed seeds per case when affordable. Report paired bootstrap 95% confidence intervals by case, McNemar intervals/tests for binary pass changes, and hierarchical bootstrap over prompt/inventory/seed for repeated measures. Correct or clearly label multiple model/thinking comparisons. Use sequential expansion only with predeclared futility and success bounds.",
+  "success_thresholds": [
+    "Suggestion/structure escalation: >=10-point lift in feasible precision or weighted feature recall at <=2x stage latency and <=3x stage cost.",
+    "Placement escalation: >=10-point lift in legal-and-semantic pass@1 or >=15-point human preference, not merely parse success.",
+    "Repair: >=70% injected-defect fix rate, <10% new-defect rate, and median unrelated-brick change <=10%.",
+    "Critique: >=75% agreement with human pairwise majority, positive sensitivity to every required-feature ablation, and <=5-point accuracy drop under camera rotation.",
+    "Adaptive routing: retain at least 95% of the best fixed-model quality while reducing median inference cost by >=30%."
+  ],
+  "decision_enabled": "These experiments decide whether to keep Flash-Lite for a stage, route to 3.5 Flash or Pro, increase thinking, add candidates, or prioritize a representation rewrite. If stronger models improve cached stage artifacts but not final builds, downstream representation/evaluation is dominant. If no model materially improves an oracle-fed placement, raw coordinate generation or inventory expressivity is the stronger bottleneck. If a human placement oracle produces much better results from the same brief, model/placement capability remains important.",
+  "oracle_replacement_test": "Replace each stage independently with a skilled-human or ground-truth artifact: human feasible suggestion menu, human canonical structure plan, human exact legal placement, human feature-specific repair, and human render ranking. Feed that oracle output through unchanged remaining stages. The delta to current output estimates the maximum contribution of that layer. Compare it with the best model upgrade delta; a large oracle gap but small model gap implies missing representation/training, while a small oracle gap means optimize elsewhere.",
+  "marginal_gain_curve": "For each difficulty slice, plot quality and cost over Flash-Lite/3.5/Pro, thinking minimal-low-medium-high, candidates k=1,2,4,8, and repair rounds 0,1,2,3. Report oracle pass@k and selected@k. Estimate incremental points per extra second and dollar. Saturation is reached when doubling compute yields <2 points on legal-and-semantic success or human preference, or when selector accuracy causes selected@k to flatten or decline.",
+  "validator_soundness_and_completeness": "Audit deterministic legality against expert/physical construction separately from semantic and visual evaluators. For model-allocation tests, use adversarial fixtures where schema-valid values violate inventory or features. Estimate human agreement and false accept/reject rates for the critic using balanced correct, subtly invalid, feature-ablated, proportion-distorted, and color-cue-only models. A model upgrade should not be credited for optimizing evaluator blind spots.",
+  "semantic_validation_required": "After schema and deterministic legality, independently validate object identity, all required feature anchors, relative positions, silhouette and proportions, symmetry constraints, color roles, allowed approximations, prompt/brief consistency, and regressions introduced by repair. Visual critique should provide evidence per view and abstain when features are occluded rather than inferring them from labels.",
+  "objective_vector_and_pareto_status": "Track legality, semantic fidelity, visual quality, creativity, stability, inventory expressiveness, feature preservation, edit locality, latency, tokens, and dollar cost separately. A model/compute arm is Pareto-dominated if another arm is no worse on all quality gates and cheaper/faster. Use product weights only after presenting the frontier; never trade away hard inventory legality or required feature coverage for a small visual score gain.",
+  "representation_efficiency": "Raw GeneratedModel JSON repeats identifiers, labels, colors, absolute positions, and feature text per brick, consuming many tokens while making overlap/support constraints non-local. Measure tokens per brick, tokens per realized required feature, error rate by sequence position, and reliable maximum piece count. Compare with layer maps or graph/subassembly deltas where support and adjacency are local. Stronger models may move the reliable-length threshold but do not change this asymptotic locality problem.",
+  "physical_and_assembly_implications": "Relevant model capabilities include exact count tracking, discrete rotation/footprint reasoning, local support, global connectivity, stable ground contact, symmetry, negative space, attachment accessibility, and prefix-valid construction. The current validator does not prove tipping stability or human instruction clarity. A placement model that wins digitally must still be checked for manual completion, temporary unsupported steps, and digital-to-physical mismatch.",
+  "feature_retention_and_edit_locality": "Measure required feature survival from brief through plan, first placement, cleanup, and repair with stable feature IDs. For each repair, report changed/removed/added bricks inside the target feature region and outside it. A stronger repair model is valuable only if it recovers failed anchors while freezing correct subassemblies; full-output similarity alone can hide semantic deletion or widespread needless change.",
+  "failure_onset_and_propagation": "Record the first failed stage and, within placement, the earliest brick/sequence position where inventory, collision, support, connectivity, or feature realization diverges. Later absolute coordinates may compound an early footprint error. Parse repair can preserve bad semantics; deterministic cleanup can delete a defining feature; full-model repair can spread changes globally. Roll back to the last artifact passing both hard constraints and feature checks, not merely the last parseable JSON.",
+  "real_world_build_validation": "For final model-allocation finalists, manually assemble at least 20 matched builds per arm across difficulty slices. Record completion, time, instruction ambiguity, temporary instability, substitutions, collapses/tipping, feature identification before label reveal, and builder edit count. A model should not be promoted solely on digital scores if physical completion or recognizability worsens.",
+  "uncertain": []
+}

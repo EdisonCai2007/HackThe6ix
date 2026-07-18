@@ -1,0 +1,353 @@
+{
+  "item_name": "Intermediate representations and connection semantics",
+  "category": "Representation and design language",
+  "scope": "Comparison of prose plus absolute brick coordinates with layered occupancy maps, voxel or stud grids, semantic feature and part graphs, typed connection graphs, subassemblies, symmetry and proportion constraints, shape grammars, procedural programs, and hybrids. The analysis covers the current 17-shape axis-aligned catalog and up to 100 pieces. It does not assume unrestricted LEGO elements, learn a new model, or claim that a representation alone supplies an aesthetic objective.",
+  "relevance_to_current_system": {
+    "design_plan": "src/generation/designPlan.js checks that required_features, part_usage_plan, fallback_priorities, and build_strategy exist, but does not type their internal semantics or require anchors, envelopes, relations, symmetry, proportions, or subassemblies.",
+    "placement_schema": "src/generation/generatedModelSchema.js makes the final representation a flat brick array. Each brick has an absolute x/y/z position, quarter-turn rotation, one free-text feature label, and a step number; there are no explicit inter-brick or inter-feature relations.",
+    "catalog": "src/generation/partCatalog.js stores part identity, rectangular width/depth, brick-or-plate height, and LDraw filename, but no connector sites, mating rules, collision mesh, strength proxy, or semantic affordance.",
+    "validator": "src/generation/validator.js expands parts into occupied rectangular cells and infers support and connectivity from adjacent occupied cells. This is appropriate as a conservative grid abstraction for the current rectangular studded parts, but it is not an explicit connector model and does not express clutch area, connection type, stability margin, or insertion feasibility.",
+    "pipeline_consequence": "The planning stage therefore cannot make downstream placement accountable to a persistent geometric design language; the exact-placement model must recover semantics, geometry, allocation, connection, ordering, and serialization in one flat sequence."
+  },
+  "bottleneck_layer": "Multiple layers: intent, representation, planning, placement, verification, and evaluation.",
+  "ceiling_hypothesis": "If the same model and inventory are given a typed hybrid target containing semantic feature nodes, integer envelopes and anchors, labeled layer occupancy, symmetry/proportion relations, subassembly boundaries, and explicit stud-connection edges, then deterministic compilation will improve paired feature fidelity and valid-prefix survival over prose-to-flat-coordinate emission. The hypothesis is weakened if the hybrid does not improve those metrics after token budget, model, candidate count, and validator are controlled.",
+  "observed_project_evidence": [
+    {
+      "fact": "The structure-plan validator checks presence and coarse types, not geometric or relational content.",
+      "source": "src/generation/designPlan.js"
+    },
+    {
+      "fact": "The generated model schema is a flat absolute-pose list with a passive feature string per brick.",
+      "source": "src/generation/generatedModelSchema.js"
+    },
+    {
+      "fact": "Part geometry is represented as axis-aligned width, depth, and category-derived height; identity is retained through part_id and ldraw_id.",
+      "source": "src/generation/partCatalog.js"
+    },
+    {
+      "fact": "Support is satisfied by at least one occupied cell immediately below a non-ground brick, and connectedness is computed from any vertical cell adjacency.",
+      "source": "src/generation/validator.js"
+    },
+    {
+      "fact": "No live representation encodes feature anchors, mirrored groups, ratios, labeled occupancy, connector endpoints, connection multiplicity, subassemblies, or a build dependency DAG.",
+      "source": "Inspection of all four listed live repository paths"
+    },
+    {
+      "interpretation": "Because most sampled outputs can be validator-valid yet weak designs, schema and occupancy legality are not the same as semantic or aesthetic preservation.",
+      "basis": "Verified project snapshot supplied with this research task"
+    }
+  ],
+  "mechanisms": [
+    "Semantic compression: prose such as 'high back, four legs, red accent' lacks integer anchors, envelopes, importance weights, and relations, so multiple incompatible geometries satisfy the same words.",
+    "Constraint non-locality: in a flat absolute coordinate sequence, a symmetry, proportion, inventory-count, or connection decision can depend on many distant bricks. Local token prediction receives no explicit variable tying them together.",
+    "Error accumulation: every emitted pose can invalidate later collision, support, and inventory choices. Long structured sequences multiply even small per-token or per-action error probabilities.",
+    "Passive features: a brick's feature string does not define a feature object, required coverage, anchor, or acceptance test, so repair can preserve labels while destroying the geometry they were meant to denote.",
+    "Occupancy-connection conflation: rectangular cell contact can establish a useful support proxy, but physically meaningful LEGO connection requires compatible connector families and sites, allowed relative transforms, and sometimes multiple contacts. The distinction becomes mandatory as soon as slopes, clips, bars, hinges, axles, side studs, or tiles enter the catalog.",
+    "Part-identity loss in voxel-only designs: a voxel target preserves volume and silhouette but not which inventory part, color, connector, or assembly order realizes it.",
+    "Premature coordinate commitment: exact poses are chosen before semantic alternatives and proportions have been compared, making later correction global and destructive.",
+    "Underconstrained procedures: a grammar or program can compactly express repeated structure and symmetry, but without a target score it can repeatedly produce legal, generic templates."
+  ],
+  "problem_a_impact": "Inventory-driven suggestions currently create inventory_reasoning but only prompt_metadata proceeds to construction. A persistent semantic/feasibility representation would carry forward the selected idea's feature graph, part/color budgets, coarse silhouette, symmetry, and fallback priorities. Without it, attractive linguistic ideas can be infeasible or reconstructed as generic masses, and there is no representation-level test of suggestion-to-build retention.",
+  "problem_b_impact": "For direct requests, free prose leaves proportions and feature placement implicit. A typed target can make approximation explicit: required versus optional features, feature anchors and tolerances, a bounded labeled occupancy envelope, color zones, and permissible simplifications. This should reduce nominal compliance such as labeling arbitrary bricks as handles or legs while giving the deterministic placer legal degrees of freedom.",
+  "confirmed_facts": [
+    "BrickNet directly compared graph-backed connection programs with naive absolute part pose serialization across 0.6B to 14B Qwen 3 models. Under nucleus sampling, graph-backed sequences averaged at least 94 successful connectivity/parse actions, while direct pose sequences did not reach 50.",
+    "BrickNet's connector ontology models stud, hinge, axle, ball, and fixed families with family-specific degrees of freedom and subtypes; it explicitly excludes some non-standard and illegal connections.",
+    "BrickNet also found that the graph representation did not solve collision survival: for the 14B nucleus-sampled model, mean successful collision-free steps were 19.1 for graph and 22.4 for pose. The paper calls long-sequence collisions an open problem.",
+    "BrickGPT serializes each axis-aligned brick as dimensions plus coordinates, reports 10 tokens per brick, and combines domain fine-tuning with per-brick validity rejection and physics-aware rollback. Its reported 250-prompt evaluation reached 100% validity and 98.8% stability, compared with 37.2% validity and 12.8% stability without rejection or rollback.",
+    "Automatic Generation of Constructable Brick Sculptures begins from voxelization, merges voxels into legal larger bricks, repairs structural weaknesses, honors limits on brick sizes and colors, and emits instructions, demonstrating a deterministic geometry-to-parts pipeline.",
+    "ShapeAssembly represents cuboid parts through hierarchical attachment and symmetry programs, supporting the transfer claim that structure, repetition, and editability can be expressed more locally than raw meshes or flat poses."
+  ],
+  "plausible_inferences": [
+    "Inference: one-shot absolute coordinate emission is a major bottleneck in this project because its plan is weakly typed and its decoder lacks stepwise rejection; BrickNet provides direct sequence-survival evidence, while BrickGPT shows coordinates are not fundamentally unusable when training and inference controls are changed.",
+    "Inference: the best near-term representation is not a pure voxel grid or a pure connection graph, but a hybrid because HackThe6ix needs both recognizable labeled volume and exact inventory part identity.",
+    "Inference: explicit symmetry and proportion constraints should have high leverage for the current rectangular catalog because they improve global composition without requiring new part families.",
+    "Inference: a subassembly tree will improve repair locality by allowing rollback and regeneration at the smallest semantic unit rather than rewriting the entire flat model.",
+    "Inference: for the current catalog, a typed stud/tube edge can initially be derived from overlapping top/bottom stud cells, but the schema should preserve endpoint identity so it can later generalize beyond rectangular bricks."
+  ],
+  "unresolved_questions": [
+    "How many tokens per brick and how does parse/validity survival vary by brick index in the current Backboard/Gemini path?",
+    "Whether current structure plans consistently contain useful implicit anchors or ratios despite the validator not requiring them.",
+    "Whether a labeled layer map is easier for the current placement model than a feature graph, or whether the extra serialization burden offsets its locality benefit.",
+    "Which symmetry/proportion predicates correlate most strongly with human preference for the product's prompt distribution.",
+    "What false-positive and false-negative rates result from treating any rectangular stud overlap as a physically robust connection.",
+    "How much of BrickNet's gain comes from its representation versus its LEGO-specific pretraining data."
+  ],
+  "confidence": "High that the current representation omits critical semantic and relational state; high that graph-backed connections improve valid sequence survival in a direct LEGO benchmark; medium that the proposed hybrid is the best product representation until a paired ablation is run. External systems use different datasets, training, part vocabularies, and baseplate assumptions.",
+  "expected_impact": "High expected impact on feature retention, proportion, repair locality, and suggestion continuity; medium-high impact on legality when paired with deterministic compilation; low direct impact on aesthetics unless a quality objective and candidate scorer are added. Confidence is medium because no HackThe6ix representation ablation exists yet.",
+  "key_external_findings": [
+    {
+      "finding": "Relative typed connections dramatically improve connection/parse survival over raw poses, but collision reasoning remains separate.",
+      "application": "Use explicit stud connection endpoints and generate only realizable relative placements; retain an occupancy/collision checker rather than assuming the graph proves geometry."
+    },
+    {
+      "finding": "Long autoregressive formats have multiplicative survival risk. BrickNet notes that only 0.1% invalid next-token mass over 4096 tokens implies below 1.7% full-sequence validity.",
+      "application": "Shorten representations, constrain actions, validate prefixes, and stop treating schema parse success as sequence reliability."
+    },
+    {
+      "finding": "Coordinate serialization can succeed with compact tokens, in-domain training, rejection sampling, and rollback.",
+      "application": "Do not discard coordinates; move them to a deterministic compiled layer or a checked incremental decoder."
+    },
+    {
+      "finding": "Voxelization is effective for silhouette targets and deterministic part merging, while hierarchical part programs preserve semantic structure, symmetry, and editability.",
+      "application": "Combine labeled coarse occupancy with semantic nodes and a connection-aware part graph instead of choosing one representation for every pipeline layer."
+    },
+    {
+      "finding": "Better likelihood or larger models do not necessarily improve perceptual text alignment; BrickNet observed monotonic perplexity improvement but unclear perceptual ranking.",
+      "application": "Representation training and generation require independent semantic/design-quality evaluation, not only next-token loss or legality."
+    }
+  ],
+  "primary_sources": [
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/html/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.html",
+      "source_type": "Peer-reviewed CVPR 2026 paper",
+      "publication_or_update_date": "2026-06",
+      "supported_claim": "Direct pose generation loses connection validity rapidly; graph-backed typed connectivity extends valid sequence survival across model sizes while collision remains unresolved.",
+      "relevance": "Closest direct evidence for representation and connection semantics."
+    },
+    {
+      "title": "bricknet Python package",
+      "url": "https://pypi.org/project/bricknet/",
+      "source_type": "Author-released implementation package",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "The implementation exposes LDraw-to-graph conversion, connector data, graph-to-tree build orders, collision checking, and scoring.",
+      "relevance": "Current reproducibility evidence for the graph/tree representation."
+    },
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV 2025 Best Paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "Compact coordinate sequences can be made valid and stable using domain fine-tuning, brick-level rejection, physical analysis, and rollback.",
+      "relevance": "Strong counterexample to the claim that coordinates are intrinsically impossible."
+    },
+    {
+      "title": "BrickGPT official repository",
+      "url": "https://github.com/AvaLovelace1/BrickGPT",
+      "source_type": "Official open-source repository",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "Inference code and model access are public; Gurobi is optional but recommended, with a less accurate connectivity fallback.",
+      "relevance": "Current implementation and dependency status."
+    },
+    {
+      "title": "Automatic Generation of Constructable Brick Sculptures",
+      "url": "https://diglib.eg.org/items/82e2ee53-fa57-4929-ac81-85acd0d9f855",
+      "source_type": "Peer-reviewed Eurographics 2013 paper",
+      "publication_or_update_date": "2013",
+      "supported_claim": "A voxel target can be deterministically merged into legal inventory-bounded bricks, structurally repaired, and converted into instructions.",
+      "relevance": "Foundational direct LEGO compiler evidence."
+    },
+    {
+      "title": "ShapeAssembly: Learning to Generate Programs for 3D Shape Structure Synthesis",
+      "url": "https://arxiv.org/abs/2009.08026",
+      "source_type": "SIGGRAPH Asia 2020 paper and author preprint",
+      "publication_or_update_date": "2020-09",
+      "supported_claim": "Hierarchical cuboid programs can encode attachments and symmetry and remain editable.",
+      "relevance": "Adjacent evidence for semantic subassemblies, relations, and procedural compactness."
+    },
+    {
+      "title": "StructureNet: Hierarchical Graph Networks for 3D Shape Generation",
+      "url": "https://arxiv.org/abs/1908.00575",
+      "source_type": "ACM TOG 2019 paper and author preprint",
+      "publication_or_update_date": "2019-08",
+      "supported_claim": "Hierarchical part graphs jointly represent semantic parts, geometry, and relations for structured generation and editing.",
+      "relevance": "Adjacent evidence for feature hierarchy and order-invariant part relations."
+    }
+  ],
+  "contradicting_evidence": [
+    "BrickGPT shows raw dimension-plus-coordinate sequences are viable when the model is fine-tuned on 47,000-plus structures and inference rejects bad next bricks and rolls back instability; therefore the bottleneck is the combination of representation, model/data, and decoding, not coordinates alone.",
+    "BrickNet's graph form improved connectivity/parse survival but did not consistently improve collision-free survival and still struggled with long sequences, so typed edges are not a substitute for collision geometry or constrained decoding.",
+    "The current HackThe6ix catalog contains only conventional axis-aligned rectangular bricks and plates, so a full five-family BrickNet connector ontology would be premature overhead today.",
+    "Voxel and occupancy representations can preserve silhouette efficiently for rectangular sculpture, but by themselves erase part identity, color allocation, connection multiplicity, and edit semantics.",
+    "Procedural grammars improve compression for repeated forms but can impose template bias and underrepresent novel asymmetric requests."
+  ],
+  "transfer_limits": [
+    "BrickNet is trained on broad human-authored LDraw data with thousands of part types and is not conditioned on exact user inventory; its paper explicitly leaves specified-part-set conditioning to future work.",
+    "BrickGPT uses eight 1-layer axis-aligned brick types on a 20x20x20 grid, stable synthetic/converted training data, and a baseplate assumption; HackThe6ix has plates and bricks at different layer heights, exact color inventories, and no current physics solver.",
+    "ShapeAssembly and StructureNet target category-level cuboid geometry, not LEGO clutch, discrete inventory counts, or build order.",
+    "Voxel-to-brick conversion begins from a target mesh or voxel sculpture; HackThe6ix must infer the target from language and may need stylized semantic exaggeration rather than pure geometric reconstruction.",
+    "Connection validity is not physical stability: typed mating does not establish center-of-mass margin, clutch force, handling strength, or human insertion access."
+  ],
+  "capability_snapshot": {
+    "verification_date": "2026-07-17",
+    "bricknet": "CVPR 2026 paper, PyPI package, models link, connector data, tree codec, collision kernel, and score module are publicly exposed; dataset access is linked through the project/package page.",
+    "brickgpt": "ICCV 2025 paper, official GitHub repository, model weights, demo, and inference package are public. Full physics analysis recommends Gurobi; a less accurate connection-only mode is available.",
+    "current_product": "Project snapshot routes suggestion and structure to gemini-3.1-flash-lite and placement/repair to gemini-3.5-flash through Backboard. The live representation is prompt-embedded JSON schema plus tools, not a provider-native typed graph or deterministic compiler."
+  },
+  "data_target_match": {
+    "bricknet": "High match on LDraw identity and connection semantics; low match on exact inventory conditioning and the 17-shape restricted catalog; human-authored data reduces synthetic-only gap but includes collisions that required cleanup during path sampling.",
+    "brickgpt": "High match on text-to-rectangular-brick sequence and stability; medium match on piece counts; low match on mixed brick/plate heights, exact part/color inventory, and human MOC style because source shapes are voxel-like and color is post-assigned.",
+    "shape_program_work": "Medium match on semantic parts, symmetry, and cuboid envelopes; low match on physical LEGO identity and inventory.",
+    "constructable_sculpture_work": "High match on rectangular occupancy-to-legal-part conversion and inventory limits; medium-low match on small stylized object semantics."
+  },
+  "source_quality_notes": "BrickNet and BrickGPT are recent peer-reviewed primary sources with author-released code; BrickNet is the closest representation ablation and BrickGPT is the strongest counterexample. Automatic Generation of Constructable Brick Sculptures is peer-reviewed but foundational and older. ShapeAssembly and StructureNet are strong adjacent-domain sources. Reported metrics are not directly comparable across datasets, and neither recent LEGO system evaluates the exact HackThe6ix inventory-conditioned product task.",
+  "near_term_recommendations": [
+    {
+      "priority": 1,
+      "change": "Version the structure plan into a typed design brief: semantic feature nodes with importance, integer anchor ranges, target envelopes, color zones, minimum brick coverage, fallback behavior, and explicit relations such as above, centered_on, attached_to, aligned_with, and mirror_of.",
+      "reason": "Adds accountability and testable geometry without replacing the final schema."
+    },
+    {
+      "priority": 2,
+      "change": "Add subassemblies and a construction dependency DAG. Each brick or planned region belongs to one subassembly, and every repair reports which subassembly and locked features may change.",
+      "reason": "Creates local rollback boundaries and feature-preserving edits."
+    },
+    {
+      "priority": 3,
+      "change": "Prototype a labeled layer-map field for coarse target occupancy at modest resolution. Mark cells required, preferred, optional, or empty and associate them with semantic features; do not ask the model to tile exact bricks yet.",
+      "reason": "Separates silhouette/proportion planning from part packing while keeping token cost bounded."
+    },
+    {
+      "priority": 4,
+      "change": "Derive an explicit connection graph after placement: parent brick, child brick, connector family, contact cells, stud-overlap count, and allowed transform. Fail closed when an edge cannot be realized.",
+      "reason": "Makes support, connectedness, and future specialty-part extension inspectable."
+    },
+    {
+      "priority": 5,
+      "change": "Instrument tokens per representation unit, parse survival, first invalid action, feature anchor error, symmetry deviation, and edit locality before committing to a new decoder.",
+      "reason": "Provides a discriminating representation benchmark."
+    }
+  ],
+  "longer_term_architecture_options": [
+    {
+      "option": "Hybrid semantic-occupancy-connection compiler",
+      "strengths": "Preserves intent, supports deterministic inventory packing, localizes constraints, and keeps final part identity and LDraw export.",
+      "weaknesses": "Requires a compiler, target scorer, connector annotations, and plan-to-occupancy data or exemplars.",
+      "dataset_needs": "Paired prompts, typed feature graphs, coarse labeled occupancy, accepted brick models, and human repair traces.",
+      "failure_modes": "The AI can author an internally consistent but aesthetically poor target; the solver can overfit occupancy and produce noisy part layouts."
+    },
+    {
+      "option": "Connection-tree autoregressive decoder inspired by BrickNet",
+      "strengths": "High valid-prefix survival and natural incremental build order.",
+      "weaknesses": "Needs LEGO-specific training and still requires collision, inventory, and semantic scoring.",
+      "dataset_needs": "Connector-annotated build trees conditioned on restricted inventories.",
+      "failure_modes": "Rare connector errors, collisions, and weak prompt alignment over long sequences."
+    },
+    {
+      "option": "Procedural shape grammar with deterministic realization",
+      "strengths": "Very compact for symmetric and repeated object families; parameters expose proportions and edits.",
+      "weaknesses": "Grammar authoring and coverage are expensive and can make suggestions repetitive.",
+      "dataset_needs": "Family-specific programs and human-designed parameter ranges.",
+      "failure_modes": "Template bias and poor open-world coverage."
+    },
+    {
+      "option": "Labeled voxel/stud target plus packing",
+      "strengths": "Simple geometry objective and direct compatibility with rectangular parts.",
+      "weaknesses": "Weak part semantics and potentially high token or memory cost.",
+      "dataset_needs": "Prompt-to-labeled-voxel targets and reference tilings.",
+      "failure_modes": "Blocky but semantically shallow builds and loss of negative-space intent."
+    }
+  ],
+  "expected_signal": "A successful hybrid should increase required-feature pass rate, multi-view silhouette agreement, suggestion-to-build feature retention, valid-prefix area under the curve, and human pairwise preference while reducing anchor error and bricks changed per local repair. Graph-only gains without semantic gains would indicate that legality, not representation of intent, was improved.",
+  "likely_ceiling": "A representation cannot choose a compelling idea, define taste, or distinguish two legal realizations unless supplied with a calibrated semantic/design-quality objective. It will also saturate under the 17-shape catalog for features that require curves, lateral connections, hinges, or transparent panels, and under weak model/data support for the new language.",
+  "implementation_effort": "Near-term typed-plan and derived-connection instrumentation is medium effort. A labeled occupancy prototype is medium-high. A production hybrid compiler, connector ontology, training data, and visual evaluator are high effort. The current rectangular catalog makes the first connector implementation materially simpler than a full LDraw-wide system.",
+  "latency_token_cost": "Typed semantic relations add modest planning tokens but may reduce downstream retries. Dense occupancy can be expensive if serialized cell by cell; use run-length encoding, rectangles, layer spans, or sparse labeled cells. A deterministic compiler adds CPU time but no model tokens. Connection-tree decoding can reduce pose dimensionality but still needs collision checks. Measure end-to-end cost because representation compactness does not guarantee fewer retries.",
+  "risks": [
+    "Overengineering a universal connector ontology before the catalog expands.",
+    "Token bloat from dense grids or verbose graph JSON.",
+    "Conflicting plan constraints that make the compiler infeasible.",
+    "Metric gaming through labels that claim feature coverage without recognizable geometry.",
+    "Solver layouts that maximize occupancy similarity but look overpacked or monotonous.",
+    "Training distribution mismatch from unrestricted LDraw models.",
+    "Repair that respects graph validity but breaks color composition or user-approved details."
+  ],
+  "dependencies": [
+    "A benchmark of prompts, exact inventories, and human-scored reference builds.",
+    "A canonical coordinate convention for feature envelopes, anchors, symmetry planes, and layer maps.",
+    "Part connector annotations and tests for current parts, even if initially generated procedurally.",
+    "Semantic and visual scoring independent of the generation model.",
+    "Telemetry that links plan, final model, validator result, render, human rating, and edits."
+  ],
+  "sequencing": [
+    "First measure current token cost and prefix/feature survival and add typed anchors, relations, symmetry, and subassemblies to the plan.",
+    "Then compare prose-only, typed semantic graph, sparse labeled layer map, and hybrid plans while retaining the current placement model.",
+    "Next build a deterministic compiler for a bounded subset of symmetric rectangular objects and compare with direct placement.",
+    "After the compiler has a quality target, add explicit connector endpoints, stepwise search, and physical/build-sequence checks.",
+    "Only then evaluate fine-tuning a connection-tree or program decoder on curated restricted-inventory data."
+  ],
+  "rollback_criteria": "Deprioritize a representation if, in a paired 60-prompt study, it increases planning plus placement tokens by more than 50% or median latency by more than 30% without at least a 10-point absolute required-feature gain or a statistically credible human preference gain, or if compiler infeasibility exceeds 10% on feasible oracle targets. Roll back dense grids specifically if sparse typed plans match their quality within 2 points.",
+  "anti_recommendations": [
+    "Do not replace raw coordinates with a pure voxel array and declare the problem solved; first show that part identity, color, connection, and negative-space semantics survive conversion.",
+    "Do not copy BrickNet's five-family ontology wholesale while the catalog only has standard rectangular studded elements; add ontology breadth when catalog tests require it.",
+    "Do not train on unrestricted LDraw sequences before measuring part-set and inventory-conditioning mismatch.",
+    "Do not add more prose fields without machine-checkable anchors, relations, and acceptance tests.",
+    "Do not optimize parser validity or next-token perplexity as the primary quality metric; BrickNet shows likelihood and perceptual quality can diverge."
+  ],
+  "selective_generation_policy": "Reject plans with contradictory anchors, impossible envelopes, or inventory budgets before placement. If the hybrid compiler cannot satisfy all required features, relax only explicitly ranked optional constraints. If no candidate clears legality and semantic thresholds, offer a simpler silhouette or a user-approved omission list instead of returning a technically valid but misleading build.",
+  "smallest_discriminating_experiments": [
+    {
+      "experiment": "Representation ablation",
+      "design": "For the same 60 prompt-inventory pairs, generate plans as prose-only, typed feature graph, sparse labeled layer map, and hybrid; use the same placement model and one candidate.",
+      "tests": "Required-feature realization, anchor error, silhouette score, legality, tokens, latency, and human pairwise preference."
+    },
+    {
+      "experiment": "Oracle compiler test",
+      "design": "Have a skilled designer create hybrid targets for 20 objects, then compare deterministic realization against the current model's direct coordinates.",
+      "tests": "Estimates the placement layer's headroom separately from semantic planning."
+    },
+    {
+      "experiment": "Connection semantics test",
+      "design": "Compare current occupancy support, explicit derived stud-edge validation, and expert physical inspection on 100 generated or mutated models.",
+      "tests": "Validator false accepts/rejects and whether edge multiplicity predicts weak structures."
+    },
+    {
+      "experiment": "Sequence survival test",
+      "design": "Replay or regenerate 100 outputs and record parse, inventory, collision, connection, and semantic-feature survival after every brick.",
+      "tests": "First failure distribution and whether subassembly order delays irreversible errors."
+    }
+  ],
+  "variables_and_controls": "Change only representation in the primary ablation. Fix model IDs, prompts, exact inventories, target piece counts, maximum output tokens, candidate count, temperature or provider defaults, validation code, render views, and seed where exposed. Randomize representation order, blind human raters, and reuse the same canonical feature rubric. In compiler tests, distinguish plan feasibility from compiler success.",
+  "dataset_and_slices": "Use at least 60 paired cases split evenly between inventory-driven selections and direct requests. Stratify by symmetry, thin appendages, holes/negative space, stacked mass, color-critical features, 10-20 versus 21-40 versus 41-100 pieces, scarce long plates, and inventories with misleading colors. Include manual high-quality rectangular-part references, current weak runtime examples, and impossible-feature exclusions.",
+  "metrics_and_scoring": [
+    "Automatic: schema parse, legal placement, exact inventory, valid-prefix area under curve, sparse occupancy IoU, multi-view silhouette IoU, anchor distance, symmetry deviation, proportion error, color-zone agreement, and connection-edge coverage.",
+    "Semantic: per-feature present/recognizable/placed-correctly rubric with required-feature recall and weighted minimum rather than only average.",
+    "Human: blinded pairwise recognizability, appeal, craftsmanship, and edit preference; include an 'equally bad' option.",
+    "Efficiency: tokens per plan unit and per final brick, latency, solver time, retries, and bricks changed per repair.",
+    "Gaming controls: remove labels from renders, score from multiple views, include adversarial label swaps, and audit high-scoring low-preference cases."
+  ],
+  "sample_size_or_confidence_method": "Use 60 paired cases for an early architecture decision and paired bootstrap 95% intervals over prompt-inventory units. Require inter-rater agreement reporting and repeat ambiguous cases. Use sequential expansion to 120 if the interval for human preference crosses a 5-point practical-effect boundary.",
+  "success_thresholds": [
+    "At least 10 percentage points absolute improvement in required-feature pass rate over prose-only.",
+    "At least 15% relative reduction in median anchor/proportion error.",
+    "At least 60% blinded human preference for the hybrid over the baseline, excluding ties, with a 95% interval above 50%.",
+    "No more than 2 percentage points lower deterministic legality and no more than 30% median latency increase for the near-term plan-only change.",
+    "At least 50% fewer unaffected bricks changed during targeted repair."
+  ],
+  "decision_enabled": "If typed semantic plans improve features without dense grids, implement them first. If layer maps add independent silhouette gains, retain the hybrid. If only oracle-authored targets help, the bottleneck is plan generation or examples rather than compilation. If graph edges improve validity but not preference, keep them as verification infrastructure rather than the primary generative language. If no representation helps even with an oracle plan, prioritize catalog expressivity, scorer quality, or model capability.",
+  "oracle_replacement_test": "A skilled LEGO designer authors only the hybrid target—not final bricks—for each benchmark item. The deterministic compiler and current placement model separately attempt realization. A second oracle supplies the final legal model for the same target. The gaps between AI-plan, human-plan, compiler, and human-final scores isolate intent representation, placement, and catalog ceilings.",
+  "marginal_gain_curve": "Measure quality and survival as semantic node count, occupancy resolution, relation count, subassembly depth, and sequence length increase. Plot human preference and feature recall against tokens and latency. Also compare 10, 20, 40, 70, and 100 bricks to identify where flat coordinates degrade and where the hybrid saturates.",
+  "validator_soundness_and_completeness": "Create expert-labeled mutations covering weak single-stud joints, interlocking overlaps, floating cells, disconnected but touching geometry, illegal relative transforms, and sturdy multi-stud bonds. Compare occupancy validator, typed-edge validator, and physical builds. Report false accepts and false rejects separately for legality, connection, and robustness.",
+  "semantic_validation_required": [
+    "Every required feature maps to a nonempty geometric region and is recognizable without reading feature labels.",
+    "Feature anchors, relative ordering, symmetry or intentional asymmetry, and proportion tolerances are satisfied.",
+    "The final model matches the selected suggestion's carried design brief and fallback decisions.",
+    "Color zones and negative spaces support recognition rather than merely using allowed colors.",
+    "Subassemblies remain visually and structurally coherent after deterministic packing or repair.",
+    "Unsupported requested features are explicitly approximated or omitted, not falsely claimed."
+  ],
+  "objective_vector_and_pareto_status": {
+    "objectives": [
+      "deterministic legality",
+      "typed connection validity",
+      "required-feature fidelity",
+      "multi-view silhouette and proportion",
+      "color composition",
+      "structural margin",
+      "inventory feasibility and expressive use",
+      "piece count",
+      "instruction complexity",
+      "edit locality",
+      "latency and token cost"
+    ],
+    "tradeoffs": "Dense feature coverage can conflict with simplicity and strength; exact occupancy can conflict with clean part rhythm; symmetry can conflict with scarce inventory; more connections can conflict with easy assembly.",
+    "pareto_status": "Use hard gates for inventory, collision, and minimum connection legality, then maintain a Pareto set over semantic quality, design quality, robustness, and cost. Do not collapse all objectives until product weights are learned from paired user choices."
+  },
+  "representation_efficiency": "BrickGPT reports exactly 10 tokens per brick in its compact dimension-plus-coordinate format. BrickNet caps training at 4096 tokens and demonstrates multiplicative sequence-survival risk; its graph-backed representation more than doubles connection/parse survival versus direct poses in several settings. [uncertain] The current verbose HackThe6ix JSON tokens per brick and maximum reliable brick count have not been measured. Constraint locality is lowest in the flat coordinate list, higher in semantic/subassembly graphs, high for sparse occupancy collision checks, and highest for typed local connector actions; dense full grids can be token-inefficient despite local constraints.",
+  "physical_and_assembly_implications": "Represent each physical connection as typed endpoints: part instance and connector-site identifiers, family/subtype, parent and child, allowed relative transform, engaged-site count, and optional strength proxy. Keep collision occupancy separate. Add a subassembly/build DAG whose every prefix is inventory-valid, collision-free, connected or intentionally staged, stable under the chosen model, and accessible along an insertion direction. A rectangular occupancy cell below a brick is support evidence, not proof of adequate clutch, static equilibrium, handling robustness, visibility, reachability, or reversibility.",
+  "feature_retention_and_edit_locality": "Features should be first-class nodes with immutable IDs, importance, geometry membership, anchor tolerance, and locked status. Bricks reference feature IDs rather than unconstrained labels. Repairs operate on the smallest violating feature or subassembly and report preserved, moved, replaced, or lost features plus the spatial edit radius and number of unrelated bricks changed.",
+  "failure_onset_and_propagation": "Record the first action where parsing, inventory, collision, typed connection, stability, or semantic constraints fail. In flat pose generation, a misplaced early support or body brick changes the legal space for every later placement. In the hybrid, roll back to the latest valid subassembly boundary or the earliest constraint dependency, freeze unaffected feature nodes, re-solve the local envelope, and expand rollback only when infeasible.",
+  "real_world_build_validation": "For finalists, have builders follow generated subassembly instructions without seeing the target render first. Measure completion rate, time, wrong-part/orientation events, forced disassembly, substitutions, collapses, flex or weak-joint reports, and whether the physical silhouette matches the digital multi-view render. The current digital validator cannot establish these outcomes.",
+  "uncertain": [
+    "representation_efficiency"
+  ]
+}

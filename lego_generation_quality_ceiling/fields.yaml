@@ -226,10 +226,3 @@ field_categories:
         description: Human or robot completion rate, build time, instruction errors, substitutions, collapses, and digital-to-physical mismatch where applicable.
         detail_level: moderate
         required: false
-
-  - category: Reserved
-    fields:
-      - name: uncertain
-        description: Reserved array containing every field name whose value is marked uncertain.
-        detail_level: brief
-        required: true

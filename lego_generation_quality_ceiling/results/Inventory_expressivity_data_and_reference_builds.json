@@ -1,0 +1,282 @@
+{
+  "item_name": "Inventory expressivity data and reference builds",
+  "category": "Catalog ceiling and learning resources",
+  "scope": "Controlled measurement of the achievable quality of the current 17 rectangular brick and plate shapes under exact part, color, quantity, and piece-cap constraints. It compares AI outputs with skilled manual and deterministic same-inventory references, estimates marginal gains from isolated new shape families, and evaluates LEGO/LDraw datasets, exemplars, retrieval, synthetic data, licensing, identity mapping, leakage, and deployment mismatch. It excludes treating unrestricted catalog expansion as proof that the current catalog is exhausted.",
+  "relevance_to_current_system": "partCatalog.js defines exactly 17 supported axis-aligned shapes: nine bricks and eight plates, with only quarter-turn rotation and heights of three or one plate layers. randomBuildInventory.js currently contains 85 pieces across 21 part/color combinations and nine colors, all mapped through part_id, ldraw_id, and rebrickable_part_num. carModel.js supplies deterministic 72- and 70-piece cars with explicit wheels, windows, windshield, roof, and spoiler features; daisyModel.js supplies a deterministic 50-piece low-relief flower with stem, leaves, petals, and center. These are immediate evidence that the existing catalog can support stronger composition than a naive stack and can anchor same-inventory comparisons.",
+  "bottleneck_layer": "inventory, data, representation, planning, and placement",
+  "ceiling_hypothesis": "If skilled humans or deterministic builders substantially outperform the current AI on the identical 17-shape inventories and caps, then catalog expressivity is not the dominant current ceiling. If the gap closes and isolated shape-family additions yield large further gains, then inventory expressivity becomes the next limiting factor.",
+  "observed_project_evidence": [
+    "Direct observation: SUPPORTED_PARTS contains 17 rectangular footprints; there are no slopes, wedges, curves, round pieces, tiles, side-stud elements, hinges, clips, axles, or true wheel geometry.",
+    "Direct observation: randomBuildInventory has 85 total pieces, 21 part/color combinations, and nine colors, so it is nontrivial but not representative of all possible user inventories.",
+    "Direct observation: deterministic car fixtures use supported rectangular parts to create a layered chassis, four visually coded black wheels, translucent windows, windshield, roof, and spoiler at 70-72 pieces.",
+    "Direct observation: the deterministic daisy creates a readable low-relief composition with stem, two leaves, white petals, and yellow center using 50 pieces.",
+    "Direct observation: current part identity is aligned across internal part_id, LDraw filename, and Rebrickable number for these simple parts, but there is no general mapping table for aliases or mould variants.",
+    "Interpretation: deterministic fixtures demonstrate a lower bound on current-catalog capability, not a measured ceiling."
+  ],
+  "mechanisms": [
+    "Rectangular parts force curves, diagonals, wheels, handles, eyes, and organic contours to be approximated through stepped silhouettes and color blocking.",
+    "Large plates improve coverage efficiency but can produce flat slabs unless planning explicitly budgets height, overlap, and protruding features.",
+    "Exact inventories couple shape and color scarcity; an object may be geometrically possible but lose a defining feature because the needed color is attached to the wrong footprint.",
+    "Training on unrestricted or large catalogs teaches part choices unavailable at deployment and can make exact-inventory planning worse without constrained adaptation.",
+    "Near-duplicate models, alternate captions of the same geometry, or train/test splits by caption can inflate apparent generalization.",
+    "LDraw model files may contain collisions, unofficial parts, illegal connections, submodels, arbitrary rotations, scenes, or thousands of pieces that do not match the current validator.",
+    "Fine-tuning before establishing skilled same-inventory references risks learning dataset style rather than closing the actual planning gap."
+  ],
+  "problem_a_impact": "Inventory-driven suggestion should exploit the best-supported object class for each exact shape/color multiset. Reference builders reveal whether suggestions leave obvious inventory affordances unused. Retrieval must be indexed by feasible feature signatures and inventory transforms, not merely semantic object labels, or the suggestion will promise a design that the exact pieces cannot realize.",
+  "problem_b_impact": "Direct requests can exceed the catalog's representational capacity, but the correct response is a measured nearest-feasible design or selective simplification. Same-inventory human references quantify how much silhouette, proportion, detail, and color fidelity remain achievable before blaming the catalog.",
+  "confirmed_facts": [
+    "BrickNet 2026 contains more than 100,000 human-designed LDraw objects/scenes, models thousands of part types and typed connector semantics, and reports that direct pose sequences become invalid quickly relative to graph-backed connectivity.",
+    "BrickNet's paper states that its text generation used an effectively unrestricted part library and identifies conditioning on a specified part set as future work, limiting direct transfer to exact-inventory generation.",
+    "BrickGPT/StableText2Brick releases more than 47,000 stable structures over more than 28,000 unique 3D objects, uses a restricted eight-brick library, and publishes code/model/dataset under MIT for the main artifacts.",
+    "BrickGPT caps training sequences at 4096 tokens and derives multiple captions from multi-view renders; caption variants from one geometry must remain in the same split to prevent leakage.",
+    "BrECS explicitly studies budget-aware sequential assembly where brick count and types are constrained, although its geometry and task differ from this product.",
+    "The 2013 constructable-brick-sculpture system supports brick-type limits, colors, connectivity repair, hollowing, and instruction output, demonstrating deterministic inventory-aware optimization before modern LLMs.",
+    "Current LDraw contributor terms allow CC BY 4.0 or CC0 for new submitted work, while legacy parts may carry earlier CC BY terms; attribution and per-file license review remain necessary.",
+    "Rebrickable's official API provides catalog sets/parts and user collections but directs bulk catalog use to downloadable CSV files and no longer exposes general MOC inventories through the documented API."
+  ],
+  "plausible_inferences": [
+    "Inference: slopes/wedges and round/cylindrical pieces are likely to yield the largest first marginal gains for the current object mix because they directly improve silhouette and iconic wheels/eyes/cups, but the ordering must be tested rather than assumed.",
+    "Inference: side-stud/SNOT capability may yield more compositional value per added shape than many cosmetic parts because it creates new feature orientations and depth.",
+    "Inference: a small curated library of exact-inventory transformations from strong reference builds may help sooner than broad fine-tuning on unrestricted LDraw data.",
+    "Inference: the deterministic car and daisy can seed mutation tests and evaluator calibration but are too few and too hand-selected to estimate catalog-wide capacity.",
+    "Inference: catalog ceiling will vary sharply by object family, so one global quality number will hide real expressivity differences."
+  ],
+  "unresolved_questions": [
+    "How much do skilled builders outperform current AI on the exact randomBuildInventory and other live inventories?",
+    "Which object families remain weak even for skilled builders under 17 shapes and 100 pieces?",
+    "Which single shape family produces the greatest human-preference lift when total piece count and color budget are held fixed?",
+    "How much of the current LDraw corpus can be normalized into the project's grid, legal rotations, part mappings, and small piece caps without distorting designs?",
+    "Does the BrickNet dataset distribution include near-duplicate variants or designer/source leakage across released splits?",
+    "What commercial-use obligations apply to every model source selected for a future curated exemplar set?",
+    "How many exact-inventory, high-quality, de-duplicated examples are required before fine-tuning beats retrieval plus constrained search?"
+  ],
+  "confidence": "High confidence that same-inventory reference builds are the necessary first ceiling test and that current public datasets have significant deployment mismatch. Moderate confidence in the proposed first shape families. Low confidence in any fine-tuning data threshold before a learning curve is measured.",
+  "expected_impact": "Very high diagnostic impact. If a large AI-to-reference gap exists, better planning, representation, and search can improve quality without catalog expansion. If the gap is small, the controlled shape-family curve provides a defensible expansion roadmap.",
+  "key_external_findings": [
+    "BrickNet provides the strongest current evidence that part connectivity representation matters more than naive absolute pose prediction as catalogs broaden, but it does not solve exact-inventory conditioning.",
+    "BrickGPT provides a released, stable, captioned brick dataset and demonstrates that restricted brick vocabularies can still cover many recognizable objects; its eight-shape grid and larger structures are closer than generic 3D data but still not identical to HackThe6ix.",
+    "BrECS shows that type/count budgets can be built into sequential generation and constraint validation rather than cleaned only after generation.",
+    "Testuz et al. show a deterministic mesh-to-brick pipeline can optimize connectivity, weak points, brick counts, colors, and instructions, supporting a non-AI reference baseline.",
+    "LDraw and Rebrickable provide complementary geometry and catalog identities, but licenses, aliases, unofficial parts, and model provenance must be audited before corpus reuse."
+  ],
+  "primary_sources": [
+    {
+      "title": "BrickNet: Graph-Backed Generative Brick Assembly",
+      "url": "https://openaccess.thecvf.com/content/CVPR2026/html/Kulits_BrickNet_Graph-Backed_Generative_Brick_Assembly_CVPR_2026_paper.html",
+      "source_type": "Peer-reviewed CVPR paper",
+      "publication_or_update_date": "2026-06",
+      "supported_claim": "Over 100,000 human-designed LDraw structures, thousands of parts, typed connectivity, graph-backed representation, and specified-part-set conditioning as future work.",
+      "relevance": "Largest current direct brick corpus and closest representation evidence."
+    },
+    {
+      "title": "BrickNet project and package",
+      "url": "https://pypi.org/project/bricknet/",
+      "source_type": "Official released software package",
+      "publication_or_update_date": "2026",
+      "supported_claim": "MIT package, public dataset/model links, graph/tree representations, connector loaders, and collision tooling are available.",
+      "relevance": "Artifact-availability check as of the research date."
+    },
+    {
+      "title": "Generating Physically Stable and Buildable Brick Structures from Text",
+      "url": "https://openaccess.thecvf.com/content/ICCV2025/html/Pun_Generating_Physically_Stable_and_Buildable_Brick_Structures_from_Text_ICCV_2025_paper.html",
+      "source_type": "Peer-reviewed ICCV paper",
+      "publication_or_update_date": "2025-10",
+      "supported_claim": "StableText2Brick scale, restricted brick vocabulary, caption generation, sequence limits, physical stability, and buildability evidence.",
+      "relevance": "Direct restricted-vocabulary text-to-brick training baseline."
+    },
+    {
+      "title": "Official BrickGPT repository",
+      "url": "https://github.com/AvaLovelace1/BrickGPT",
+      "source_type": "Official code and dataset repository",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "The main BrickGPT model, StableText2Brick dataset, and majority code are released under MIT, with submodule exceptions.",
+      "relevance": "Availability, implementation, and licensing evidence."
+    },
+    {
+      "title": "Budget-Aware Sequential Brick Assembly with Efficient Constraint Satisfaction",
+      "url": "https://openreview.net/forum?id=0mRfQOnkqk",
+      "source_type": "Peer-reviewed TMLR paper",
+      "publication_or_update_date": "2024-10-03",
+      "supported_claim": "Sequential brick generation can directly account for brick-count and brick-type budgets with efficient constraint checking.",
+      "relevance": "Closest explicit budget-aware generation evidence."
+    },
+    {
+      "title": "Automatic Generation of Constructable Brick Sculptures",
+      "url": "https://diglib.eg.org/items/82e2ee53-fa57-4929-ac81-85acd0d9f855",
+      "source_type": "Peer-reviewed Eurographics paper",
+      "publication_or_update_date": "2013",
+      "supported_claim": "Voxel-to-brick conversion can enforce constructability, repair structural weakness, honor brick-type limits and colors, and output instructions.",
+      "relevance": "Foundational deterministic inventory-aware reference baseline."
+    },
+    {
+      "title": "LDraw Contributor Agreement",
+      "url": "https://www.ldraw.org/docs-main/licenses/ldraw-org-contributor-agreement.html",
+      "source_type": "First-party license documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "Submitted work is licensed under CC BY 4.0 or optionally dedicated under CC0; the Work includes Parts Library and OMR items under the agreement.",
+      "relevance": "Required provenance and attribution basis for LDraw-derived data."
+    },
+    {
+      "title": "LDraw Parts Library Policies and FAQ",
+      "url": "https://library.ldraw.org/documentation/policies-and-procedures/parts-library-policies-and-faq",
+      "source_type": "First-party library policy",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "Part authors may use CC BY 4.0 or CC0 and legacy licensing must be respected.",
+      "relevance": "Shows why per-file license/provenance review is necessary."
+    },
+    {
+      "title": "Rebrickable API Documentation",
+      "url": "https://rebrickable.com/api/v3/docs/",
+      "source_type": "First-party API documentation",
+      "publication_or_update_date": "Verified 2026-07-17",
+      "supported_claim": "Official sets/parts and user collections are exposed; bulk use should use downloads; general MOC inventories are not exposed through the current API.",
+      "relevance": "Identity mapping and catalog-data availability."
+    }
+  ],
+  "contradicting_evidence": [
+    "BrickGPT achieves high validity and stability with only eight brick types, suggesting restricted shape vocabulary does not by itself prevent diverse recognizable outputs.",
+    "BrickNet shows broad part vocabularies introduce severe connection and collision complexity; adding shapes can lower reliability before it raises perceived quality.",
+    "Deterministic voxel-to-brick systems can honor part limits but tend toward sculpture approximation and may not produce clever small LEGO-style builds.",
+    "The existing deterministic car and daisy are curated demonstrations and may overstate average achievable quality on arbitrary inventories."
+  ],
+  "transfer_limits": [
+    "BrickNet uses thousands of parts, arbitrary connector semantics, human MOCs/scenes, and effectively unrestricted generation; HackThe6ix uses 17 rectangles and exact counts.",
+    "StableText2Brick uses eight brick sizes on a fixed 20-cube world and synthetic mesh-derived structures; color/inventory distributions and piece counts differ.",
+    "Official-set LDraw models are optimized by professional designers for set-specific inventories and may contain subassemblies or specialty parts absent here.",
+    "Voxel and mesh datasets provide target shape but not necessarily human-like feature abstraction, color blocking, or satisfying assembly order.",
+    "Generic part-recognition datasets support sensing, not design quality or exact-inventory construction sequences."
+  ],
+  "capability_snapshot": "Verified 2026-07-17: BrickNet paper/project, models, dataset links, and an MIT-licensed PyPI package are publicly reachable; BrickGPT code and StableText2Brick dataset are publicly linked and the main artifacts declare MIT with noted submodule exceptions; LDraw current contributor agreement permits CC BY 4.0 or CC0, while legacy parts can carry older licenses; Rebrickable v3 exposes official catalog and user collections but directs bulk access to downloads. Availability does not waive per-record provenance, trademark, attribution, or commercial-use review.",
+  "data_target_match": {
+    "BrickNet": "High part-geometry and human-design value; low exact-inventory, catalog-size, sequence-length, and collision cleanliness match.",
+    "StableText2Brick": "Moderate restricted-vocabulary, stability, caption, and sequential-format match; low exact color/count conditioning and small-build match.",
+    "LDraw OMR": "High official geometry and instruction/submodel value; low current-part overlap unless aggressively filtered, plus professional-set distribution bias.",
+    "BrECS": "High budget-aware formulation value; low visual-semantic and current-catalog match.",
+    "Current deterministic fixtures": "Very high schema, catalog, renderer, and validator match; extremely low diversity and sample size.",
+    "Skilled same-inventory references": "Highest deployment match and best oracle for ceiling measurement, but costly and susceptible to builder-style bias."
+  },
+  "source_quality_notes": "BrickNet and BrickGPT are recent peer-reviewed direct-domain papers with public artifacts. BrECS is peer-reviewed TMLR with open code. Eurographics 2013 is older but directly addresses inventory limits and constructability. LDraw and Rebrickable claims use first-party documentation. Dataset license declarations do not automatically establish rights for every upstream model or caption source, so a provenance manifest remains mandatory.",
+  "near_term_recommendations": [
+    "Create a frozen ceiling benchmark where two skilled builders and one deterministic/programmatic baseline use exactly the same inventories, prompts, caps, colors, and legality rules as the AI.",
+    "Include current deterministic car and daisy as minimum-quality anchors, not as the only gold references.",
+    "For each inventory, let reference builders first choose the best object freely for the suggestion track, then separately answer fixed direct requests; this isolates idea-selection ceiling from placement ceiling.",
+    "Store reference briefs, feature anchors, brick placements, rejected alternatives, build time, and difficulty so they can support retrieval and error analysis.",
+    "Normalize external data through a strict pipeline: license/provenance check, part-ID mapping, supported-part filtering, rotation/grid normalization, collision and connectivity validation, piece-count filtering, submodel flattening, and near-duplicate clustering.",
+    "Use retrieval only when an exemplar's feature graph and inventory transform are feasible; retrieve structure patterns rather than copy a model whose parts are unavailable.",
+    "[uncertain] Test added families in this proposed order, one family at a time: slopes/wedges, round/cylindrical pieces, side-stud/SNOT elements, curves, tiles, then hinges/axles/clips. The order is a hypothesis based on silhouette and feature orientation, not a measured result."
+  ],
+  "longer_term_architecture_options": [
+    "Inventory-conditioned graph/program generator pretrained on normalized BrickNet or StableText2Brick patterns and adapted using exact-inventory small builds.",
+    "Procedural library of semantic subassemblies such as wheel pair, cup handle, bench slats, flower head, eye pair, roof, and spoiler, with deterministic inventory substitution and learned selection.",
+    "Hybrid mesh/voxel target plus constrained brick packing, where the AI proposes semantic targets and deterministic search chooses legal parts under exact counts.",
+    "Preference-guided reranker trained on de-duplicated same-inventory human comparisons only after retrieval and best-of-N baselines establish residual value."
+  ],
+  "expected_signal": "The AI-reference preference gap quantifies headroom inside the current catalog. Shape-family trials should show family-specific human-preference and feature-coverage lift after controlling total pieces. Retrieval should improve feature coverage mainly when inventory-transform distance is low. Data normalization should reduce illegal examples and near-duplicate leakage before any model training.",
+  "likely_ceiling": "Manual references do not scale and may encode one builder's style. Retrieval saturates on novel inventories. The 17 rectangles ultimately limit smooth contours, side-facing attachment, and mechanically articulated detail. Catalog expansion also saturates unless connection-aware representation, inventory conditioning, and search improve together.",
+  "implementation_effort": "Reference benchmark: medium, dominated by builder time, annotation, and independent review. Dataset normalization and license audit: high. One-family catalog trials: medium per family because geometry, renderer, validator, exporter, prompts, fixtures, and tests must stay aligned. Fine-tuning: high and premature until learning curves justify it.",
+  "latency_token_cost": "Manual and deterministic references are offline cost. Retrieval adds low latency if embeddings and inventory signatures are indexed locally. Best-of-N and fine-tuned generation add runtime cost depending on candidate count. A broader catalog increases token vocabulary, branching factor, validator complexity, and likely repair/search time even when per-call token limits are unchanged.",
+  "risks": [
+    "Reference builders may optimize for the rubric rather than natural product quality.",
+    "Replacing rectangles with specialty parts at fixed count can accidentally change color availability or total stud area, confounding marginal-family results.",
+    "External models may contain collisions, illegal techniques, unavailable colors, copyrighted set designs, or unclear upstream provenance.",
+    "Caption and model variants can leak across splits and inflate apparent semantic generalization.",
+    "Part-number aliases and mould variants can cause inventory mismatches or duplicate classes.",
+    "A broad catalog increases output entropy and may reduce legality faster than it improves appearance.",
+    "Fine-tuning may memorize common objects and reduce creativity or inventory compliance on rare inventories."
+  ],
+  "dependencies": [
+    "Frozen multi-view human-calibrated quality rubric.",
+    "Exact inventory snapshots and deterministic validator versioning.",
+    "Builder recruitment and a reference-authoring interface that records time and revisions.",
+    "Part identity/provenance registry across internal, LDraw, Rebrickable, and source-model IDs.",
+    "Near-duplicate geometry hashing and object-family split policy.",
+    "Per-family geometry, connection, render, export, and validation implementation before catalog trials."
+  ],
+  "sequencing": [
+    "Within 48 hours, freeze 12-24 target tasks and inventory fixtures, score current deterministic car/daisy, and commission a first skilled same-inventory build on randomBuildInventory.",
+    "Within one to two weeks, complete two independent reference builds per task, run blinded ratings, and calculate AI-to-reference gaps by object family and inventory scarcity.",
+    "Next, test procedural/retrieval baselines on the unchanged 17-shape catalog.",
+    "Only after existing-catalog headroom is reduced, run one-family-at-a-time catalog experiments with matched total count and colors.",
+    "Normalize external corpora and build data-learning curves before deciding whether fine-tuning is warranted."
+  ],
+  "rollback_criteria": "Do not add a shape family if its blinded human-preference lift is below 10 percentage points or its confidence interval includes zero, if legality drops more than 2 points, or if engineering/runtime cost dominates a simpler planning improvement. Stop dataset ingestion when provenance cannot be resolved. Do not fine-tune if retrieval plus constrained search matches it within the confidence interval or if held-out object-family gains do not exceed 5 points.",
+  "anti_recommendations": [
+    "Do not infer the 17-shape ceiling from disappointing AI outputs without skilled same-inventory references.",
+    "Do not add many specialty parts simultaneously; the marginal value and complexity of each family would be unidentifiable.",
+    "Do not train directly on unrestricted LDraw text without collision, connector, identity, license, piece-count, and near-duplicate normalization.",
+    "Do not treat official-set instructions as deployment-distributed examples; they use designed inventories and many excluded parts.",
+    "Do not fine-tune on captions split independently from their source geometry.",
+    "Do not use catalog expansion as a substitute for preserving semantic anchors and improving composition."
+  ],
+  "selective_generation_policy": "Estimate feasibility before generation. If no reference or solver can realize mandatory direct-request features from the inventory, return a simpler named variant or ask the user to relax a feature. For suggestion mode, choose only concepts above a measured feasibility threshold. If a retrieved exemplar needs unavailable connection types, discard it rather than approximate silently.",
+  "smallest_discriminating_experiments": [
+    {
+      "name": "Same-inventory oracle gap",
+      "design": "For six inventories and six object families, compare current AI, deterministic/programmatic baseline, and two skilled reference builders under identical parts, colors, caps, and validation."
+    },
+    {
+      "name": "Suggestion freedom versus direct request",
+      "design": "On each inventory, compare the best freely chosen reference object with a fixed requested object to estimate how much suggestion control should help."
+    },
+    {
+      "name": "One-family marginal expansion",
+      "design": "Add exactly one shape family while holding total piece count, color counts, prompt set, model, and search budget fixed; replace matched rectangles rather than only adding pieces."
+    },
+    {
+      "name": "Data-source transfer",
+      "design": "Compare no retrieval, current-fixture retrieval, filtered StableText2Brick retrieval, and filtered BrickNet/LDraw retrieval on the same exact-inventory tasks without fine-tuning."
+    }
+  ],
+  "variables_and_controls": "For oracle tests, vary builder/method while fixing inventory snapshot, prompt/brief, cap, legality, renderer, and rating rubric. For catalog tests, vary one family only; match total pieces, colors, approximate plastic/stud capacity, generation model, prompts, candidates, and time budget. Randomize presentation and blind raters. For data tests, fix generator and retrieval count; split by geometry cluster, source object, and object family, not caption.",
+  "dataset_and_slices": "Use at least six inventories: randomBuildInventory, car inventory, daisy inventory, a small 10-25-piece set, a color-scarce set, and a shape-mismatched/adversarial set. Use suggestion and direct-request modes; object families vehicle, furniture, vessel/container, animal, plant, architecture, and abstract/decorative. Stratify by 10-25, 26-50, and 51-100 pieces; symmetry requirement; low-relief versus full 3D; and color importance. External records must include source, license, part mapping confidence, collision status, connector types, piece count, captions, and duplicate cluster.",
+  "metrics_and_scoring": {
+    "quality": [
+      "Blinded human pairwise preference",
+      "Category recognizability without label",
+      "Mandatory-feature coverage",
+      "Silhouette/proportion/depth/color rubric",
+      "Creativity and clever constraint use"
+    ],
+    "constraint": [
+      "Current validator legality",
+      "Exact part/color/count compliance",
+      "Piece cap",
+      "Build time and edit burden"
+    ],
+    "expressivity": [
+      "AI-to-skilled-reference gap within 17 shapes",
+      "Marginal preference lift per added family",
+      "Feature types newly realizable",
+      "Quality per piece and per added catalog entry"
+    ],
+    "data": [
+      "Part-set overlap",
+      "Piece-count and topology distance",
+      "Inventory-conditioning match",
+      "License/provenance completeness",
+      "Near-duplicate rate and held-out-family performance"
+    ]
+  },
+  "sample_size_or_confidence_method": "Start with 36 task-inventory cells and paired outputs from each method; use at least three independent blinded human ratings per pair and task-clustered bootstrap 95% intervals. For each shape family, use the same cells in a repeated-measures design and continue until the interval around preference lift is narrower than plus or minus 10 points. Report builder as a random effect or stratify results so one expert does not define the ceiling.",
+  "success_thresholds": [
+    "A current-catalog planning investment is justified if skilled references beat AI in at least 65% of pairs with a 95% interval lower bound above 50% and at least 15-point mandatory-feature lift.",
+    "A shape family is justified if it gains at least 10 preference points and 10 feature-coverage points on the holdout without more than 2-point legality loss or increased total pieces.",
+    "Retrieval is useful if it adds at least 8 preference points on low-distance inventory matches and does not harm high-distance cases under selective filtering.",
+    "Fine-tuning consideration begins only if a de-duplicated learning curve shows at least 5-point held-out-family gain beyond retrieval plus search and the gain grows with data."
+  ],
+  "decision_enabled": "The oracle gap decides whether to prioritize planning/representation or catalog expansion. Per-family trials rank catalog work. Data-transfer trials determine whether to invest in corpus normalization, retrieval, or custom examples. Learning curves determine whether fine-tuning has evidence-based value.",
+  "oracle_replacement_test": "Replace the entire AI design stage with two skilled builders using identical inventories and caps, then separately replace only the semantic plan with a human brief while keeping AI placement. The full-reference gap estimates achievable current-catalog quality; the human-plan gap isolates ideation/planning; a deterministic constrained placement from the human plan isolates placement. Repeat with one expanded family to measure residual inventory ceiling.",
+  "marginal_gain_curve": "Plot blinded human preference, feature coverage, legality, and build effort for catalog states: current 17; plus slopes; plus round; plus SNOT; plus curves; and selected combinations, while also plotting current-catalog AI versus deterministic versus skilled reference. For data, plot quality at 0, 50, 200, 1,000, and larger de-duplicated exact-inventory examples or the largest feasible points; stop when confidence intervals overlap and marginal gain per annotation cost collapses.",
+  "validator_soundness_and_completeness": "Expert-review a stratified sample of current and expanded-part passes/failures, then physically build a subset. New part families require connector-aware collision/support rules; the current occupancy validator may falsely accept visually intersecting or weak connections and falsely reject legal geometry not representable by rectangular cells.",
+  "semantic_validation_required": "Even a legal same-inventory build must realize the intended object, mandatory features, appropriate proportions, depth, symmetry/asymmetry, and color roles. Reference builders should annotate intended feature anchors so evaluation distinguishes catalog impossibility from missed composition.",
+  "objective_vector_and_pareto_status": "Track legality, exact inventory use, recognizability, mandatory features, silhouette/proportion/depth, color, creativity, stability proxy, piece count, build time, edit burden, latency, and catalog complexity separately. A shape family is Pareto-improving only if quality rises without unacceptable legality, complexity, or runtime costs; a manual reference defines headroom, not a single target scalar.",
+  "representation_efficiency": "Current rectangular shapes need only footprint, category, quarter-turn, and grid position. Slopes, hinges, clips, axles, and SNOT introduce orientation, connector state, continuous or discrete articulation, and collision envelopes, raising tokens and branching factor. Measure tokens per brick, valid-continuation count, parse survival, and validator time as catalog families are added.",
+  "physical_and_assembly_implications": "Rectangular vertical stud overlap is only a simplified connection model. Broader parts require typed connectors, legal orientation, collision clearance, clutch/stability assumptions, and sequence accessibility. Reference builds should include an assembly order and flag temporary support or hidden placements so visual expressivity does not conceal buildability loss.",
+  "feature_retention_and_edit_locality": "Reference and retrieved designs should expose subassemblies and feature anchors. When adapting an exemplar to inventory, record which features survive, which substitutions occur, and how many unrelated bricks move. Reject adaptation that copies global geometry but loses defining features or exceeds local edit budgets.",
+  "failure_onset_and_propagation": "Record whether failure begins at infeasible concept choice, missing catalog family, poor inventory-to-feature allocation, plan, placement, cleanup, or repair. For overused pieces, identify which later feature loses the contested part and whether an earlier allocation choice caused cascading degradation.",
+  "real_world_build_validation": "[uncertain] Current deterministic fixtures establish validator legality but no documented physical build evidence was found. Physically assemble a balanced sample of AI and reference builds from the same real inventory, recording missing/misidentified parts, substitutions, collapse, inaccessible steps, time, and post-build preference. The necessary sample size depends on observed failure rates.",
+  "uncertain": [
+    "near_term_recommendations",
+    "real_world_build_validation"
+  ]
+}
