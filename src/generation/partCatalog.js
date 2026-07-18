@@ -86,6 +86,14 @@ export const SUPPORTED_PARTS = {
     width: 1,
     depth: 2,
   },
+  3623: {
+    label: "1x3 plate",
+    category: "plate",
+    part_id: "3623",
+    ldraw_id: "3623.dat",
+    width: 1,
+    depth: 3,
+  },
   3710: {
     label: "1x4 plate",
     category: "plate",
@@ -110,6 +118,14 @@ export const SUPPORTED_PARTS = {
     width: 2,
     depth: 2,
   },
+  3021: {
+    label: "2x3 plate",
+    category: "plate",
+    part_id: "3021",
+    ldraw_id: "3021.dat",
+    width: 2,
+    depth: 3,
+  },
   3020: {
     label: "2x4 plate",
     category: "plate",
@@ -117,6 +133,22 @@ export const SUPPORTED_PARTS = {
     ldraw_id: "3020.dat",
     width: 2,
     depth: 4,
+  },
+  3795: {
+    label: "2x6 plate",
+    category: "plate",
+    part_id: "3795",
+    ldraw_id: "3795.dat",
+    width: 2,
+    depth: 6,
+  },
+  3034: {
+    label: "2x8 plate",
+    category: "plate",
+    part_id: "3034",
+    ldraw_id: "3034.dat",
+    width: 2,
+    depth: 8,
   },
   3031: {
     label: "4x4 plate",

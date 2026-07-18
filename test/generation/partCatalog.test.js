@@ -57,6 +57,20 @@ describe("supported part catalog", () => {
   });
 
   it("includes longer 1-wide plates with plate-height dimensions", () => {
+    assert.deepEqual(SUPPORTED_PARTS["3623"], {
+      label: "1x3 plate",
+      category: "plate",
+      part_id: "3623",
+      ldraw_id: "3623.dat",
+      width: 1,
+      depth: 3,
+    });
+    assert.deepEqual(getPartDimensions("3623", 90), {
+      width: 3,
+      depth: 1,
+      height: 1,
+    });
+
     assert.deepEqual(SUPPORTED_PARTS["3710"], {
       label: "1x4 plate",
       category: "plate",
@@ -82,6 +96,50 @@ describe("supported part catalog", () => {
     assert.deepEqual(getPartDimensions("3666", 90), {
       width: 6,
       depth: 1,
+      height: 1,
+    });
+  });
+
+  it("includes 2-wide plates with plate-height dimensions", () => {
+    assert.deepEqual(SUPPORTED_PARTS["3021"], {
+      label: "2x3 plate",
+      category: "plate",
+      part_id: "3021",
+      ldraw_id: "3021.dat",
+      width: 2,
+      depth: 3,
+    });
+    assert.deepEqual(getPartDimensions("3021"), {
+      width: 2,
+      depth: 3,
+      height: 1,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3795"], {
+      label: "2x6 plate",
+      category: "plate",
+      part_id: "3795",
+      ldraw_id: "3795.dat",
+      width: 2,
+      depth: 6,
+    });
+    assert.deepEqual(getPartDimensions("3795", 270), {
+      width: 6,
+      depth: 2,
+      height: 1,
+    });
+
+    assert.deepEqual(SUPPORTED_PARTS["3034"], {
+      label: "2x8 plate",
+      category: "plate",
+      part_id: "3034",
+      ldraw_id: "3034.dat",
+      width: 2,
+      depth: 8,
+    });
+    assert.deepEqual(getPartDimensions("3034", 90), {
+      width: 8,
+      depth: 2,
       height: 1,
     });
   });
