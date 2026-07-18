@@ -84,6 +84,14 @@ def test_session_cli_identifies_one_best_crop_and_writes_outputs(
     result = json.loads((session / "multiview_result.json").read_text())
     assert result["instance_count"] == 1
     assert result["instances"][0]["id_crop"]["source"] == "rectified-fallback"
+    assert set(result["timings_s"]) == {
+        "load", "detect", "fuse", "identify", "evidence",
+        "color_inventory", "total",
+    }
+    assert all(value >= 0 for value in result["timings_s"].values())
+    assert result["timings_s"]["total"] >= max(
+        value for key, value in result["timings_s"].items() if key != "total"
+    )
 
 
 def test_session_cli_writes_frame_overlays_for_v2(tmp_path, monkeypatch):

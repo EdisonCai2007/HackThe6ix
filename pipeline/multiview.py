@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -104,6 +105,7 @@ class MultiViewScanResult:
     crops: list[np.ndarray] = field(default_factory=list)
     views: list["RectifiedView"] = field(default_factory=list)
     segmentation_detections: list = field(default_factory=list)
+    timings_s: dict[str, float] = field(default_factory=dict)
 
 
 def box_is_complete(box: Box, valid_mask: np.ndarray, margin: int = 8) -> bool:
@@ -793,7 +795,9 @@ def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache"),
     seg_model=None, gate_config=None,
 ) -> MultiViewScanResult:
+    started = time.perf_counter()
     manifest, views = load_views(manifest_path)
+    loaded = time.perf_counter()
     segmentation_detections = []
     if detector == "seg":
         from pipeline.segdetect import (
@@ -814,9 +818,11 @@ def scan_manifest(
         )
     else:
         observations = observations_from_views(views, detector=detector)
+    detected = time.perf_counter()
     instances = filter_unconfirmed_instances(
         fuse_observations(observations), views
     )
+    fused = time.perf_counter()
     session_dir = Path(manifest["session_dir"])
     crops, id_crops = _identification_crops(instances, views, session_dir)
     identifications = identify_all(crops, cache_dir=cache_dir)
@@ -824,10 +830,12 @@ def scan_manifest(
         instances, views, session_dir, identifications, crops, id_crops,
         cache_dir,
     )
+    identified = time.perf_counter()
     identifications = _apply_stud_advisory(
         instances, views, identifications, crops, id_crops,
         manifest["px_per_m"],
     )
+    evidenced = time.perf_counter()
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize"] = {
             "part_id": identification.part_id,
@@ -839,14 +847,26 @@ def scan_manifest(
         f"{identification.name} | {color.name} | {identification.score:.2f}"
         for identification, color in zip(identifications, colors)
     ]
+    inventory = build_inventory(list(zip(identifications, colors)))
+    mosaic = compose_object_aware_mosaic(views, instances)
+    completed = time.perf_counter()
     return MultiViewScanResult(
-        inventory=build_inventory(list(zip(identifications, colors))),
+        inventory=inventory,
         instances=instances,
         labels=labels,
-        mosaic=compose_object_aware_mosaic(views, instances),
+        mosaic=mosaic,
         manifest=manifest,
         id_crops=id_crops,
         crops=crops,
         views=views,
         segmentation_detections=segmentation_detections,
+        timings_s={
+            "load": loaded - started,
+            "detect": detected - loaded,
+            "fuse": fused - detected,
+            "identify": identified - fused,
+            "evidence": evidenced - identified,
+            "color_inventory": completed - evidenced,
+            "total": completed - started,
+        },
     )

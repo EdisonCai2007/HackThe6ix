@@ -262,6 +262,7 @@ def main(argv: list[str] | None = None) -> None:
                              for instance in result.instances),
         "selected_coverage": result.manifest["selected_coverage"],
         "union_coverage": result.manifest["union_coverage"],
+        "timings_s": result.timings_s,
         "instances": [
             {
                 "box": list(instance.best.box),
