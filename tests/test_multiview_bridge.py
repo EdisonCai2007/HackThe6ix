@@ -206,6 +206,38 @@ def _view(view_index, quality, rgb_size=(1200, 1600)):
     )
 
 
+def test_masked_focus_score_prefers_sharp_piece_interior():
+    from pipeline.multiview import _masked_focus_score
+
+    image = np.full((100, 120, 3), 220, dtype=np.uint8)
+    for x in range(25, 95, 8):
+        image[25:75, x:x + 3] = 40
+    mask = np.zeros(image.shape[:2], dtype=bool)
+    mask[20:80, 20:100] = True
+    blurred = cv2.GaussianBlur(image, (15, 15), 0)
+
+    assert _masked_focus_score(image, mask) > 2 * _masked_focus_score(
+        blurred, mask
+    )
+
+
+def test_id_observation_prefers_local_sharpness_over_global_view_quality():
+    from pipeline.multiview import FusedInstance, _identification_observation
+
+    views = [_view(0, quality=8.0), _view(1, quality=1.0)]
+    globally_good = _obs(0, (300, 300, 390, 390), complete=True)
+    locally_sharp = _obs(1, (300, 300, 390, 390), complete=True)
+    globally_good.identification_focus = 12.0
+    locally_sharp.identification_focus = 55.0
+    instance = FusedInstance(
+        [globally_good, locally_sharp], best=globally_good
+    )
+
+    chosen, _ = _identification_observation(instance, views)
+
+    assert chosen is locally_sharp
+
+
 def test_id_observation_prefers_sharp_topdown_view_over_canvas_complete():
     """A piece clipped by the CANVAS crop is usually whole in the original
     frame — the sharp top-down view must win over an oblique complete one."""
@@ -352,6 +384,75 @@ def test_second_chance_picks_best_alternate_not_first(tmp_path, monkeypatch):
     assert identifications[0].part_id == "3008"
     assert identifications[0].score == 0.84
     assert id_crops[0]["source"] == "original-masked-second-chance"
+
+
+def test_unresolved_identity_displays_highest_scoring_weak_view(
+    tmp_path, monkeypatch
+):
+    from pipeline.multiview import FusedInstance, _second_chance
+
+    session = tmp_path / "session"
+    frames = session / "frames"
+    frames.mkdir(parents=True)
+    for frame_id in (1, 2):
+        cv2.imwrite(
+            str(frames / f"{frame_id:05d}.rgb.jpg"),
+            np.full((1200, 1600, 3), 245, dtype=np.uint8),
+        )
+    views = [_view(0, quality=2.0), _view(1, quality=1.0)]
+    for index, view in enumerate(views):
+        view.frame_id = index + 1
+        view.rgb = f"frames/{index + 1:05d}.rgb.jpg"
+    observations = [
+        _obs(0, (300, 300, 390, 390), complete=True),
+        _obs(1, (300, 300, 390, 390), complete=True),
+    ]
+    observations[0].frame_id = 1
+    observations[1].frame_id = 2
+    instance = FusedInstance(observations, observations[0])
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_crop",
+        lambda crop, **kwargs: Identification(
+            None,
+            "unknown brick",
+            None,
+            0.68,
+            candidates=(
+                {"part_id": "3003", "name": "Brick 2 x 2", "score": 0.68},
+            ),
+        ),
+    )
+    primary = Identification(
+        None,
+        "unknown brick",
+        None,
+        0.55,
+        candidates=(
+            {"part_id": "3003", "name": "Brick 2 x 2", "score": 0.55},
+        ),
+    )
+    id_crops = [{
+        "frame_id": 1,
+        "rgb": views[0].rgb,
+        "box_original": [300, 300, 390, 390],
+        "source": "original-masked",
+    }]
+
+    identifications, _, id_crops = _second_chance(
+        [instance],
+        views,
+        session,
+        [primary],
+        [np.zeros((8, 8, 3), np.uint8)],
+        id_crops,
+        cache_dir=tmp_path,
+    )
+
+    assert identifications[0].part_id is None
+    assert identifications[0].score == pytest.approx(0.68)
+    assert id_crops[0]["frame_id"] == 2
+    assert "best_weak_view_selected" in id_crops[0]["flags"]
 
 
 def test_segmentation_reviews_safe_context_crop_for_moderate_id(

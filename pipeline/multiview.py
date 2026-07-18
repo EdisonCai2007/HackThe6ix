@@ -101,6 +101,7 @@ class Observation:
     color_evidence: dict | None = field(
         default=None, repr=False, compare=False
     )
+    identification_focus: float | None = None
 
 
 @dataclass
@@ -848,6 +849,9 @@ def observations_from_segmentations(
                 "boundary_zone": gate.boundary_zone,
             },
             color_evidence=evidence,
+            identification_focus=_masked_focus_score(
+                original, detection.mask_original
+            ),
         ))
     return observations
 
@@ -966,6 +970,65 @@ def compose_object_aware_mosaic(
     return mosaic
 
 
+def _masked_focus_score(image: np.ndarray, mask: np.ndarray) -> float:
+    """Piece-interior focus without rewarding a sharp segmentation edge."""
+    mask = np.asarray(mask, dtype=bool)
+    if mask.shape != image.shape[:2]:
+        raise ValueError("focus mask must match image dimensions")
+    if not mask.any():
+        return 0.0
+    interior = cv2.erode(
+        mask.astype(np.uint8), np.ones((5, 5), np.uint8)
+    ).astype(bool)
+    if interior.sum() < max(9, 0.25 * mask.sum()):
+        interior = mask
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    response = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
+    values = response[interior]
+    return float(np.quantile(values, 0.80)) if values.size else 0.0
+
+
+def _identification_quality_details(
+    observation: Observation,
+    view: RectifiedView,
+    box: list[int] | tuple[int, int, int, int],
+) -> dict:
+    focus = observation.identification_focus
+    focus_source = "piece_mask"
+    if focus is None:
+        focus = max(0.0, float(view.quality))
+        focus_source = "whole_view_fallback"
+    if observation.mask_original is not None:
+        piece_pixels = int(np.asarray(observation.mask_original, dtype=bool).sum())
+    else:
+        piece_pixels = _box_area(tuple(map(int, box)))
+    size_weight = min(1.0, np.sqrt(max(0, piece_pixels)) / 64.0)
+    tilt = view.view_tilt_deg
+    pose_weight = (
+        1.0 if tilt is None
+        else max(0.35, float(np.cos(np.deg2rad(float(tilt)))))
+    )
+    confidence_weight = (
+        1.0 if observation.confidence is None
+        else max(0.35, min(1.0, float(observation.confidence)))
+    )
+    score = (
+        float(np.log1p(max(0.0, float(focus))))
+        * float(size_weight)
+        * pose_weight
+        * confidence_weight
+    )
+    return {
+        "score": score,
+        "focus": float(focus),
+        "focus_source": focus_source,
+        "piece_pixels": piece_pixels,
+        "size_weight": float(size_weight),
+        "pose_weight": pose_weight,
+        "segmentation_confidence_weight": confidence_weight,
+    }
+
+
 def _ranked_id_observations(
     instance: FusedInstance, views: list[RectifiedView]
 ) -> list[tuple[Observation, list[int]]]:
@@ -1006,8 +1069,12 @@ def _ranked_id_observations(
                 observation.box, view.homography, view.rgb_size,
                 view.raise_uv_per_cm,
             )
+        identification_quality = _identification_quality_details(
+            observation, view, box
+        )
         ranked.append((
-            (fits, view.quality, observation.complete,
+            (fits, identification_quality["score"], view.quality,
+             observation.complete,
              observation.boundary_clearance, -observation.frame_id),
             observation, list(box),
         ))
@@ -1044,6 +1111,7 @@ def _identification_crops(
             provenance.append({
                 "frame_id": observation.frame_id, "rgb": None,
                 "box_original": None, "source": "rectified-fallback",
+                "identification_focus": observation.identification_focus,
             })
             continue
         if observation.original_image is not None:
@@ -1074,6 +1142,10 @@ def _identification_crops(
         info = {
             "frame_id": observation.frame_id, "rgb": view.rgb,
             "box_original": list(box), "source": source,
+            "identification_focus": observation.identification_focus,
+            "identification_quality": _identification_quality_details(
+                observation, view, box
+            ),
         }
         if observation.mask_original is not None:
             info.update({
@@ -1210,6 +1282,9 @@ def _second_chance(
             "identification": primary,
             "crop": crops[index],
             "provenance": None,
+            "identification_quality": float(
+                info.get("identification_quality", {}).get("score", 0.0)
+            ),
         }]
         if not weak_review and not segmentation_review:
             info["brickognize_views"] = entries
@@ -1269,6 +1344,10 @@ def _second_chance(
                     "frame_id": observation.frame_id, "rgb": view.rgb,
                     "box_original": list(box),
                     "source": source,
+                    "identification_focus": observation.identification_focus,
+                    "identification_quality": _identification_quality_details(
+                        observation, view, box
+                    ),
                 }
                 if observation.mask_original is not None:
                     update.update({
@@ -1281,6 +1360,9 @@ def _second_chance(
                     "identification": candidate,
                     "crop": variant,
                     "provenance": update,
+                    "identification_quality": float(
+                        update["identification_quality"]["score"]
+                    ),
                 })
         selected, disagreement, support = _select_identity_consensus(entries)
         per_frame = _identity_entries_by_frame(entries)
@@ -1289,13 +1371,28 @@ def _second_chance(
         info["appearance_support"] = aggregate_appearance_support(per_frame)
         if disagreement:
             flags.append("identity_view_disagreement")
-        matches = [
-            record for record in internal_entries
-            if record["entry"]["frame_id"] == selected["frame_id"]
-            and record["entry"]["part_id"] == selected["part_id"]
-            and record["entry"]["name"] == selected["name"]
-            and record["entry"]["score"] == selected["score"]
-        ]
+        if selected.get("part_id") is None:
+            chosen = max(
+                (
+                    record for record in internal_entries
+                    if record["entry"].get("part_id") is None
+                ),
+                key=lambda record: (
+                    float(record["entry"].get("score", 0.0)),
+                    float(record.get("identification_quality", 0.0)),
+                ),
+            )
+            matches = [chosen]
+            if chosen is not internal_entries[0]:
+                flags.append("best_weak_view_selected")
+        else:
+            matches = [
+                record for record in internal_entries
+                if record["entry"]["frame_id"] == selected["frame_id"]
+                and record["entry"]["part_id"] == selected["part_id"]
+                and record["entry"]["name"] == selected["name"]
+                and record["entry"]["score"] == selected["score"]
+            ]
         if matches:
             chosen = matches[-1]
             identifications[index] = chosen["identification"]
