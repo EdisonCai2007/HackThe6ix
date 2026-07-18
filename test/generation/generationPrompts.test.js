@@ -105,6 +105,33 @@ describe("generation prompt builders", () => {
     assert.equal(firstUserPayload(request).required_output_shape, undefined);
   });
 
+  it("builds structure and placement prompts that favor feature color blocks over exact color matching", () => {
+    const structureRequest = buildStructurePrompt({
+      userPrompt: "build me a blue mailbox",
+      inventory: duckInventory,
+      targetPieceCount: 15,
+      model: TEST_STRUCTURE_MODEL,
+    });
+    const placementRequest = buildPlacementPrompt({
+      userPrompt: "build me a blue mailbox",
+      inventory: duckInventory,
+      structurePlan,
+      targetPieceCount: 15,
+      model: TEST_PLACEMENT_MODEL,
+    });
+
+    const structureText = requestText(structureRequest);
+    const placementText = requestText(placementRequest);
+
+    assert.match(structureText, /natural\/requested colors as preferences/i);
+    assert.match(structureText, /allowed_color_ids broad/i);
+    assert.match(structureText, /abstract colors/i);
+    assert.doesNotMatch(structureText, /color match in that order/i);
+    assert.match(placementText, /coherent feature blocks/i);
+    assert.match(placementText, /symmetric/i);
+    assert.match(placementText, /never shrink or simplify solely/i);
+  });
+
   it("builds a suggestions request that favors realistic everyday objects over generic or high-tech shapes", () => {
     const request = buildBuildSuggestionsPrompt({
       inventory: duckInventory,
@@ -130,7 +157,7 @@ describe("generation prompt builders", () => {
     assert.doesNotMatch(text, /Dragon Scooter/i);
   });
 
-  it("builds suggestion metadata guidance around features instead of size or brick choices", () => {
+  it("builds suggestion metadata guidance around shape before color and keeps metadata color-neutral", () => {
     const request = buildBuildSuggestionsPrompt({
       inventory: duckInventory,
       model: "suggestion-model",
@@ -140,9 +167,14 @@ describe("generation prompt builders", () => {
 
     assert.match(text, /prompt_metadata[\s\S]*features/i);
     assert.match(text, /prompt_metadata[\s\S]*silhouette/i);
-    assert.match(text, /prompt_metadata[\s\S]*color accents/i);
+    assert.match(text, /shape first/i);
+    assert.match(text, /flat/i);
+    assert.match(text, /bulky/i);
+    assert.match(text, /consider color last/i);
+    assert.match(text, /prompt_metadata[\s\S]*do not include color words/i);
     assert.match(text, /prompt_metadata[\s\S]*avoid size adjectives/i);
     assert.match(text, /prompt_metadata[\s\S]*Do not mention specific bricks/i);
+    assert.doesNotMatch(text, /prompt_metadata[\s\S]*color accents/i);
     assert.doesNotMatch(text, /\bsmall\b/i);
     assert.doesNotMatch(text, /\btiny\b/i);
     assert.doesNotMatch(text, /\bcompact\b/i);

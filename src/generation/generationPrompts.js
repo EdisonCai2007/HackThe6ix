@@ -207,6 +207,7 @@ function buildGeminiJsonRequest({
   userPayload,
   responseSchema,
   maxOutputTokens = GENERATION_MAX_TOKENS,
+  inlineImage,
 }) {
   return {
     model,
@@ -216,7 +217,17 @@ function buildGeminiJsonRequest({
     contents: [
       {
         role: "user",
-        parts: [textPart(JSON.stringify(userPayload, null, 2))],
+        parts: [
+          textPart(JSON.stringify(userPayload, null, 2)),
+          ...(inlineImage
+            ? [{
+              inlineData: {
+                mimeType: inlineImage.mimeType,
+                data: inlineImage.data,
+              },
+            }]
+            : []),
+        ],
       },
     ],
     generationConfig: {
@@ -247,9 +258,9 @@ export function buildStructurePrompt({
       "Do not output LDraw.",
       "Do not output meshes, vertices, or arbitrary 3D geometry.",
       "Do not invent parts, colors, or quantities outside the provided inventory.",
-      "The generated model must be one small free-standing connected LEGO object, not a scene.",
-      `Prefer 10-40 pieces and never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
-      "Prioritize recognizable silhouette, required object features, inventory availability, stable construction, and color match in that order.",
+      "The generated model must be one free-standing connected LEGO object, not a scene.",
+      `Prefer more pieces but never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
+      "Treat natural/requested colors as preferences: keep allowed_color_ids broad, plan coherent feature color blocks, and accept abstract colors when silhouette/features stay readable.",
     ].join("\n"),
     userPayload: {
       user_prompt: userPrompt,
@@ -270,14 +281,16 @@ export function buildBuildSuggestionsPrompt({ inventory, model }) {
       "Return at most 5 suggestions.",
       "Each suggestion must describe one free-standing connected LEGO object, never a scene, diorama, landscape, or multi-object set.",
       "Favor distinctive realistic everyday objects: household items, tools, food, furniture, signs, simple animals, basic vehicles, or common fixtures.",
-      "Avoid generic cargo blocks, cubes, columns, towers, slabs, abstract structures, and speculative add-ons like boosters, propellers, glowing engines, weapons, or impossible moving parts.",
-      "Each label must be short and specific; prefer Mailbox, Coffee Mug, Fire Hydrant, or Snack Cart over generic labels.",
-      "Each prompt_metadata value must be a concise user-ready generation prompt that names concrete features, silhouette, and color accents for that one object.",
+      "Never use generic cargo blocks, cubes, columns, towers, slabs, abstract structures, and speculative add-ons like boosters, propellers, glowing engines, weapons, or impossible moving parts.",
+      "Each label must be short and specific; avoid color adjectives and prefer Mailbox, Coffee Mug, Fire Hydrant, or Snack Cart over generic labels.",
+      "Each prompt_metadata value must be a concise user-ready generation prompt that names concrete features and silhouette for that one object.",
+      "For prompt_metadata, use shape first: describe the broad form, whether the object reads as flat or bulky, and the recognizable details.",
+      "For prompt_metadata, do not include color words, color names, or palette guidance; the builder must choose colors from inventory availability instead of treating metadata colors as strict requirements.",
       "For prompt_metadata, avoid size adjectives.",
       "For prompt_metadata, Do not mention specific bricks, part IDs, dimensions, piece counts, or construction instructions; the planner decides exact LEGO parts and layout.",
-      "Each inventory_reasoning value must explain how the available parts, colors, quantities, and dimensions support the object.",
+      "Each inventory_reasoning value must explain how the available part shapes, flat-or-bulky profile, quantities, and dimensions support the object; consider color last as a weak tie-breaker only.",
       "Use only capabilities supported by the provided inventory; do not claim unavailable parts or colors.",
-      "Use inventory shape and color heuristics: taller-piece inventory should favor chunkier silhouettes, while flatter-piece inventory should favor flatter silhouettes.",
+      "Use inventory shape heuristics before color: taller-piece inventory should favor bulky silhouettes, while flatter-piece inventory should favor flatter silhouettes; color alone is never enough to choose an object.",
       "In the inventory summary, height_layers 3 means a brick and height_layers 1 means a plate.",
     ].join("\n"),
     userPayload: {
@@ -306,8 +319,8 @@ export function buildPlacementPrompt({
       "No markdown, no commentary, and no text before or after the JSON object.",
       "Do not output raw LDraw.",
       "Do not output meshes, vertices, or arbitrary 3D geometry.",
-      "Use only parts and colors present in the inventory.",
-      "Do not exceed inventory quantities.",
+      "Use only inventory parts/colors; assign alternate colors as coherent feature blocks or symmetric patterns, not random scatter.",
+      "Do not exceed inventory quantities; never shrink or simplify solely to stay within one matching color.",
       `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
       "piece_count must be a non-negative integer.",
       "step must be a positive integer.",
@@ -322,6 +335,58 @@ export function buildPlacementPrompt({
       inventory: inventorySummary,
       structure_plan: structurePlan,
     },
+    responseSchema: GENERATED_MODEL_SCHEMA,
+    maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
+  });
+}
+
+export function buildRefinementPrompt({
+  userPrompt,
+  inventory,
+  structurePlan,
+  originalModel,
+  cleanedModel,
+  removedBricks = [],
+  validationErrors = [],
+  targetPieceCount,
+  image,
+  model,
+}) {
+  const cappedTarget = clampTargetPieceCount(
+    targetPieceCount ?? structurePlan.target_piece_count,
+  );
+
+  return buildGeminiJsonRequest({
+    model,
+    systemText: [
+      "You are the final visual evaluator and model generator for a local LEGO generation app.",
+      "Inspect the fixed isometric image together with all structured generation context.",
+      "Return exactly one complete GeneratedModel JSON object matching generationConfig.responseSchema.",
+      "No markdown, no commentary, no KEEP or REBUILD decision, no wrapper object, and no text before or after the JSON object.",
+      "The response must always contain the entire model, never a patch or list of edits.",
+      "You may replace every brick when doing so improves prompt resemblance, recognizable silhouette, proportions, color placement, or physical validity.",
+      "If the cleaned current model is already the best result, return that model with identical model contents.",
+      "Use only supported parts and exact part/color combinations present in the full selected inventory, without exceeding quantities.",
+      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      "piece_count must equal the number of bricks in the returned model.",
+      "Use x and y as integer stud-grid positions and z as an integer plate-layer height.",
+      "Plates are 1 layer tall and bricks are 3 layers tall.",
+      "Every brick rotation must be numeric 0, 90, 180, or 270.",
+      "At least one brick must touch z 0, every raised brick must have occupied stud support directly below it, all bricks must connect through vertical stud overlap, and bricks must not overlap.",
+      "Deterministic validation after this response is authoritative; visual plausibility does not override inventory or geometry rules.",
+    ].join("\n"),
+    userPayload: {
+      user_prompt: userPrompt,
+      target_piece_count: cappedTarget,
+      structure_plan: structurePlan,
+      full_selected_inventory: inventory,
+      original_placement_model: originalModel,
+      cleaned_current_model: cleanedModel,
+      removed_bricks: removedBricks,
+      deterministic_validation_errors: validationErrors,
+      image_description: "One fixed browser-rendered isometric view of cleaned_current_model.",
+    },
+    inlineImage: image,
     responseSchema: GENERATED_MODEL_SCHEMA,
     maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
   });
