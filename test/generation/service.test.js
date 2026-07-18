@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
-import { generateBuildSuggestions, generateModel } from "../../src/generation/service.js";
+import { generateBuildSuggestions, generateModel, refineModel } from "../../src/generation/service.js";
 
 const TEST_STRUCTURE_MODEL = "env-structure-model";
 const TEST_PLACEMENT_MODEL = "env-placement-model";
@@ -148,6 +148,31 @@ function requestText(request) {
 }
 
 describe("generateModel", () => {
+  it("emits complete placement brick patches while placement text is streaming", async () => {
+    const events = [];
+    const client = {
+      async complete(request) {
+        if (request.model === TEST_STRUCTURE_MODEL) return JSON.stringify(structurePlan);
+        throw new Error("buffered placement should not run");
+      },
+      async *streamWithMetadata() {
+        yield { text: JSON.stringify({ ...validModel, bricks: [{ ...validModel.bricks[0] }]}).slice(0, 260) };
+        yield { text: JSON.stringify({ ...validModel, bricks: [{ ...validModel.bricks[0] }]}).slice(260) };
+      },
+    };
+
+    const result = await generateTestModel({
+      userPrompt: "build me a tiny duck",
+      inventory: duckInventory,
+      targetPieceCount: 2,
+      generationClient: client,
+      streamPlacement: true,
+      onProgress: (event) => events.push(event),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(events.some((event) => event.type === "brick" && event.phase === "placement"), true);
+  });
   it("runs structure, placement, shape validation, and model validation", async () => {
     const client = fakeClient([JSON.stringify(structurePlan), JSON.stringify(validModel)]);
 
@@ -626,6 +651,33 @@ describe("generateModel", () => {
         .map((event) => event.status),
       ["running", "complete"],
     );
+  });
+});
+
+describe("refineModel", () => {
+  it("marks replacement metadata from live streamed placement ids", async () => {
+    const events = [];
+    const client = {
+      async *streamWithMetadata() {
+        yield { text: JSON.stringify(validModel) };
+      },
+    };
+
+    const result = await refineModel({
+      userPrompt: "build me a tiny duck",
+      inventory: duckInventory,
+      targetPieceCount: 2,
+      structurePlan,
+      originalModel: validModel,
+      generationClient: client,
+      refinementModel: TEST_REPAIR_MODEL,
+      streamRefinement: true,
+      streamedBrickIds: ["a-different-live-id"],
+      onProgress: (event) => events.push(event),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(events.find((event) => event.type === "brick")?.replaced, false);
   });
 });
 

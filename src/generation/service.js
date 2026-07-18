@@ -1,17 +1,20 @@
-import { parseJsonObject, parseStructurePlanText } from "./designPlan.js";
+import {
+  parseJsonObject,
+  parseStructurePlanText,
+  validateStructurePlan,
+} from "./designPlan.js";
 import { validateGeneratedModelShape } from "./generatedModelSchema.js";
 import {
   BUILD_SUGGESTIONS_SCHEMA,
-  buildJsonRepairPrompt,
   buildBuildSuggestionsPrompt,
+  buildJsonRepairPrompt,
   buildPlacementPrompt,
-  buildPlacementValidationRepairPrompt,
+  buildRefinementPrompt,
   buildStructurePrompt,
-  GENERATED_MODEL_SCHEMA,
-  STRUCTURE_PLAN_SCHEMA,
 } from "./generationPrompts.js";
 import { cleanupIllegalInventoryUsage } from "./inventoryCleanup.js";
 import { validateModel } from "./validator.js";
+import { createStreamingBrickExtractor } from "./streamingBrickExtractor.js";
 
 function failure(stage, errors, extra = {}) {
   return {
@@ -25,30 +28,11 @@ function failure(stage, errors, extra = {}) {
 const STAGE_LABELS = {
   structure_generate: "Structure generation",
   structure_parse: "Structure JSON parse",
-  structure_repair: "Structure JSON repair",
   placement_generate: "Placement generation",
   placement_parse: "Placement JSON parse",
-  placement_repair: "Placement JSON repair",
-  validation: "Validation",
-  validation_repair: "Validation repair",
+  validation: "Deterministic cleanup and validation",
+  refinement: "Isometric refinement",
 };
-
-const REPAIRABLE_VALIDATION_TYPES = new Set([
-  "floating_brick",
-  "disconnected_component",
-  "no_ground_contact",
-  "overlapping_bricks",
-]);
-
-const REPAIRABLE_INVENTORY_VALIDATION_TYPES = new Set([
-  "inventory_missing",
-  "inventory_exceeded",
-]);
-
-const CLEANUP_RELEVANT_VALIDATION_TYPES = new Set([
-  "unsupported_part",
-  ...REPAIRABLE_INVENTORY_VALIDATION_TYPES,
-]);
 
 const BUILD_SUGGESTION_FIELDS = new Set([
   "label",
@@ -147,50 +131,64 @@ async function emitDraft(onProgress, stage, payload) {
   });
 }
 
-async function parseWithOneRepair({
+async function streamTextAndBricks({ generationClient, request, phase, onProgress, seenIds }) {
+  const extractor = createStreamingBrickExtractor();
+  let text = "";
+  let sequence = 0;
+  const emittedIds = seenIds ?? new Set();
+  const stream = generationClient.streamWithMetadata(request, {
+    phase,
+    stage: `${phase}_generate`,
+    label: phase === "placement" ? "Placement generation" : "Refinement",
+  });
+  for await (const item of stream) {
+    const chunk = typeof item === "string" ? item : item?.text ?? "";
+    text += chunk;
+    for (const brick of extractor.push(chunk)) {
+      sequence += 1;
+      const replaced = emittedIds.has(brick.id);
+      emittedIds.add(brick.id);
+      await onProgress?.({
+        type: "brick",
+        phase,
+        brick,
+        sequence,
+        replaced,
+      });
+    }
+  }
+  const finalState = extractor.finish();
+  for (const error of finalState.errors) {
+    await onProgress?.({ type: "warning", phase, warning: error.message });
+  }
+  return { text, trailingFragment: finalState.trailingFragment };
+}
+
+async function parseSuggestionWithOneRepair({
   text,
-  label,
-  parse,
   generationClient,
   model,
-  responseSchema,
-  onProgress,
-  parseStage,
-  repairStage,
-  repairMetadata,
 }) {
-  await emitProgress(onProgress, parseStage, "running");
-  const initialResult = parse(text);
+  const initialResult = parseJsonObject(text, "build suggestions");
 
   if (initialResult.ok) {
-    await emitProgress(onProgress, parseStage, "complete");
-    await emitProgress(onProgress, repairStage, "skipped");
     return initialResult;
   }
 
-  await emitProgress(onProgress, repairStage, "running");
   const repairRequest = buildJsonRepairPrompt({
-    label,
+    label: "build suggestions",
     malformedText: text,
-    errorMessage: initialResult.errors[0]?.message ?? `Invalid ${label} JSON.`,
+    errorMessage: initialResult.errors[0]?.message ?? "Invalid build suggestions JSON.",
     model,
-    responseSchema,
+    responseSchema: BUILD_SUGGESTIONS_SCHEMA,
   });
-  const repairedText = await generationClient.complete(
-    repairRequest,
-    repairMetadata ?? {
-      phase: "json_repair",
-      stage: repairStage,
-      label: `${label} JSON repair`,
-    },
-  );
+  const repairedText = await generationClient.complete(repairRequest, {
+    phase: "suggestion",
+    stage: "suggestion_repair",
+    label: "Build suggestion JSON repair",
+  });
 
-  const repairedResult = parse(repairedText);
-
-  await emitProgress(onProgress, parseStage, repairedResult.ok ? "complete" : "failed");
-  await emitProgress(onProgress, repairStage, repairedResult.ok ? "complete" : "failed");
-
-  return repairedResult;
+  return parseJsonObject(repairedText, "build suggestions");
 }
 
 export async function generateBuildSuggestions({ inventory, generationClient, suggestionModel }) {
@@ -207,20 +205,10 @@ export async function generateBuildSuggestions({ inventory, generationClient, su
     stage: "suggestion_generate",
     label: "Build suggestion generation",
   });
-  const parsed = await parseWithOneRepair({
+  const parsed = await parseSuggestionWithOneRepair({
     text: suggestionText,
-    label: "build suggestions",
-    parse: (text) => parseJsonObject(text, "build suggestions"),
     generationClient,
     model,
-    responseSchema: BUILD_SUGGESTIONS_SCHEMA,
-    parseStage: "suggestion_parse",
-    repairStage: "suggestion_repair",
-    repairMetadata: {
-      phase: "suggestion",
-      stage: "suggestion_repair",
-      label: "Build suggestion JSON repair",
-    },
   });
 
   if (!parsed.ok) {
@@ -236,245 +224,98 @@ export async function generateBuildSuggestions({ inventory, generationClient, su
   return { ok: true, suggestions: validation.value };
 }
 
-function hasRepairableValidationError(validation) {
-  return (
-    validation.errors.length > 0 &&
-    validation.errors.every((error) => REPAIRABLE_VALIDATION_TYPES.has(error.type))
-  );
-}
+function initialPlacementContext({
+  userPrompt,
+  targetPieceCount,
+  structurePlan,
+  originalModel,
+  inventory,
+}) {
+  const cleanup = cleanupIllegalInventoryUsage(originalModel, inventory);
+  const validation = validateModel(cleanup.model, inventory);
 
-function validationErrorsMatching(validation, repairableTypes) {
-  return validation.errors.filter((error) => repairableTypes.has(error.type));
-}
-
-function hasValidationErrorType(validation, repairableTypes) {
-  return validationErrorsMatching(validation, repairableTypes).length > 0;
-}
-
-function buildValidationFailure(stage, errors, model, validation, originalValidation, extra = {}) {
   return {
-    ok: false,
-    stage,
-    errors,
-    model,
+    userPrompt,
+    targetPieceCount,
+    structurePlan,
+    originalModel,
+    cleanedModel: cleanup.model,
+    removedBricks: cleanup.removedBricks,
     validation,
-    ...(originalValidation ? { originalValidation } : {}),
-    ...extra,
   };
 }
 
-async function runPlacementValidationRepair({
-  userPrompt,
-  inventory,
-  structurePlan,
-  invalidModel,
-  originalFailedModel,
-  prunedModel,
-  removedBricks = [],
-  validation,
-  targetPieceCount,
-  generationClient,
-  model,
-  buildRepairPrompt,
-  validationErrors,
-}) {
-  const repairRequest = buildRepairPrompt({
-    userPrompt,
-    inventory,
-    structurePlan,
-    invalidModel,
-    originalFailedModel,
-    prunedModel,
-    removedBricks,
-    validationErrors,
-    targetPieceCount,
-    model,
-  });
-  const repairedText = await generationClient.complete(repairRequest, {
-    phase: "validation_repair",
-    stage: "validation_repair",
-    label: "Placement validation repair",
-  });
-  let repairedJson = parseJsonObject(repairedText, "placement validation repair model");
-
-  if (!repairedJson.ok) {
-    const syntaxRepairRequest = buildJsonRepairPrompt({
-      label: "placement validation repair model",
-      malformedText: repairedText,
-      errorMessage:
-        repairedJson.errors[0]?.message ??
-        "Invalid placement validation repair model JSON.",
-      model,
-      responseSchema: GENERATED_MODEL_SCHEMA,
-    });
-    const syntaxRepairedText = await generationClient.complete(syntaxRepairRequest, {
-      phase: "validation_repair",
-      stage: "validation_repair_parse",
-      label: "Placement validation repair JSON repair",
-    });
-    repairedJson = parseJsonObject(
-      syntaxRepairedText,
-      "placement validation repair model",
-    );
-  }
-
-  if (!repairedJson.ok) {
-    return {
-      ok: false,
-      stage: "validation_repair_parse",
-      errors: repairedJson.errors,
-      model: invalidModel,
-      validation,
-    };
-  }
-
-  const shapeResult = validateGeneratedModelShape(repairedJson.value);
-
-  if (!shapeResult.ok) {
-    return {
-      ok: false,
-      stage: "validation_repair_shape",
-      errors: shapeResult.errors,
-      model: repairedJson.value,
-      validation,
-    };
-  }
-
-  const repairedValidation = validateModel(repairedJson.value, inventory);
-
+function successFromSelection(context, model, validation, outcome, extra = {}) {
   return {
     ok: true,
-    model: repairedJson.value,
-    validation: repairedValidation,
+    stage: "complete",
+    structurePlan: context.structurePlan,
+    model,
+    validation,
+    removedBricks: context.removedBricks,
+    refinement: {
+      outcome,
+      ...extra,
+    },
   };
 }
 
-async function repairInvalidPlacement({
-  userPrompt,
-  inventory,
-  structurePlan,
-  invalidModel,
-  validation,
-  targetPieceCount,
-  generationClient,
-  model,
-  onProgress,
-}) {
-  let currentModel = invalidModel;
-  let currentValidation = validation;
-  let removedBricks = [];
-  let prunedModel = currentModel;
-  let prunedValidation = currentValidation;
-  const shouldClean = hasValidationErrorType(
-    currentValidation,
-    CLEANUP_RELEVANT_VALIDATION_TYPES,
-  );
+function selectRefinementResult(context, parsedRefinement) {
+  if (parsedRefinement.ok) {
+    const shapeResult = validateGeneratedModelShape(parsedRefinement.value);
 
-  if (shouldClean) {
-    await emitProgress(onProgress, "validation_repair", "running");
-    const cleanup = cleanupIllegalInventoryUsage(currentModel, inventory);
-    removedBricks = cleanup.removedBricks;
-    prunedModel = cleanup.model;
-    prunedValidation = validateModel(prunedModel, inventory);
+    if (shapeResult.ok) {
+      const refinedValidation = validateModel(parsedRefinement.value, context.inventory);
 
-    await emitDraft(onProgress, "pruned_draft", {
-      model: prunedModel,
-      validation: prunedValidation,
-      removedBricks,
-    });
+      if (refinedValidation.valid) {
+        return successFromSelection(
+          context,
+          parsedRefinement.value,
+          refinedValidation,
+          "refined_valid",
+        );
+      }
 
-    currentModel = prunedModel;
-    currentValidation = prunedValidation;
-  }
+      if (context.validation.valid) {
+        return successFromSelection(
+          context,
+          context.cleanedModel,
+          context.validation,
+          "cleaned_initial_valid_fallback",
+          { refinedValidation },
+        );
+      }
 
-  const shouldAttemptRepair =
-    hasRepairableValidationError(currentValidation) ||
-    (removedBricks.length > 0 && currentValidation.valid);
+      return successFromSelection(
+        context,
+        parsedRefinement.value,
+        refinedValidation,
+        "refined_invalid_draft",
+      );
+    }
 
-  if (!shouldAttemptRepair) {
-    await emitProgress(onProgress, "validation_repair", shouldClean ? "failed" : "skipped");
-    return buildValidationFailure(
-      "validation",
-      currentValidation.errors,
-      currentModel,
-      currentValidation,
-      validation,
-      {
-        prunedModel,
-        prunedValidation,
-        removedBricks,
-      },
+    return successFromSelection(
+      context,
+      context.cleanedModel,
+      context.validation,
+      "cleaned_initial_schema_fallback",
+      { errors: shapeResult.errors },
     );
   }
 
-  if (!shouldClean) {
-    await emitProgress(onProgress, "validation_repair", "running");
-  }
-
-  const buildabilityRepair = await runPlacementValidationRepair({
-    userPrompt,
-    inventory,
-    structurePlan,
-    invalidModel: currentModel,
-    originalFailedModel: invalidModel,
-    prunedModel,
-    removedBricks,
-    validation: currentValidation,
-    validationErrors: currentValidation.errors,
-    targetPieceCount,
-    generationClient,
-    model,
-    buildRepairPrompt: buildPlacementValidationRepairPrompt,
-  });
-
-  if (!buildabilityRepair.ok && removedBricks.length > 0 && currentValidation.valid) {
-    await emitProgress(onProgress, "validation_repair", "complete");
-    return {
-      ok: true,
-      model: currentModel,
-      validation: currentValidation,
-      removedBricks,
-      repaired: false,
-    };
-  }
-
-  await emitProgress(
-    onProgress,
-    "validation_repair",
-    buildabilityRepair.ok && buildabilityRepair.validation.valid ? "complete" : "failed",
-  );
-
-  if (!buildabilityRepair.ok) {
-    return {
-      ...buildabilityRepair,
-      prunedModel,
-      prunedValidation,
-      removedBricks,
-    };
-  }
-
-  if (buildabilityRepair.validation.valid) {
-    return {
-      ...buildabilityRepair,
-      removedBricks,
-      repaired: true,
-    };
-  }
-
-  return buildValidationFailure(
-    "validation",
-    buildabilityRepair.validation.errors,
-    buildabilityRepair.model,
-    buildabilityRepair.validation,
-    validation,
-    {
-      prunedModel,
-      prunedValidation,
-      removedBricks,
-    },
+  return successFromSelection(
+    context,
+    context.cleanedModel,
+    context.validation,
+    "cleaned_initial_parse_fallback",
+    { errors: parsedRefinement.errors },
   );
 }
 
+/**
+ * Runs the first two calls in the submitted-build budget and returns the
+ * canonical cleaned placement context needed by browser-side refinement.
+ */
 export async function generateModel({
   userPrompt,
   inventory,
@@ -482,8 +323,8 @@ export async function generateModel({
   generationClient,
   structureModel,
   placementModel,
-  repairModel,
   onProgress,
+  streamPlacement = false,
 }) {
   if (
     typeof structureModel !== "string" ||
@@ -496,18 +337,11 @@ export async function generateModel({
     );
   }
 
-  const resolvedStructureModel = structureModel.trim();
-  const resolvedPlacementModel = placementModel.trim();
-  const resolvedRepairModel =
-    typeof repairModel === "string" && repairModel.trim() !== ""
-      ? repairModel.trim()
-      : resolvedPlacementModel;
-
   const structureRequest = buildStructurePrompt({
     userPrompt,
     inventory,
     targetPieceCount,
-    model: resolvedStructureModel,
+    model: structureModel.trim(),
   });
 
   await emitProgress(onProgress, "structure_generate", "running");
@@ -517,22 +351,13 @@ export async function generateModel({
     label: "Structure planning",
   });
   await emitProgress(onProgress, "structure_generate", "complete");
-  const structureResult = await parseWithOneRepair({
-    text: structureText,
-    label: "structure plan",
-    parse: parseStructurePlanText,
-    generationClient,
-    model: resolvedRepairModel,
-    responseSchema: STRUCTURE_PLAN_SCHEMA,
+  await emitProgress(onProgress, "structure_parse", "running");
+  const structureResult = parseStructurePlanText(structureText);
+  await emitProgress(
     onProgress,
-    parseStage: "structure_parse",
-    repairStage: "structure_repair",
-    repairMetadata: {
-      phase: "planning",
-      stage: "structure_repair",
-      label: "Structure JSON repair",
-    },
-  });
+    "structure_parse",
+    structureResult.ok ? "complete" : "failed",
+  );
 
   if (!structureResult.ok) {
     return failure("structure_parse", structureResult.errors);
@@ -543,107 +368,183 @@ export async function generateModel({
     inventory,
     structurePlan: structureResult.value,
     targetPieceCount,
-    model: resolvedPlacementModel,
+    model: placementModel.trim(),
   });
 
   await emitProgress(onProgress, "placement_generate", "running");
-  const placementText = await generationClient.complete(placementRequest, {
-    phase: "placing",
-    stage: "placement_generate",
-    label: "Placement generation",
-  });
+  const placementText = streamPlacement && typeof generationClient.streamWithMetadata === "function"
+    ? (await streamTextAndBricks({
+      generationClient,
+      request: placementRequest,
+      phase: "placement",
+      onProgress,
+    })).text
+    : await generationClient.complete(placementRequest, {
+      phase: "placing",
+      stage: "placement_generate",
+      label: "Placement generation",
+    });
   await emitProgress(onProgress, "placement_generate", "complete");
-  const placementJson = await parseWithOneRepair({
-    text: placementText,
-    label: "placement model",
-    parse: (text) => parseJsonObject(text, "placement model"),
-    generationClient,
-    model: resolvedRepairModel,
-    responseSchema: GENERATED_MODEL_SCHEMA,
-    onProgress,
-    parseStage: "placement_parse",
-    repairStage: "placement_repair",
-    repairMetadata: {
+  await emitProgress(onProgress, "placement_parse", "running");
+  let placementJson = parseJsonObject(placementText, "placement model");
+
+  if (!placementJson.ok && streamPlacement && typeof generationClient.complete === "function") {
+    const repairRequest = buildJsonRepairPrompt({
+      label: "placement model",
+      malformedText: placementText,
+      errorMessage: placementJson.errors[0]?.message ?? "Incomplete streamed placement JSON.",
+      model: placementModel.trim(),
+    });
+    const repairedText = await generationClient.complete(repairRequest, {
       phase: "placing",
       stage: "placement_repair",
       label: "Placement JSON repair",
-    },
-  });
+    });
+    placementJson = parseJsonObject(repairedText, "placement model");
+  }
 
   if (!placementJson.ok) {
+    await emitProgress(onProgress, "placement_parse", "failed");
     return failure("placement_parse", placementJson.errors, {
       structurePlan: structureResult.value,
     });
   }
 
-  await emitProgress(onProgress, "validation", "running");
   const shapeResult = validateGeneratedModelShape(placementJson.value);
 
   if (!shapeResult.ok) {
-    await emitProgress(onProgress, "validation", "failed");
+    await emitProgress(onProgress, "placement_parse", "failed");
     return failure("placement_shape", shapeResult.errors, {
       structurePlan: structureResult.value,
     });
   }
 
-  await emitDraft(onProgress, "placement_draft", {
-    model: placementJson.value,
+  await emitProgress(onProgress, "placement_parse", "complete");
+  await emitProgress(onProgress, "validation", "running");
+  const context = initialPlacementContext({
+    userPrompt,
+    targetPieceCount,
+    structurePlan: structureResult.value,
+    originalModel: placementJson.value,
+    inventory,
   });
 
-  const validation = validateModel(placementJson.value, inventory);
-
-  if (!validation.valid) {
-    const repairedPlacement = await repairInvalidPlacement({
-      userPrompt,
-      inventory,
-      structurePlan: structureResult.value,
-      invalidModel: placementJson.value,
-      validation,
-      targetPieceCount,
-      generationClient,
-      model: resolvedRepairModel,
-      onProgress,
-    });
-
-    if (repairedPlacement.ok) {
-      await emitProgress(onProgress, "validation", "complete");
-      return {
-        ok: true,
-        stage: "complete",
-        structurePlan: structureResult.value,
-        model: repairedPlacement.model,
-        validation: repairedPlacement.validation,
-        ...(repairedPlacement.removedBricks ? { removedBricks: repairedPlacement.removedBricks } : {}),
-        ...(typeof repairedPlacement.repaired === "boolean"
-          ? { repaired: repairedPlacement.repaired }
-          : {}),
-      };
-    }
-
-    await emitProgress(onProgress, "validation", "failed");
-    return failure(repairedPlacement.stage, repairedPlacement.errors, {
-      structurePlan: structureResult.value,
-      model: repairedPlacement.model,
-      validation: repairedPlacement.validation,
-      originalValidation: repairedPlacement.originalValidation,
-      ...(repairedPlacement.prunedModel ? { prunedModel: repairedPlacement.prunedModel } : {}),
-      ...(repairedPlacement.prunedValidation
-        ? { prunedValidation: repairedPlacement.prunedValidation }
-        : {}),
-      ...(repairedPlacement.removedBricks
-        ? { removedBricks: repairedPlacement.removedBricks }
-        : {}),
-    });
-  }
-
-  await emitProgress(onProgress, "validation_repair", "skipped");
+  await emitDraft(onProgress, "cleaned_placement_draft", {
+    model: context.cleanedModel,
+    validation: context.validation,
+    removedBricks: context.removedBricks,
+  });
   await emitProgress(onProgress, "validation", "complete");
 
   return {
     ok: true,
-    stage: "complete",
-    structurePlan: structureResult.value,
-    model: placementJson.value,
-    validation,
+    stage: "awaiting_refinement",
+    structurePlan: context.structurePlan,
+    originalModel: context.originalModel,
+    cleanedModel: context.cleanedModel,
+    model: context.cleanedModel,
+    validation: context.validation,
+    removedBricks: context.removedBricks,
+    targetPieceCount,
   };
+}
+
+/**
+ * Runs exactly one final multimodal model call and selects a result using the
+ * deterministic fallback order from the refinement design.
+ */
+export async function refineModel({
+  userPrompt,
+  inventory,
+  targetPieceCount,
+  structurePlan,
+  originalModel,
+  image,
+  generationClient,
+  refinementModel,
+  streamRefinement = false,
+  streamedBrickIds,
+  onProgress,
+}) {
+  if (typeof refinementModel !== "string" || refinementModel.trim() === "") {
+    throw new Error(
+      "refinementModel is required. Resolve it from GEMINI_REFINEMENT_MODEL or the placement model before calling refineModel.",
+    );
+  }
+
+  const structureValidation = validateStructurePlan(structurePlan);
+
+  if (!structureValidation.ok) {
+    return failure("refinement_context", structureValidation.errors);
+  }
+
+  const originalShape = validateGeneratedModelShape(originalModel);
+
+  if (!originalShape.ok) {
+    return failure("refinement_context", originalShape.errors);
+  }
+
+  // Rebuild all deterministic context server-side so browser-provided cleanup
+  // or validation fields can never override the authoritative local rules.
+  const initialContext = initialPlacementContext({
+    userPrompt,
+    targetPieceCount,
+    structurePlan,
+    originalModel,
+    inventory,
+  });
+  const context = { ...initialContext, inventory };
+  const refinementRequest = buildRefinementPrompt({
+    userPrompt,
+    inventory,
+    structurePlan,
+    originalModel,
+    cleanedModel: context.cleanedModel,
+    removedBricks: context.removedBricks,
+    validationErrors: context.validation.errors,
+    targetPieceCount,
+    image,
+    model: refinementModel.trim(),
+  });
+
+  let refinementText;
+
+  try {
+    refinementText = streamRefinement && typeof generationClient.streamWithMetadata === "function"
+      ? (await streamTextAndBricks({
+        generationClient,
+        request: refinementRequest,
+        phase: "repair",
+        onProgress,
+        seenIds: new Set(
+          streamedBrickIds ?? (originalModel.bricks ?? []).map((brick) => brick.id),
+        ),
+      })).text
+      : await generationClient.complete(refinementRequest, {
+        phase: "refinement",
+        stage: "refinement",
+        label: "Isometric model refinement",
+      });
+  } catch (error) {
+    if (streamRefinement) {
+      throw error;
+    }
+    return successFromSelection(
+      context,
+      context.cleanedModel,
+      context.validation,
+      "cleaned_initial_provider_fallback",
+      { errors: [{ message: error.message }] },
+    );
+  }
+
+  const parsedRefinement = parseJsonObject(refinementText, "refinement model");
+  if (streamRefinement && !parsedRefinement.ok) {
+    return failure("refinement_parse", parsedRefinement.errors, {
+      model: context.cleanedModel,
+      validation: context.validation,
+      structurePlan,
+    });
+  }
+  return selectRefinementResult(context, parsedRefinement);
 }
