@@ -95,7 +95,6 @@ describe("generation server SSE events", () => {
         BACKBOARD_LLM_PROVIDER: "google",
         BACKBOARD_MODEL: "gemini-3.5-flash",
       },
-      inventoryStore: { async load() { return { inventory_id: "inv_test_123", items: [] }; } },
       logger: { logAiRequest() {}, logAiResponse() {}, logAiError() {} },
     });
 

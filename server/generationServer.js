@@ -129,9 +129,7 @@ function shouldUseBackboardGeneration(env = process.env) {
 }
 
 export function createGenerationClientForBody({
-  body,
   env = process.env,
-  inventoryStore = getInventorySessionStore(),
   logger = getRuntimeLogger(),
 } = {}) {
   const rawClient = shouldUseBackboardGeneration(env)
@@ -140,9 +138,6 @@ export function createGenerationClientForBody({
       assistantId: env.BACKBOARD_ASSISTANT_ID,
       llmProvider: env.BACKBOARD_LLM_PROVIDER ?? "google",
       memory: env.BACKBOARD_MEMORY ?? "off",
-      inventorySessionId: body.inventory_id,
-      inlineInventory: body.inventory,
-      inventoryStore,
     })
     : createGeminiClient({
       apiKey: env.GEMINI_API_KEY,
