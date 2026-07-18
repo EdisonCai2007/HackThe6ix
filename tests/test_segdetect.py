@@ -229,3 +229,7 @@ def test_segmented_scan_uses_true_instance_mask_for_original_crop(
     assert result.id_crops[0]["source"] == "yolo-instance-mask"
     assert result.id_crops[0]["source_instance_id"] == "fake-0"
     assert result.id_crops[0]["segmentation_confidence"] == pytest.approx(0.92)
+    metric = result.id_crops[0]["metric_silhouette"]
+    assert metric["action"] == "shadow_only"
+    assert metric["evidence"]["reliability"] == "low"
+    assert metric["evidence"]["used_frame_ids"] == [1]

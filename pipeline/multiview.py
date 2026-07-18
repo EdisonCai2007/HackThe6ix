@@ -18,6 +18,7 @@ from pipeline.color import (
     normalize_illumination,
 )
 from pipeline.detect import Box, crop_box, detect
+from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
 from pipeline.studs import advise, analyze_studs, stud_radius_px
@@ -815,6 +816,25 @@ def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
     return identifications
 
 
+def _attach_metric_silhouettes(instances, views, id_crops, px_per_m):
+    """Serialize polygon measurements without changing identification."""
+    by_index = {view.view_index: view for view in views}
+    for instance, info in zip(instances, id_crops):
+        measurements = [
+            measure_observation(
+                observation,
+                px_per_m,
+                view=by_index.get(observation.view_index),
+            )
+            for observation in instance.observations
+        ]
+        aggregate = aggregate_measurements(measurements)
+        info["metric_silhouette"] = {
+            "action": "shadow_only",
+            "evidence": aggregate.to_dict(),
+        }
+
+
 def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache"),
     seg_model=None, gate_config=None,
@@ -863,6 +883,9 @@ def scan_manifest(
                            for candidate in identification.candidates],
         }
     identified = time.perf_counter()
+    _attach_metric_silhouettes(
+        instances, views, id_crops, manifest["px_per_m"]
+    )
     identifications = _apply_stud_advisory(
         instances, views, identifications, crops, id_crops,
         manifest["px_per_m"],
