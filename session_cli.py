@@ -248,14 +248,16 @@ def main(argv: list[str] | None = None) -> None:
         seg_model=seg_model,
         analysis_dir=args.analysis_dir,
     )
-    (session_dir / "inventory.json").write_text(
+    output_dir = args.analysis_dir if args.analysis_dir is not None else session_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "inventory.json").write_text(
         json.dumps(result.inventory, indent=2) + "\n"
     )
     # Coverage preview only — final boxes are never drawn on the mosaic.
-    cv2.imwrite(str(session_dir / "topdown.jpg"), result.mosaic,
+    cv2.imwrite(str(output_dir / "topdown.jpg"), result.mosaic,
                 [cv2.IMWRITE_JPEG_QUALITY, 95])
 
-    debug_dir = session_dir / "debug"
+    debug_dir = output_dir / "debug"
     debug_dir.mkdir(exist_ok=True)
     gallery = crop_gallery(result.crops, result.labels, result.id_crops)
     cv2.imwrite(str(debug_dir / "crop_gallery.jpg"), gallery,
@@ -287,12 +289,12 @@ def main(argv: list[str] | None = None) -> None:
     }
     if detector == "seg":
         details["segmentation"] = _segmentation_details(result)
-    (session_dir / "multiview_result.json").write_text(
+    (output_dir / "multiview_result.json").write_text(
         json.dumps(details, indent=2) + "\n"
     )
     print(
         f"{len(result.instances)} fused pieces ({detector}) from "
-        f"{len(result.manifest['views'])} views -> {session_dir}"
+        f"{len(result.manifest['views'])} views -> {output_dir}"
     )
     print(
         f"usable RGB coverage: {100 * result.manifest['selected_coverage']:.1f}% "

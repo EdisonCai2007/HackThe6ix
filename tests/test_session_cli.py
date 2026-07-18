@@ -120,6 +120,7 @@ def test_analysis_dir_keeps_model_fit_outputs_run_scoped(tmp_path, monkeypatch):
     session = tmp_path / "session"
     manifest = _write_manifest(session)
     analysis = tmp_path / "diagnostic-run"
+    (session / "inventory.json").write_text("preserved-session-output\n")
     monkeypatch.setattr(
         pipeline.multiview,
         "identify_all",
@@ -134,6 +135,10 @@ def test_analysis_dir_keeps_model_fit_outputs_run_scoped(tmp_path, monkeypatch):
     ])
 
     assert (analysis / "model_fit.json").exists()
+    assert (analysis / "inventory.json").exists()
+    assert (analysis / "multiview_result.json").exists()
+    assert (analysis / "debug" / "crop_gallery.jpg").exists()
+    assert (session / "inventory.json").read_text() == "preserved-session-output\n"
     assert not (session / "analysis" / "model_fit.json").exists()
 
 
