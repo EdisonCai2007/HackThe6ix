@@ -20,6 +20,7 @@ import numpy as np
 from pipeline.multiview import color_provenance, consensus_color, scan_manifest
 from pipeline.original_crop import original_box
 from training.color_acceptance import write_color_worksheet
+from training.inventory_review_assets import write_review_bundle
 
 GALLERY_TILE_H = 180
 GALLERY_PAD = 8
@@ -232,9 +233,30 @@ def main(argv: list[str] | None = None) -> None:
             "requires --analysis-dir and skips model-fit diagnostics"
         ),
     )
+    parser.add_argument(
+        "--inventory-review", action="store_true",
+        help="write a fast, run-scoped human inventory review bundle",
+    )
+    parser.add_argument(
+        "--expected-count", type=int,
+        help="physical piece count required by --inventory-review",
+    )
+    parser.add_argument(
+        "--review-workers", type=int, default=12,
+        help="bounded Brickognize concurrency used only by review drafts",
+    )
     args = parser.parse_args(argv)
     if args.color_worksheet and args.analysis_dir is None:
         parser.error("--color-worksheet requires --analysis-dir")
+    if args.inventory_review:
+        if args.analysis_dir is None:
+            parser.error("--inventory-review requires --analysis-dir")
+        if args.expected_count is None or args.expected_count <= 0:
+            parser.error("--inventory-review requires a positive --expected-count")
+        if args.color_worksheet:
+            parser.error("--inventory-review cannot be combined with --color-worksheet")
+        if args.review_workers <= 0:
+            parser.error("--review-workers must be positive")
     try:
         detector = resolve_detector(args.detector, args.seg_model)
     except FileNotFoundError as error:
@@ -256,7 +278,13 @@ def main(argv: list[str] | None = None) -> None:
         detector=detector,
         cache_dir=Path(".cache"),
         seg_model=seg_model,
-        analysis_dir=None if args.color_worksheet else args.analysis_dir,
+        analysis_dir=(
+            None if args.color_worksheet or args.inventory_review
+            else args.analysis_dir
+        ),
+        review_draft=args.inventory_review,
+        identify_workers=args.review_workers,
+        identify_min_interval=0.0 if args.inventory_review else 1.0,
     )
     output_dir = args.analysis_dir if args.analysis_dir is not None else session_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -313,6 +341,17 @@ def main(argv: list[str] | None = None) -> None:
                 consensus_color(instance).name for instance in result.instances
             ],
         )
+    review_path = None
+    if args.inventory_review:
+        review_path = write_review_bundle(
+            result,
+            session_dir,
+            output_dir,
+            args.expected_count,
+            color_names=[
+                consensus_color(instance).name for instance in result.instances
+            ],
+        )
     print(
         f"{len(result.instances)} fused pieces ({detector}) from "
         f"{len(result.manifest['views'])} views -> {output_dir}"
@@ -326,6 +365,8 @@ def main(argv: list[str] | None = None) -> None:
           f"{len(gate_overlays)} gate overlay(s)")
     if worksheet_paths is not None:
         print(f"color worksheet: {worksheet_paths.csv}")
+    if review_path is not None:
+        print(f"inventory review: {review_path}")
     if details["partial_count"]:
         print(f"warning: {details['partial_count']} piece(s) only partially observed")
 

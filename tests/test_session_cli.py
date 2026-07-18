@@ -186,6 +186,48 @@ def test_color_worksheet_is_run_scoped_without_running_model_fit(
     assert not (session / "color-labels").exists()
 
 
+def test_inventory_review_requires_run_scope_and_positive_expected_count(
+    tmp_path, capsys
+):
+    manifest = _write_manifest(tmp_path / "session")
+    for arguments in (
+        [str(manifest), "--inventory-review", "--expected-count", "1"],
+        [str(manifest), "--inventory-review", "--analysis-dir", str(tmp_path / "run")],
+        [str(manifest), "--inventory-review", "--expected-count", "0",
+         "--analysis-dir", str(tmp_path / "run")],
+    ):
+        try:
+            session_cli.main(arguments)
+        except SystemExit as error:
+            assert error.code == 2
+        else:
+            raise AssertionError("invalid inventory review arguments were accepted")
+
+
+def test_inventory_review_writes_bundle_without_model_fit(tmp_path, monkeypatch):
+    session = tmp_path / "session"
+    manifest = _write_manifest(session)
+    analysis = tmp_path / "inventory-review"
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_all",
+        lambda crops, **kwargs: [
+            Identification("3003", "Brick 2 x 2", "Bricks", 0.9)
+            for _ in crops
+        ],
+    )
+
+    session_cli.main([
+        str(manifest), "--detector", "cv", "--analysis-dir", str(analysis),
+        "--inventory-review", "--expected-count", "1",
+    ])
+
+    review = json.loads((analysis / "review.json").read_text())
+    assert review["expected_physical_count"] == 1
+    assert len(review["components"]) == 1
+    assert not (analysis / "model_fit.json").exists()
+
+
 def test_seg_debug_writes_workspace_and_gate_overlays(tmp_path, monkeypatch):
     import pipeline.segdetect
     from tests.test_segdetect import _FakeModel, _write_v3_fixture
