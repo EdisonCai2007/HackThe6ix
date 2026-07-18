@@ -71,7 +71,8 @@ def _parse(payload: dict) -> Identification:
         return UNKNOWN
     candidates = tuple(
         {"part_id": item["id"], "name": item["name"],
-         "score": float(item.get("score", 0.0))}
+         "score": float(item.get("score", 0.0)),
+         "img_url": item.get("img_url")}
         for item in items[:5]
     )
     top = items[0]

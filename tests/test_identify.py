@@ -9,7 +9,8 @@ from pipeline.identify import Identification, identify_all, identify_crop
 BRICK_RESP = {
     "items": [
         {"id": "3001", "name": "Brick 2 x 4", "category": "Bricks",
-         "type": "part", "score": 0.93},
+         "type": "part", "score": 0.93,
+         "img_url": "https://example.test/parts/3001.webp"},
         {"id": "3002", "name": "Brick 2 x 3", "category": "Bricks",
          "type": "part", "score": 0.41},
     ]
@@ -61,6 +62,8 @@ def test_takes_top_item(monkeypatch, tmp_path, crop):
         ("3001", "Brick 2 x 4", "Bricks", 0.93)
     # Raw candidates ride along for downstream advisories (stud check).
     assert result.candidates[0]["part_id"] == "3001"
+    assert result.candidates[0]["img_url"] == \
+        "https://example.test/parts/3001.webp"
 
 
 def test_low_score_discarded(monkeypatch, tmp_path, crop):

@@ -107,6 +107,48 @@ def test_v2_identifies_from_original_pixels(tmp_path, monkeypatch):
     assert prov["brickognize"]["score"] == pytest.approx(0.9)
 
 
+def test_review_draft_uses_bounded_parallel_primary_identification_only(
+    tmp_path, monkeypatch
+):
+    manifest = _write_session(tmp_path / "session", with_bridge=True)
+    call = {}
+
+    def identify(crops, **kwargs):
+        call.update(kwargs)
+        return [Identification(
+            "3001", "Brick 2 x 4", "Bricks", 0.9,
+            candidates=({
+                "part_id": "3001", "name": "Brick 2 x 4", "score": 0.9,
+                "img_url": "https://example.test/3001.webp",
+            },),
+        ) for _ in crops]
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("review draft must skip production evidence calls")
+
+    monkeypatch.setattr(pipeline.multiview, "identify_all", identify)
+    monkeypatch.setattr(pipeline.multiview, "_second_chance", forbidden)
+    monkeypatch.setattr(pipeline.multiview, "_apply_stud_advisory", forbidden)
+
+    result = scan_manifest(
+        manifest,
+        detector="cv",
+        review_draft=True,
+        identify_workers=12,
+        identify_min_interval=0.0,
+    )
+
+    assert call["workers"] == 12
+    assert call["min_interval"] == 0.0
+    provenance = result.id_crops[0]
+    assert provenance["brickognize_raw"] == provenance["brickognize_primary"]
+    assert provenance["brickognize"] == {
+        "part_id": "3001", "name": "Brick 2 x 4", "score": 0.9,
+    }
+    assert provenance["brickognize_primary"]["candidates"][0]["img_url"] \
+        == "https://example.test/3001.webp"
+
+
 def test_v1_falls_back_to_rectified_crop(tmp_path, monkeypatch):
     manifest = _write_session(tmp_path / "session", with_bridge=False)
     captured = []

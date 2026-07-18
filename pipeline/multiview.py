@@ -1769,6 +1769,8 @@ def _apply_dimension_consistency(
 def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache"),
     seg_model=None, gate_config=None, analysis_dir=None,
+    review_draft: bool = False, identify_workers: int = 4,
+    identify_min_interval: float = 1.0,
 ) -> MultiViewScanResult:
     started = time.perf_counter()
     manifest, views = load_views(manifest_path)
@@ -1801,7 +1803,13 @@ def scan_manifest(
     fused = time.perf_counter()
     session_dir = Path(manifest["session_dir"])
     crops, id_crops = _identification_crops(instances, views, session_dir)
-    identifications = identify_all(crops, cache_dir=cache_dir)
+    identify_options = {"cache_dir": cache_dir}
+    if review_draft:
+        identify_options.update({
+            "workers": identify_workers,
+            "min_interval": identify_min_interval,
+        })
+    identifications = identify_all(crops, **identify_options)
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize_primary"] = {
             "part_id": identification.part_id,
@@ -1810,37 +1818,56 @@ def scan_manifest(
             "candidates": [dict(candidate)
                            for candidate in identification.candidates],
         }
-    metric_silhouettes = _attach_metric_silhouettes(
-        instances, views, id_crops, manifest["px_per_m"]
-    )
-    _attach_depth_heights(instances, id_crops, manifest)
-    metric_flags = [
-        resolve_dimensions(identification, metric).flag
-        for identification, metric in zip(
-            identifications, metric_silhouettes
+    if review_draft:
+        for crop_info, identification in zip(id_crops, identifications):
+            primary = crop_info["brickognize_primary"]
+            crop_info["brickognize_raw"] = dict(primary)
+            crop_info["brickognize_views"] = [{
+                "frame_id": crop_info.get("frame_id"),
+                "source": crop_info.get("source", "primary"),
+                **dict(primary),
+            }]
+            crop_info["identity_support"] = (
+                {identification.part_id: 1}
+                if identification.part_id is not None else {}
+            )
+            crop_info["appearance_support"] = aggregate_appearance_support(
+                crop_info["brickognize_views"]
+            )
+        identified = time.perf_counter()
+        evidenced = identified
+    else:
+        metric_silhouettes = _attach_metric_silhouettes(
+            instances, views, id_crops, manifest["px_per_m"]
         )
-    ]
-    identifications, crops, id_crops = _second_chance(
-        instances, views, session_dir, identifications, crops, id_crops,
-        cache_dir, metric_flags=metric_flags,
-    )
-    for crop_info, identification in zip(id_crops, identifications):
-        crop_info["brickognize_raw"] = {
-            "part_id": identification.part_id,
-            "name": identification.name,
-            "score": identification.score,
-            "candidates": [dict(candidate)
-                           for candidate in identification.candidates],
-        }
-    identified = time.perf_counter()
-    identifications = _apply_dimension_consistency(
-        identifications, metric_silhouettes, id_crops, manifest
-    )
-    identifications = _apply_stud_advisory(
-        instances, views, identifications, crops, id_crops,
-        manifest["px_per_m"], session_dir,
-    )
-    evidenced = time.perf_counter()
+        _attach_depth_heights(instances, id_crops, manifest)
+        metric_flags = [
+            resolve_dimensions(identification, metric).flag
+            for identification, metric in zip(
+                identifications, metric_silhouettes
+            )
+        ]
+        identifications, crops, id_crops = _second_chance(
+            instances, views, session_dir, identifications, crops, id_crops,
+            cache_dir, metric_flags=metric_flags,
+        )
+        for crop_info, identification in zip(id_crops, identifications):
+            crop_info["brickognize_raw"] = {
+                "part_id": identification.part_id,
+                "name": identification.name,
+                "score": identification.score,
+                "candidates": [dict(candidate)
+                               for candidate in identification.candidates],
+            }
+        identified = time.perf_counter()
+        identifications = _apply_dimension_consistency(
+            identifications, metric_silhouettes, id_crops, manifest
+        )
+        identifications = _apply_stud_advisory(
+            instances, views, identifications, crops, id_crops,
+            manifest["px_per_m"], session_dir,
+        )
+        evidenced = time.perf_counter()
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize"] = {
             "part_id": identification.part_id,
