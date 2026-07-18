@@ -135,6 +135,26 @@ def test_load_views_accepts_optional_camera_geometry(tmp_path):
     assert views[0].camera_bearing_deg == pytest.approx(296.5)
 
 
+def test_load_views_accepts_view_ray_geometry(tmp_path):
+    from pipeline.multiview import load_views
+
+    manifest_path = _write_session(tmp_path / "session", with_bridge=True)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["version"] = 3
+    manifest["views"][0].update({
+        "viewing_ray_table_xyz": [0.3, 0.0, -0.9539],
+        "view_tilt_deg": 17.46,
+    })
+    manifest_path.write_text(json.dumps(manifest))
+
+    _, views = load_views(manifest_path)
+
+    assert views[0].viewing_ray_table_xyz == pytest.approx(
+        (0.3, 0.0, -0.9539)
+    )
+    assert views[0].view_tilt_deg == pytest.approx(17.46)
+
+
 def test_legacy_v3_view_geometry_defaults_to_unavailable(tmp_path):
     from pipeline.multiview import load_views
 
@@ -149,6 +169,8 @@ def test_legacy_v3_view_geometry_defaults_to_unavailable(tmp_path):
     assert views[0].sharpness_score is None
     assert views[0].camera_position_table_xyz is None
     assert views[0].camera_bearing_deg is None
+    assert views[0].viewing_ray_table_xyz is None
+    assert views[0].view_tilt_deg is None
 
 
 def _obs(view_index, box, complete, clearance=10.0):
