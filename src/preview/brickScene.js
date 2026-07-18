@@ -56,8 +56,9 @@ function createSelectionOutline(part) {
   const outline = new THREE.LineSegments(
     new THREE.EdgesGeometry(boxGeometry),
     new THREE.LineBasicMaterial({
-      color: 0xff2f2f,
-      depthTest: false,
+      color: 0x000000,
+      transparent: true,
+      depthTest: true,
       depthWrite: false,
       toneMapped: false,
     }),
@@ -184,10 +185,13 @@ export function createBrickScene(scene) {
     const outline = object.userData.outline;
     const invalidOverlay = object.userData.invalidOverlay;
     const invalid = invalidBrickIds.has(brickId);
+    const selected = selectedBrickId === brickId;
+    const preview = object.userData.brick?.preview === true;
 
     if (outline) {
-      outline.visible = invalid || selectedBrickId === brickId;
-      outline.material.color.set(invalid ? 0xff2f2f : 0xf2cd37);
+      outline.visible = invalid || selected || !preview;
+      outline.material.color.set(invalid ? 0xff2f2f : selected ? 0xf2cd37 : 0x000000);
+      outline.material.depthTest = !invalid && !selected;
     }
 
     if (invalidOverlay) {
