@@ -18,7 +18,7 @@ from pipeline.color import (
     normalize_illumination,
 )
 from pipeline.detect import Box, crop_box, detect
-from pipeline.dimensions import resolve_dimensions
+from pipeline.dimensions import parse_regular_dimensions, resolve_dimensions
 from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
@@ -717,8 +717,83 @@ def _isolated_context_crop(
     return original[y0:y1, x0:x1].copy()
 
 
+def _regular_family(name):
+    parsed = parse_regular_dimensions(name)
+    return None if parsed is None else (parsed.kind, parsed.studs)
+
+
+def _needs_family_review(identification, detector, metric_flag):
+    """Regular segmented parts need semantic evidence from another view."""
+    return detector == "seg" and (
+        identification.score < SEG_ID_REVIEW_SCORE
+        or _regular_family(identification.name) is not None
+        or metric_flag == "possible_non_canonical_pose"
+    )
+
+
+def _identity_entries_by_frame(entries):
+    per_frame = {}
+    for entry in entries:
+        current = per_frame.get(entry["frame_id"])
+        if current is None or float(entry["score"]) > float(current["score"]):
+            per_frame[entry["frame_id"]] = entry
+    return list(per_frame.values())
+
+
+def _select_identity_consensus(entries):
+    """Select one top identity per frame, then prefer repeated agreement."""
+    if not entries:
+        raise ValueError("identity consensus requires at least one entry")
+    per_frame = _identity_entries_by_frame(entries)
+    accepted = [
+        entry for entry in per_frame
+        if entry.get("part_id") is not None
+        and float(entry.get("score", 0.0)) >= MIN_SCORE
+    ]
+    support = {}
+    for entry in accepted:
+        part_id = entry["part_id"]
+        support[part_id] = support.get(part_id, 0) + 1
+    if len(support) == 1:
+        return max(accepted, key=lambda entry: float(entry["score"])), False, support
+    if support:
+        maximum = max(support.values())
+        winners = [part_id for part_id, count in support.items()
+                   if count == maximum]
+        if maximum >= 2 and len(winners) == 1:
+            winner = winners[0]
+            selected = max(
+                (entry for entry in accepted
+                 if entry["part_id"] == winner),
+                key=lambda entry: float(entry["score"]),
+            )
+            return selected, False, support
+    primary = entries[0]
+    if primary.get("part_id") is None or float(primary.get("score", 0.0)) < MIN_SCORE:
+        selected = max(
+            accepted, key=lambda entry: float(entry["score"]),
+            default=primary,
+        )
+    else:
+        selected = primary
+    return selected, len(support) > 1, support
+
+
+def _identity_entry(frame_id, source, identification):
+    return {
+        "frame_id": int(frame_id),
+        "source": source,
+        "part_id": identification.part_id,
+        "name": identification.name,
+        "score": float(identification.score),
+        "candidates": [dict(candidate)
+                       for candidate in identification.candidates],
+    }
+
+
 def _second_chance(
-    instances, views, session_dir, identifications, crops, id_crops, cache_dir
+    instances, views, session_dir, identifications, crops, id_crops, cache_dir,
+    metric_flags=None,
 ):
     """Weak chosen-crop IDs get one more try from alternate observations.
 
@@ -729,21 +804,39 @@ def _second_chance(
 
     originals: dict[int, np.ndarray] = {}
     for index, instance in enumerate(instances):
-        segmentation_review = (
-            instance.best.detector == "seg"
-            and identifications[index].score < SEG_ID_REVIEW_SCORE
+        primary = identifications[index]
+        metric_flag = (
+            metric_flags[index] if metric_flags is not None else None
         )
-        if (
-            identifications[index].score >= MIN_SCORE
-            and not segmentation_review
-        ):
+        segmentation_review = _needs_family_review(
+            primary, instance.best.detector, metric_flag
+        )
+        weak_review = primary.score < MIN_SCORE
+        info = id_crops[index]
+        flags = info.setdefault("flags", [])
+        entries = [_identity_entry(
+            info.get("frame_id", instance.best.frame_id),
+            info.get("source", "primary"),
+            primary,
+        )]
+        internal_entries = [{
+            "entry": entries[0],
+            "identification": primary,
+            "crop": crops[index],
+            "provenance": None,
+        }]
+        if not weak_review and not segmentation_review:
+            info["brickognize_views"] = entries
+            info["identity_support"] = (
+                {primary.part_id: 1} if primary.part_id is not None else {}
+            )
             continue
+        if segmentation_review and _regular_family(primary.name) is not None:
+            flags.append("family_reviewed")
         ranked = _ranked_id_observations(instance, views)
         # Evaluate ALL alternates and keep the highest-scoring acceptance:
         # a canvas-clipped alternate can produce a confident-but-wrong ID
         # (a cut-off beam reads as a wedge), so first-accept is unsafe.
-        best = None
-        best_score = identifications[index].score
         candidates = (
             ranked[:SECOND_CHANCE_MAX_ALTERNATES]
             if segmentation_review
@@ -781,27 +874,46 @@ def _second_chance(
                 variants = [(crop, "original-masked-second-chance")]
             for variant, source in variants:
                 candidate = identify_crop(variant, cache_dir=cache_dir)
-                if candidate.score >= MIN_SCORE and candidate.score > best_score:
-                    best_score = candidate.score
-                    best = (
-                        candidate, observation, view, box, variant, source
-                    )
-        if best is not None:
-            candidate, observation, view, box, crop, source = best
-            identifications[index] = candidate
-            crops[index] = crop
-            update = {
-                "frame_id": observation.frame_id, "rgb": view.rgb,
-                "box_original": list(box),
-                "source": source,
-            }
-            if observation.mask_original is not None:
-                update.update({
-                    "source_instance_id": observation.source_instance_id,
-                    "segmentation_confidence": observation.confidence,
-                    "gate": observation.gate_provenance,
+                entry = _identity_entry(
+                    observation.frame_id, source, candidate
+                )
+                entries.append(entry)
+                update = {
+                    "frame_id": observation.frame_id, "rgb": view.rgb,
+                    "box_original": list(box),
+                    "source": source,
+                }
+                if observation.mask_original is not None:
+                    update.update({
+                        "source_instance_id": observation.source_instance_id,
+                        "segmentation_confidence": observation.confidence,
+                        "gate": observation.gate_provenance,
+                    })
+                internal_entries.append({
+                    "entry": entry,
+                    "identification": candidate,
+                    "crop": variant,
+                    "provenance": update,
                 })
-            id_crops[index].update(update)
+        selected, disagreement, support = _select_identity_consensus(entries)
+        per_frame = _identity_entries_by_frame(entries)
+        info["brickognize_views"] = per_frame
+        info["identity_support"] = support
+        if disagreement:
+            flags.append("identity_view_disagreement")
+        matches = [
+            record for record in internal_entries
+            if record["entry"]["frame_id"] == selected["frame_id"]
+            and record["entry"]["part_id"] == selected["part_id"]
+            and record["entry"]["name"] == selected["name"]
+            and record["entry"]["score"] == selected["score"]
+        ]
+        if matches:
+            chosen = matches[-1]
+            identifications[index] = chosen["identification"]
+            crops[index] = chosen["crop"]
+            if chosen["provenance"] is not None:
+                info.update(chosen["provenance"])
     return identifications, crops, id_crops
 
 
@@ -882,14 +994,16 @@ def _apply_dimension_consistency(
         decision = resolve_dimensions(identification, metric)
         info["metric_silhouette"]["action"] = decision.action
         info["metric_silhouette"]["decision"] = decision.to_dict()
-        flags = []
+        flags = info.setdefault("flags", [])
         if decision.flag is not None:
-            flags.append(decision.flag)
+            if decision.flag not in flags:
+                flags.append(decision.flag)
         if angle_diverse is False:
-            flags.append("insufficient_view_diversity")
+            if "insufficient_view_diversity" not in flags:
+                flags.append("insufficient_view_diversity")
         elif angle_diverse is None:
-            flags.append("view_diversity_unknown")
-        info["flags"] = flags
+            if "view_diversity_unknown" not in flags:
+                flags.append("view_diversity_unknown")
         identifications[index] = decision.identification
     return identifications
 
@@ -929,9 +1043,26 @@ def scan_manifest(
     session_dir = Path(manifest["session_dir"])
     crops, id_crops = _identification_crops(instances, views, session_dir)
     identifications = identify_all(crops, cache_dir=cache_dir)
+    for crop_info, identification in zip(id_crops, identifications):
+        crop_info["brickognize_primary"] = {
+            "part_id": identification.part_id,
+            "name": identification.name,
+            "score": identification.score,
+            "candidates": [dict(candidate)
+                           for candidate in identification.candidates],
+        }
+    metric_silhouettes = _attach_metric_silhouettes(
+        instances, views, id_crops, manifest["px_per_m"]
+    )
+    metric_flags = [
+        resolve_dimensions(identification, metric).flag
+        for identification, metric in zip(
+            identifications, metric_silhouettes
+        )
+    ]
     identifications, crops, id_crops = _second_chance(
         instances, views, session_dir, identifications, crops, id_crops,
-        cache_dir,
+        cache_dir, metric_flags=metric_flags,
     )
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize_raw"] = {
@@ -942,9 +1073,6 @@ def scan_manifest(
                            for candidate in identification.candidates],
         }
     identified = time.perf_counter()
-    metric_silhouettes = _attach_metric_silhouettes(
-        instances, views, id_crops, manifest["px_per_m"]
-    )
     identifications = _apply_dimension_consistency(
         identifications, metric_silhouettes, id_crops, manifest
     )

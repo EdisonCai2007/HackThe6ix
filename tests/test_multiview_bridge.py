@@ -97,6 +97,10 @@ def test_v2_identifies_from_original_pixels(tmp_path, monkeypatch):
     x0, y0, x1, y1 = prov["box_original"]
     # Mapped block (500..740, 360..560) padded 20% and raise-extended.
     assert x0 <= 500 and x1 >= 740 and y0 <= 360 and y1 >= 560
+    assert prov["brickognize_primary"]["part_id"] == "3001"
+    assert prov["brickognize_raw"]["part_id"] == "3001"
+    assert prov["brickognize_views"][0]["frame_id"] == 1
+    assert prov["identity_support"] == {"3001": 1}
     assert prov["brickognize"]["part_id"] == "3001"
     assert prov["brickognize"]["score"] == pytest.approx(0.9)
 
@@ -357,6 +361,7 @@ def test_segmentation_reviews_safe_context_crop_for_moderate_id(
     mask = np.zeros((120, 160), dtype=bool)
     mask[40:80, 40:120] = True
     observation = _obs(0, (40, 40, 120, 80), complete=True)
+    observation.frame_id = 1
     observation.detector = "seg"
     observation.mask_original = mask
     observation.original_image = original
@@ -365,6 +370,7 @@ def test_segmentation_reviews_safe_context_crop_for_moderate_id(
     observation.confidence = 0.95
     instance = FusedInstance([observation], observation)
     view = _view(0, quality=2.0, rgb_size=(160, 120))
+    view.frame_id = 1
     view.rgb = "frames/00001.rgb.jpg"
     calls = []
 
@@ -393,3 +399,113 @@ def test_segmentation_reviews_safe_context_crop_for_moderate_id(
     assert len(calls) == 2
     assert identifications[0].part_id == "3008"
     assert id_crops[0]["source"] == "yolo-instance-context-second-chance"
+
+
+def test_high_score_regular_segmentation_still_requires_family_review():
+    from pipeline.multiview import _needs_family_review
+
+    primary = Identification(
+        "3021", "Plate 2 x 3", None, 0.90,
+        candidates=(
+            {"part_id": "3021", "name": "Plate 2 x 3", "score": 0.90},
+            {"part_id": "3002", "name": "Brick 2 x 3", "score": 0.72},
+        ),
+    )
+
+    assert _needs_family_review(
+        primary, detector="seg", metric_flag=None
+    )
+
+
+def test_two_alternate_frames_overrule_one_high_primary():
+    from pipeline.multiview import _select_identity_consensus
+
+    entries = [
+        {"frame_id": 1, "part_id": "3021", "name": "Plate 2 x 3",
+         "score": 0.90},
+        {"frame_id": 2, "part_id": "3002", "name": "Brick 2 x 3",
+         "score": 0.88},
+        {"frame_id": 3, "part_id": "3002", "name": "Brick 2 x 3",
+         "score": 0.86},
+    ]
+
+    selected, disagreement, support = _select_identity_consensus(entries)
+
+    assert selected["part_id"] == "3002"
+    assert not disagreement
+    assert support == {"3021": 1, "3002": 2}
+
+
+def test_conflicting_single_alternate_preserves_high_primary_and_flags():
+    from pipeline.multiview import _select_identity_consensus
+
+    entries = [
+        {"frame_id": 1, "part_id": "3021", "name": "Plate 2 x 3",
+         "score": 0.90},
+        {"frame_id": 2, "part_id": "3002", "name": "Brick 2 x 3",
+         "score": 0.91},
+    ]
+
+    selected, disagreement, support = _select_identity_consensus(entries)
+
+    assert selected["part_id"] == "3021"
+    assert disagreement
+    assert support == {"3021": 1, "3002": 1}
+
+
+def test_family_review_uses_distinct_frame_consensus(tmp_path, monkeypatch):
+    from pipeline.multiview import FusedInstance, _second_chance
+
+    original = np.full((120, 160, 3), 225, dtype=np.uint8)
+    original[40:80, 40:120] = (0, 80, 240)
+    mask = np.zeros((120, 160), dtype=bool)
+    mask[40:80, 40:120] = True
+    observations = []
+    views = []
+    for index, frame_id in enumerate((1, 2, 3)):
+        observation = _obs(index, (40, 40, 120, 80), complete=True)
+        observation.frame_id = frame_id
+        observation.detector = "seg"
+        observation.mask_original = mask
+        observation.original_image = original
+        observation.box_original = (40, 40, 120, 80)
+        observation.source_instance_id = f"piece-{index}"
+        observation.confidence = 0.95
+        observations.append(observation)
+        view = _view(index, quality=3.0 - index, rgb_size=(160, 120))
+        view.frame_id = frame_id
+        view.rgb = f"frames/{frame_id:05d}.rgb.jpg"
+        views.append(view)
+    instance = FusedInstance(observations, observations[0])
+    primary = Identification(
+        "3021", "Plate 2 x 3", None, 0.90,
+        candidates=(
+            {"part_id": "3021", "name": "Plate 2 x 3", "score": 0.90},
+            {"part_id": "3002", "name": "Brick 2 x 3", "score": 0.72},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_crop",
+        lambda crop, **kwargs: Identification(
+            "3002", "Brick 2 x 3", None, 0.88
+        ),
+    )
+    id_crops = [{
+        "frame_id": 1,
+        "rgb": views[0].rgb,
+        "box_original": [40, 40, 120, 80],
+        "source": "yolo-instance-mask",
+    }]
+
+    identifications, _, id_crops = _second_chance(
+        [instance], views, tmp_path, [primary],
+        [original[40:80, 40:120].copy()], id_crops,
+        cache_dir=tmp_path,
+    )
+
+    assert identifications[0].part_id == "3002"
+    assert id_crops[0]["identity_support"] == {"3021": 1, "3002": 2}
+    assert "family_reviewed" in id_crops[0]["flags"]
+    assert len({entry["frame_id"]
+                for entry in id_crops[0]["brickognize_views"]}) == 3
