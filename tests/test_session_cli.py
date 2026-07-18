@@ -116,6 +116,27 @@ def test_session_cli_writes_frame_overlays_for_v2(tmp_path, monkeypatch):
     assert id_crop["brickognize"]["part_id"] == "3001"
 
 
+def test_analysis_dir_keeps_model_fit_outputs_run_scoped(tmp_path, monkeypatch):
+    session = tmp_path / "session"
+    manifest = _write_manifest(session)
+    analysis = tmp_path / "diagnostic-run"
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "identify_all",
+        lambda crops, **kwargs: [
+            Identification("3003", "Brick 2 x 2", "Bricks", 0.9)
+            for _ in crops
+        ],
+    )
+
+    session_cli.main([
+        str(manifest), "--detector", "cv", "--analysis-dir", str(analysis)
+    ])
+
+    assert (analysis / "model_fit.json").exists()
+    assert not (session / "analysis" / "model_fit.json").exists()
+
+
 def test_seg_debug_writes_workspace_and_gate_overlays(tmp_path, monkeypatch):
     import pipeline.segdetect
     from tests.test_segdetect import _FakeModel, _write_v3_fixture

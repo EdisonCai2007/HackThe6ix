@@ -518,3 +518,134 @@ def test_family_review_uses_distinct_frame_consensus(tmp_path, monkeypatch):
     assert support["unique_top_candidate"] == "3002"
     assert support["unique_top_count"] == 2
     assert support["candidate_support"]["3002"]["accepted_frame_ids"] == [2, 3]
+
+
+def test_model_fit_diagnostic_ranks_regular_conflicts_without_changing_id(
+    tmp_path, monkeypatch,
+):
+    from pipeline.model_fit import (
+        CandidateFit,
+        FrameCalibration,
+        ModelFitEvidence,
+        resting_orientations,
+    )
+    from pipeline.multiview import (
+        FusedInstance,
+        _attach_model_fit_diagnostics,
+    )
+
+    observation = _obs(0, (20, 20, 60, 50), complete=True)
+    observation.frame_id = 7
+    observation.confidence = 0.9
+    observation.mask_original = np.zeros((100, 120), dtype=bool)
+    observation.mask_original[35:65, 45:80] = True
+    instance = FusedInstance([observation], observation)
+    calibration = FrameCalibration(
+        frame_id=7,
+        intrinsics=(100.0, 100.0, 60.0, 50.0),
+        rgb_size=(120, 100),
+        camera_to_world=np.eye(4),
+        world_to_table=np.eye(4),
+        view_tilt_deg=45.0,
+    )
+    monkeypatch.setattr(
+        pipeline.multiview,
+        "load_frame_calibrations",
+        lambda session_dir, views: {7: calibration},
+    )
+    calls = []
+
+    def fake_compare(models, observations, seed_xy):
+        calls.append(tuple(model.part_id for model in models))
+        fits = []
+        for index, model in enumerate(models):
+            fits.append(CandidateFit(
+                model=model,
+                total=0.1 + index * 0.1,
+                orientation=resting_orientations(model)[0],
+                center_xy=seed_xy,
+                yaw_deg=0.0,
+                view_losses=({
+                    "frame_id": 7, "weight": 1.0, "trimmed": False,
+                    "iou": 0.8, "boundary_error": 0.01,
+                    "under_coverage": 0.1, "spill": 0.1, "total": 0.1,
+                },),
+                trimmed_frame_id=None,
+                reliability="diagnostic",
+                reason="fixture",
+            ))
+        return ModelFitEvidence(
+            candidates=tuple(fits),
+            best_part_id=fits[0].model.part_id,
+            runner_up_margin=0.1,
+            reliability="diagnostic",
+            reason="fixture",
+        )
+
+    monkeypatch.setattr(
+        pipeline.multiview, "compare_regular_candidates", fake_compare
+    )
+    identity = {"part_id": "3020", "name": "Plate 2 x 4", "score": 0.88}
+    id_crops = [{
+        "brickognize": dict(identity),
+        "appearance_support": {"candidate_support": {
+            "3020": {
+                "part_id": "3020", "name": "Plate 2 x 4",
+                "accepted_frame_ids": [7], "weak_frame_ids": [],
+            },
+            "3001": {
+                "part_id": "3001", "name": "Brick 2 x 4",
+                "accepted_frame_ids": [], "weak_frame_ids": [7],
+            },
+        }},
+    }]
+    analysis_dir = tmp_path / "analysis"
+    manifest = {
+        "session_dir": str(tmp_path / "session"),
+        "origin_xy": [0.0, 0.0],
+        "px_per_m": 1000.0,
+    }
+
+    _attach_model_fit_diagnostics(
+        [instance], [_view(0, quality=1.0)], id_crops, manifest,
+        analysis_dir,
+    )
+
+    assert calls == [("3020", "3001")]
+    assert id_crops[0]["model_fit"]["best_part_id"] == "3020"
+    assert id_crops[0]["brickognize"] == identity
+    overlay_paths = id_crops[0]["model_fit"]["overlay_paths"]
+    assert overlay_paths
+    assert all(str(path).startswith(str(analysis_dir)) for path in overlay_paths)
+    assert not (tmp_path / "session" / "debug").exists()
+
+
+def test_model_fit_diagnostic_marks_irregular_candidates_unavailable(
+    tmp_path, monkeypatch,
+):
+    from pipeline.multiview import FusedInstance, _attach_model_fit_diagnostics
+
+    observation = _obs(0, (20, 20, 60, 50), complete=True)
+    instance = FusedInstance([observation], observation)
+    monkeypatch.setattr(
+        pipeline.multiview, "load_frame_calibrations", lambda *args: {}
+    )
+    id_crops = [{
+        "appearance_support": {"candidate_support": {
+            "3040": {
+                "part_id": "3040", "name": "Slope 45 2 x 1",
+                "accepted_frame_ids": [1], "weak_frame_ids": [],
+            },
+        }},
+    }]
+
+    _attach_model_fit_diagnostics(
+        [instance], [_view(0, quality=1.0)], id_crops,
+        {"session_dir": str(tmp_path), "origin_xy": [0, 0],
+         "px_per_m": 1000.0},
+        tmp_path / "analysis",
+    )
+
+    evidence = id_crops[0]["model_fit"]
+    assert evidence["reliability"] == "unavailable"
+    assert "regular" in evidence["reason"]

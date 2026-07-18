@@ -220,6 +220,10 @@ def main(argv: list[str] | None = None) -> None:
         "--seg-model", type=Path, default=SEG_WEIGHTS,
         help="YOLO segmentation weights used by auto/seg",
     )
+    parser.add_argument(
+        "--analysis-dir", type=Path,
+        help="write opt-in diagnostic model-fit evidence beneath this directory",
+    )
     args = parser.parse_args(argv)
     try:
         detector = resolve_detector(args.detector, args.seg_model)
@@ -237,8 +241,13 @@ def main(argv: list[str] | None = None) -> None:
         from pipeline.segdetect import YoloSegModel
 
         seg_model = YoloSegModel(weights=args.seg_model)
-    result = scan_manifest(manifest_path, detector=detector,
-                           cache_dir=Path(".cache"), seg_model=seg_model)
+    result = scan_manifest(
+        manifest_path,
+        detector=detector,
+        cache_dir=Path(".cache"),
+        seg_model=seg_model,
+        analysis_dir=args.analysis_dir,
+    )
     (session_dir / "inventory.json").write_text(
         json.dumps(result.inventory, indent=2) + "\n"
     )

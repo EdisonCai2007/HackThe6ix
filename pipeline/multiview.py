@@ -27,6 +27,14 @@ from pipeline.evidence import (
 from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
+from pipeline.model_fit import (
+    FitObservation,
+    RegularModel,
+    compare_regular_candidates,
+    cuboid_vertices,
+    load_frame_calibrations,
+    render_cuboid,
+)
 from pipeline.studs import (
     advise,
     aggregate_stud_evidence,
@@ -1189,6 +1197,181 @@ def _attach_depth_heights(instances, id_crops, manifest):
         ).to_dict()
 
 
+def _regular_appearance_models(info):
+    support = info.get("appearance_support", {}).get("candidate_support", {})
+    models = []
+    seen = set()
+    for candidate in support.values():
+        if not (
+            candidate.get("accepted_frame_ids")
+            or candidate.get("weak_frame_ids")
+        ):
+            continue
+        model = RegularModel.from_identification(
+            candidate.get("part_id"), candidate.get("name")
+        )
+        if model is None or model.part_id in seen:
+            continue
+        seen.add(model.part_id)
+        models.append(model)
+    return tuple(models)
+
+
+def _serialize_candidate_fit(fit):
+    orientation = None
+    if fit.orientation is not None:
+        orientation = {
+            "label": fit.orientation.label,
+            "dimensions_xyz_m": list(fit.orientation.dimensions_xyz),
+        }
+    return {
+        "part_id": fit.model.part_id,
+        "name": fit.model.name,
+        "total": fit.total,
+        "orientation": orientation,
+        "center_xy_m": (
+            None if fit.center_xy is None else list(fit.center_xy)
+        ),
+        "yaw_deg": fit.yaw_deg,
+        "view_losses": list(fit.view_losses),
+        "trimmed_frame_id": fit.trimmed_frame_id,
+        "reliability": fit.reliability,
+        "reason": fit.reason,
+    }
+
+
+def _write_model_fit_overlays(
+    analysis_dir, instance_index, observations, evidence,
+):
+    overlay_dir = Path(analysis_dir) / "overlays"
+    overlay_dir.mkdir(parents=True, exist_ok=True)
+    observations_by_frame = {
+        observation.frame_id: observation for observation in observations
+    }
+    written = []
+    for fit in evidence.candidates:
+        if (
+            fit.orientation is None
+            or fit.center_xy is None
+            or fit.yaw_deg is None
+        ):
+            continue
+        vertices = cuboid_vertices(
+            fit.center_xy, fit.yaw_deg, fit.orientation.dimensions_xyz
+        )
+        for view_loss in fit.view_losses:
+            observation = observations_by_frame.get(view_loss["frame_id"])
+            if observation is None:
+                continue
+            predicted = render_cuboid(
+                observation.mask_original.shape,
+                observation.calibration,
+                vertices,
+            )
+            observed = np.asarray(observation.mask_original, dtype=bool)
+            overlay = np.zeros((*observed.shape, 3), dtype=np.uint8)
+            overlay[observed & ~predicted] = (0, 210, 0)
+            overlay[predicted & ~observed] = (0, 0, 230)
+            overlay[observed & predicted] = (0, 220, 220)
+            path = overlay_dir / (
+                f"instance_{instance_index:03d}_{fit.model.part_id}_"
+                f"frame_{observation.frame_id:05d}.png"
+            )
+            cv2.imwrite(str(path), overlay)
+            written.append(str(path.resolve()))
+    return written
+
+
+def _attach_model_fit_diagnostics(
+    instances, views, id_crops, manifest, analysis_dir,
+):
+    """Attach opt-in cuboid diagnostics after identity arbitration."""
+    analysis_dir = Path(analysis_dir)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    calibrations = load_frame_calibrations(
+        Path(manifest["session_dir"]), views
+    )
+    origin_x, origin_y = (
+        float(value) for value in manifest["origin_xy"]
+    )
+    px_per_m = float(manifest["px_per_m"])
+    summaries = []
+    by_view_index = {view.view_index: view for view in views}
+    for index, (instance, info) in enumerate(zip(instances, id_crops)):
+        models = _regular_appearance_models(info)
+        if len(models) < 2:
+            serialized = {
+                "reliability": "unavailable",
+                "reason": "fewer than two regular appearance candidate models",
+                "best_part_id": None,
+                "runner_up_margin": None,
+                "candidates": [],
+                "overlay_paths": [],
+            }
+            info["model_fit"] = serialized
+            summaries.append(serialized)
+            continue
+        fit_observations = []
+        for observation in instance.observations:
+            calibration = calibrations.get(observation.frame_id)
+            if calibration is None or observation.mask_original is None:
+                continue
+            view = by_view_index.get(observation.view_index)
+            gate = observation.gate_provenance or {}
+            fit_observations.append(FitObservation(
+                frame_id=observation.frame_id,
+                mask_original=observation.mask_original,
+                calibration=calibration,
+                confidence=(
+                    1.0 if observation.confidence is None
+                    else float(observation.confidence)
+                ),
+                boundary_zone=bool(gate.get("boundary_zone", False)),
+                sharpness=(
+                    1.0
+                    if view is None or view.sharpness_score is None
+                    else float(view.sharpness_score)
+                ),
+            ))
+        if not fit_observations:
+            serialized = {
+                "reliability": "unavailable",
+                "reason": "no calibrated original-mask observations",
+                "best_part_id": None,
+                "runner_up_margin": None,
+                "candidates": [],
+                "overlay_paths": [],
+            }
+            info["model_fit"] = serialized
+            summaries.append(serialized)
+            continue
+        x0, y0, x1, y1 = instance.best.box
+        seed_xy = (
+            origin_x + (x0 + x1) / (2.0 * px_per_m),
+            origin_y + (y0 + y1) / (2.0 * px_per_m),
+        )
+        evidence = compare_regular_candidates(
+            models, fit_observations, seed_xy
+        )
+        serialized = {
+            "reliability": evidence.reliability,
+            "reason": evidence.reason,
+            "best_part_id": evidence.best_part_id,
+            "runner_up_margin": evidence.runner_up_margin,
+            "candidates": [
+                _serialize_candidate_fit(fit) for fit in evidence.candidates
+            ],
+        }
+        serialized["overlay_paths"] = _write_model_fit_overlays(
+            analysis_dir, index, fit_observations, evidence
+        )
+        info["model_fit"] = serialized
+        summaries.append(serialized)
+    (analysis_dir / "model_fit.json").write_text(
+        json.dumps({"instances": summaries}, indent=2) + "\n"
+    )
+
+
 def _apply_dimension_consistency(
     identifications, metric_silhouettes, id_crops, manifest
 ):
@@ -1216,7 +1399,7 @@ def _apply_dimension_consistency(
 
 def scan_manifest(
     manifest_path, detector: str = "cv", cache_dir: Path = Path(".cache"),
-    seg_model=None, gate_config=None,
+    seg_model=None, gate_config=None, analysis_dir=None,
 ) -> MultiViewScanResult:
     started = time.perf_counter()
     manifest, views = load_views(manifest_path)
@@ -1295,6 +1478,10 @@ def scan_manifest(
             "name": identification.name,
             "score": identification.score,
         }
+    if analysis_dir is not None:
+        _attach_model_fit_diagnostics(
+            instances, views, id_crops, manifest, analysis_dir
+        )
     colors = [consensus_color(instance) for instance in instances]
     labels = [
         f"{identification.name} | {color.name} | {identification.score:.2f}"
