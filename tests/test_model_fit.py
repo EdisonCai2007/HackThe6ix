@@ -343,3 +343,40 @@ def test_fit_without_oblique_view_is_low_reliability():
 
     assert fit.reliability == "low"
     assert "oblique" in fit.reason
+
+
+def test_fit_scores_bounded_crop_for_large_original_mask(monkeypatch):
+    import pipeline.model_fit as model_fit
+    from pipeline.model_fit import FitObservation, RegularModel, ViewFitLoss
+
+    calibration = _synthetic_calibration()
+    calibration = model_fit.FrameCalibration(
+        frame_id=calibration.frame_id,
+        intrinsics=(500.0, 500.0, 600.0, 500.0),
+        rgb_size=(1200, 1000),
+        camera_to_world=calibration.camera_to_world,
+        world_to_table=calibration.world_to_table,
+        view_tilt_deg=45.0,
+    )
+    mask = np.zeros((1000, 1200), dtype=bool)
+    mask[480:520, 570:630] = True
+    observation = FitObservation(1, mask, calibration)
+    scored_shapes = []
+
+    def fake_evaluate(orientation, center, yaw, observations, weights,
+                      allow_trim=True):
+        scored_shapes.extend(item.mask_original.shape for item in observations)
+        losses = [ViewFitLoss(1.0, 0.0, 0.0, 0.0, 0.0)
+                  for _ in observations]
+        return 0.0, losses, None
+
+    monkeypatch.setattr(model_fit, "_evaluate_hypothesis", fake_evaluate)
+    brick = RegularModel.from_identification("3001", "Brick 2 x 4")
+
+    model_fit.fit_regular_candidate(
+        brick, [observation], (0.0, 0.0), yaw_values=(0.0,)
+    )
+
+    assert scored_shapes
+    assert max(height for height, _ in scored_shapes) < 300
+    assert max(width for _, width in scored_shapes) < 300

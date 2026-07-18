@@ -190,12 +190,12 @@ def score_silhouettes(observed, predicted):
     if observed.shape != predicted.shape or observed.ndim != 2:
         raise ValueError("silhouette masks must have the same two-dimensional shape")
     full_diagonal = float(np.hypot(*observed.shape))
-    union_pixels = np.argwhere(observed | predicted)
-    if len(union_pixels):
-        y0, x0 = np.maximum(union_pixels.min(axis=0) - 2, 0)
-        y1, x1 = np.minimum(
-            union_pixels.max(axis=0) + 3, np.asarray(observed.shape)
-        )
+    union_mask = (observed | predicted).astype(np.uint8)
+    if np.any(union_mask):
+        x, y, width, height = cv2.boundingRect(union_mask)
+        x0, y0 = max(0, x - 2), max(0, y - 2)
+        x1 = min(observed.shape[1], x + width + 2)
+        y1 = min(observed.shape[0], y + height + 2)
         observed = observed[y0:y1, x0:x1]
         predicted = predicted[y0:y1, x0:x1]
     intersection = int(np.count_nonzero(observed & predicted))
@@ -300,12 +300,47 @@ def _fit_reliability(observations):
     return "diagnostic", "calibrated multi-view diagnostic only"
 
 
+def _bounded_fit_observation(observation):
+    """Crop fitting work around the observed piece and adjust intrinsics."""
+    mask = np.asarray(observation.mask_original, dtype=bool)
+    ys, xs = np.nonzero(mask)
+    if not len(xs):
+        return observation
+    object_width = int(xs.max() - xs.min() + 1)
+    object_height = int(ys.max() - ys.min() + 1)
+    margin = max(32, int(np.ceil(1.5 * max(object_width, object_height))))
+    x0 = max(0, int(xs.min()) - margin)
+    y0 = max(0, int(ys.min()) - margin)
+    x1 = min(mask.shape[1], int(xs.max()) + margin + 1)
+    y1 = min(mask.shape[0], int(ys.max()) + margin + 1)
+    if (x0, y0, x1, y1) == (0, 0, mask.shape[1], mask.shape[0]):
+        return observation
+    fx, fy, cx, cy = observation.calibration.intrinsics
+    calibration = FrameCalibration(
+        frame_id=observation.calibration.frame_id,
+        intrinsics=(fx, fy, cx - x0, cy - y0),
+        rgb_size=(x1 - x0, y1 - y0),
+        camera_to_world=observation.calibration.camera_to_world,
+        world_to_table=observation.calibration.world_to_table,
+        view_tilt_deg=observation.calibration.view_tilt_deg,
+    )
+    return FitObservation(
+        frame_id=observation.frame_id,
+        mask_original=mask[y0:y1, x0:x1],
+        calibration=calibration,
+        confidence=observation.confidence,
+        boundary_zone=observation.boundary_zone,
+        sharpness=observation.sharpness,
+    )
+
+
 def fit_regular_candidate(
     model, observations, seed_xy, yaw_values=None,
 ):
     """Fit one regular cuboid deterministically without making an ID decision."""
     observations = tuple(
-        observation for observation in observations
+        _bounded_fit_observation(observation)
+        for observation in observations
         if observation.mask_original is not None
     )
     reliability, reason = _fit_reliability(observations)
