@@ -19,10 +19,16 @@ from pipeline.color import (
 )
 from pipeline.detect import Box, crop_box, detect
 from pipeline.dimensions import parse_regular_dimensions, resolve_dimensions
+from pipeline.evidence import arbitrate_identification
 from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
-from pipeline.studs import advise, analyze_studs, stud_radius_px
+from pipeline.studs import (
+    advise,
+    aggregate_stud_evidence,
+    analyze_studs,
+    stud_radius_px,
+)
 
 SECOND_CHANCE_MAX_ALTERNATES = 3
 SEG_SINGLETON_MIN_CONFIDENCE = 0.50
@@ -917,8 +923,13 @@ def _second_chance(
     return identifications, crops, id_crops
 
 
-def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
-                         px_per_m):
+def _apply_stud_advisory(
+    instances, views, identifications, crops, id_crops, px_per_m,
+    session_dir,
+):
+    from pipeline.original_crop import masked_crop, masked_instance_crop
+
+    originals = {}
     for index, instance in enumerate(instances):
         info = id_crops[index]
         ident = identifications[index]
@@ -931,33 +942,103 @@ def _apply_stud_advisory(instances, views, identifications, crops, id_crops,
                 "reason": "identification crop has no original-frame geometry",
             }
             continue
-        matches = [
-            observation for observation in instance.observations
-            if observation.frame_id == info.get("frame_id")
-            and (
-                info.get("source_instance_id") is None
-                or observation.source_instance_id == info["source_instance_id"]
+        evidences = []
+        view_evidence = []
+        seen_frames = set()
+        for observation, _ in _ranked_id_observations(instance, views):
+            if observation.frame_id in seen_frames:
+                continue
+            seen_frames.add(observation.frame_id)
+            view = views[observation.view_index]
+            if observation.original_image is not None:
+                original = observation.original_image
+            elif view.frame_id in originals:
+                original = originals[view.frame_id]
+            else:
+                original = cv2.imread(str(session_dir / view.rgb))
+                if original is None:
+                    continue
+                originals[view.frame_id] = original
+            if observation.mask_original is not None:
+                box, stud_crop = masked_instance_crop(
+                    original, observation.mask_original
+                )
+                x0, y0, x1, y1 = box
+                local_mask = observation.mask_original[y0:y1, x0:x1]
+            else:
+                box, stud_crop = masked_crop(
+                    original, observation.box, view.homography,
+                    original.shape[:2], view.raise_uv_per_cm,
+                )
+                local_mask = None
+            radius = stud_radius_px(observation.box, box, px_per_m)
+            evidence = analyze_studs(
+                stud_crop, radius, mask=local_mask
             )
-        ]
-        observation = (
-            matches[0] if matches
-            else _identification_observation(instance, views)[0]
+            evidences.append(evidence)
+            serialized = evidence.to_dict()
+            serialized.update({
+                "frame_id": observation.frame_id,
+                "box_original": list(box),
+                "radius_px": round(radius, 1),
+            })
+            view_evidence.append(serialized)
+            if len(evidences) >= SECOND_CHANCE_MAX_ALTERNATES:
+                break
+        if not evidences:
+            matches = [
+                observation for observation in instance.observations
+                if observation.frame_id == info.get("frame_id")
+            ]
+            observation = (
+                matches[0] if matches
+                else _identification_observation(instance, views)[0]
+            )
+            radius = stud_radius_px(
+                observation.box, info["box_original"], px_per_m
+            )
+            local_mask = None
+            if observation.mask_original is not None:
+                x0, y0, x1, y1 = info["box_original"]
+                local_mask = observation.mask_original[y0:y1, x0:x1]
+            evidence = analyze_studs(
+                crops[index], radius, mask=local_mask
+            )
+            evidences.append(evidence)
+            serialized = evidence.to_dict()
+            serialized.update({
+                "frame_id": observation.frame_id,
+                "box_original": list(info["box_original"]),
+                "radius_px": round(radius, 1),
+            })
+            view_evidence.append(serialized)
+        consensus = aggregate_stud_evidence(evidences)
+        proposal, proposal_action = advise(ident, consensus)
+        dimension_action = info.get("metric_silhouette", {}).get(
+            "action", "unavailable"
         )
-        radius = stud_radius_px(observation.box, info["box_original"], px_per_m)
-        local_mask = None
-        if observation.mask_original is not None:
-            x0, y0, x1, y1 = info["box_original"]
-            local_mask = observation.mask_original[y0:y1, x0:x1]
-        evidence = analyze_studs(crops[index], radius, mask=local_mask)
-        adjusted, action = advise(ident, evidence)
-        info["stud"] = evidence.to_dict()
+        outcome = arbitrate_identification(
+            current=ident,
+            dimension_action=dimension_action,
+            stud_proposal=proposal,
+            stud_action=proposal_action,
+            identity_support=info.get("identity_support", {}),
+        )
+        info["stud"] = consensus.to_dict()
         info["stud"].update({
-            "radius_px": round(radius, 1),
-            "action": action,
+            "views": view_evidence,
+            "proposal_action": proposal_action,
+            "proposal": {
+                "part_id": proposal.part_id,
+                "name": proposal.name,
+                "score": proposal.score,
+            },
+            "action": outcome.action,
+            "arbitration": outcome.to_dict(),
         })
-        if adjusted is not ident:
+        if outcome.identification is not ident:
             info["stud"]["was"] = f"{ident.name} ({ident.score:.2f})"
-            identifications[index] = adjusted
+            identifications[index] = outcome.identification
     return identifications
 
 
@@ -1078,7 +1159,7 @@ def scan_manifest(
     )
     identifications = _apply_stud_advisory(
         instances, views, identifications, crops, id_crops,
-        manifest["px_per_m"],
+        manifest["px_per_m"], session_dir,
     )
     evidenced = time.perf_counter()
     for crop_info, identification in zip(id_crops, identifications):

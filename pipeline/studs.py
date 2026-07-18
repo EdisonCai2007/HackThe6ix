@@ -21,6 +21,7 @@ CONTRADICTION_FACTOR = 3.0
 HIGH_CONFIDENCE = 0.90
 MIN_CANDIDATE_SCORE = 0.50
 DARK_LUMA_THRESHOLD = 50.0
+TRANSITION_LUMA_MAX = 80.0
 
 _NAME_DIMS = re.compile(r"(\d+)\s*x\s*(\d+)")
 
@@ -167,10 +168,22 @@ def analyze_studs(
         )
     median_luma = float(np.median(gray[piece_mask]))
     is_dark = median_luma < DARK_LUMA_THRESHOLD
-    specifications = (
-        (("clahe", None, 16.0), ("gamma_clahe", 0.5, 16.0))
-        if is_dark else (("clahe", None, 22.0),)
-    )
+    if is_dark:
+        specifications = (
+            ("clahe", None, 16.0),
+            ("gamma_clahe", 0.5, 16.0),
+        )
+    elif median_luma <= TRANSITION_LUMA_MAX:
+        specifications = (
+            ("clahe", None, 18.0),
+            ("gamma_clahe", 0.5, 16.0),
+            ("gamma_soft_clahe", 0.75, 18.0),
+        )
+    else:
+        specifications = (
+            ("clahe", None, 22.0),
+            ("gamma_soft_clahe", 0.75, 20.0),
+        )
     variants = []
     for name, gamma, param2 in specifications:
         centers = _hough_centers(
@@ -205,22 +218,19 @@ def analyze_studs(
         max(positive_counts) - min(positive_counts)
         if len(positive_counts) > 1 else 0
     )
-    if is_dark and len(plausible_variants) >= 2:
+    if len(plausible_variants) >= 2:
         if spread <= max(3.0, 0.25 * count):
             reliability = "high"
-            reason = "dark preprocessing variants agree on a plausible grid"
+            reason = "preprocessing variants agree on a plausible grid"
         elif spread <= max(6.0, 0.50 * count):
             reliability = "medium"
-            reason = "plausible dark grid with moderate variant spread"
+            reason = "plausible grid with moderate variant spread"
         else:
             reliability = "low"
-            reason = "dark preprocessing variants disagree"
-    elif not is_dark and plausible_variants:
-        reliability = "high"
-        reason = "bright CLAHE variant found a plausible grid"
+            reason = "preprocessing variants disagree"
     elif plausible_variants:
         reliability = "medium"
-        reason = "only one dark preprocessing variant found a plausible grid"
+        reason = "only one preprocessing variant found a plausible grid"
     else:
         reliability = "low"
         reason = "detected circles do not form a plausible stud grid"
@@ -234,6 +244,67 @@ def analyze_studs(
 def count_studs(crop_bgr: np.ndarray, radius_px: float) -> int:
     """Backward-compatible bare count for callers that do not have a mask."""
     return analyze_studs(crop_bgr, radius_px).count
+
+
+def aggregate_stud_evidence(
+    evidences: list[StudEvidence],
+) -> StudEvidence:
+    """Combine distinct-view observations without promoting one view to high."""
+    if not evidences:
+        return StudEvidence(
+            0, "unavailable", "not_visible", False, None, (),
+            "no stud observations were available",
+        )
+    usable = [
+        evidence for evidence in evidences
+        if evidence.reliability in {"high", "medium"}
+        and evidence.visibility == "stud_face"
+    ]
+    source = usable or evidences
+    counts = [evidence.count for evidence in source]
+    count = int(np.rint(np.median(counts))) if counts else 0
+    lumas = [
+        evidence.median_luma for evidence in evidences
+        if evidence.median_luma is not None
+    ]
+    median_luma = float(np.median(lumas)) if lumas else None
+    variants = tuple(
+        variant for evidence in evidences for variant in evidence.variants
+    )
+    if not usable:
+        reliability = "low"
+        visibility = (
+            "partial" if any(evidence.count for evidence in evidences)
+            else "not_visible"
+        )
+        reason = "no view supplied a reliable visible stud face"
+    elif len(usable) == 1:
+        reliability = "medium"
+        visibility = "stud_face"
+        reason = "only one view supplied usable stud evidence"
+    else:
+        spread = max(counts) - min(counts)
+        if spread <= max(3.0, 0.25 * count):
+            reliability = "high"
+            visibility = "stud_face"
+            reason = "distinct views agree on the stud count"
+        elif spread <= max(6.0, 0.50 * count):
+            reliability = "medium"
+            visibility = "stud_face"
+            reason = "distinct views have moderate stud-count spread"
+        else:
+            reliability = "low"
+            visibility = "partial"
+            reason = "distinct views disagree on the stud count"
+    return StudEvidence(
+        count=count,
+        reliability=reliability,
+        visibility=visibility,
+        is_dark=any(evidence.is_dark for evidence in evidences),
+        median_luma=median_luma,
+        variants=variants,
+        reason=reason,
+    )
 
 
 def _contradicts(count: int, expected: int | None) -> bool:

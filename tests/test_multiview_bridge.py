@@ -230,7 +230,7 @@ def test_id_observation_rejects_view_clipped_in_original_frame():
     assert chosen is safe
 
 
-def test_stud_advisory_corrects_contradicted_id(tmp_path, monkeypatch):
+def test_stud_advisory_does_not_correct_from_one_view(tmp_path, monkeypatch):
     manifest = _write_session(tmp_path / "session", with_bridge=True)
 
     def fake_identify(crops, **kwargs):
@@ -249,10 +249,10 @@ def test_stud_advisory_corrects_contradicted_id(tmp_path, monkeypatch):
         ),
     )
     result = scan_manifest(manifest, detector="cv")
-    assert result.id_crops[0]["stud"]["action"] == "corrected"
+    assert result.id_crops[0]["stud"]["action"] == "ambiguous"
     assert result.id_crops[0]["brickognize_raw"]["part_id"] == "3008"
-    assert result.id_crops[0]["brickognize"]["part_id"] == "3028"
-    assert result.inventory[0]["part_id"] == "3028"
+    assert result.id_crops[0]["brickognize"]["part_id"] == "3008"
+    assert result.inventory[0]["part_id"] == "3008"
 
 
 def test_stud_advisory_skips_when_studs_invisible(tmp_path, monkeypatch):

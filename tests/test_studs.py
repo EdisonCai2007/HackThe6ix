@@ -7,6 +7,7 @@ import pytest
 from pipeline.identify import Identification
 from pipeline.studs import (
     StudEvidence,
+    aggregate_stud_evidence,
     analyze_studs,
     advise,
     count_studs,
@@ -129,6 +130,73 @@ def test_side_view_without_stud_edges_is_not_reliable_negative_evidence():
     assert evidence.count < 4
     assert evidence.visibility != "stud_face"
     assert evidence.reliability in {"low", "unavailable"}
+
+
+def test_transitional_dark_piece_uses_multiple_variants():
+    image, mask = _dark_grid(2, 12)
+    adjusted = image.astype(np.int16)
+    adjusted[mask > 0] += 22
+    image = np.clip(adjusted, 0, 255).astype(np.uint8)
+
+    evidence = analyze_studs(image, radius_px=11, mask=mask)
+
+    assert 50 <= evidence.median_luma <= 80
+    assert len(evidence.variants) >= 2
+
+
+def test_one_plausible_variant_is_not_high_reliability(monkeypatch):
+    import pipeline.studs as studs
+
+    centers = iter((
+        ((30.0, 30.0), (60.0, 30.0),
+         (30.0, 60.0), (60.0, 60.0)),
+        (),
+    ))
+    monkeypatch.setattr(
+        studs, "_hough_centers", lambda *args: next(centers)
+    )
+    image = np.full((100, 100, 3), 100, dtype=np.uint8)
+    mask = np.ones((100, 100), dtype=np.uint8)
+
+    evidence = analyze_studs(image, 10, mask)
+
+    assert evidence.reliability != "high"
+
+
+def _stud_evidence(count, reliability="high"):
+    return StudEvidence(
+        count=count,
+        reliability=reliability,
+        visibility="stud_face",
+        is_dark=True,
+        median_luma=40.0,
+        variants=(),
+        reason="fixture",
+    )
+
+
+def test_one_usable_view_is_medium_consensus_at_most():
+    consensus = aggregate_stud_evidence([_stud_evidence(24)])
+
+    assert consensus.count == 24
+    assert consensus.reliability == "medium"
+
+
+def test_two_agreeing_views_make_high_stud_consensus():
+    consensus = aggregate_stud_evidence([
+        _stud_evidence(23), _stud_evidence(25, "medium")
+    ])
+
+    assert consensus.count == 24
+    assert consensus.reliability == "high"
+
+
+def test_conflicting_views_make_low_stud_consensus():
+    consensus = aggregate_stud_evidence([
+        _stud_evidence(8), _stud_evidence(24)
+    ])
+
+    assert consensus.reliability == "low"
 
 
 # --- advise ---------------------------------------------------------------
