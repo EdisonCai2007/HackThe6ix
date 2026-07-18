@@ -101,3 +101,92 @@ def test_compatible_stud_evidence_leaves_identity_unchanged():
 
     assert outcome.identification is current
     assert outcome.action == "compatible"
+
+
+def test_appearance_support_counts_only_each_frames_top_raw_hypothesis():
+    from pipeline.evidence import aggregate_appearance_support
+
+    entries = [
+        {
+            "frame_id": 35, "part_id": None, "name": "unknown brick",
+            "score": 0.615,
+            "candidates": [
+                {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.615},
+                {"part_id": "39789", "name": "Technic, Brick 2 x 4 with 3 Axle Holes", "score": 0.600},
+            ],
+        },
+        {
+            "frame_id": 54, "part_id": None, "name": "unknown brick",
+            "score": 0.687,
+            "candidates": [
+                {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.687},
+                {"part_id": "39789", "name": "Technic, Brick 2 x 4 with 3 Axle Holes", "score": 0.578},
+            ],
+        },
+        {
+            "frame_id": 263, "part_id": None, "name": "unknown brick",
+            "score": 0.699,
+            "candidates": [
+                {"part_id": "39789", "name": "Technic, Brick 2 x 4 with 3 Axle Holes", "score": 0.699},
+            ],
+        },
+    ]
+
+    result = aggregate_appearance_support(entries)
+
+    assert result["unique_top_candidate"] == "3001"
+    assert result["unique_top_count"] == 2
+    assert result["candidate_support"]["3001"]["weak_frame_ids"] == [35, 54]
+    assert result["candidate_support"]["39789"]["weak_frame_ids"] == [263]
+    assert result["candidate_support"]["39789"]["alternative_frame_ids"] == [35, 54]
+
+
+def test_appearance_support_separates_accepted_and_weak_frames():
+    from pipeline.evidence import aggregate_appearance_support
+
+    result = aggregate_appearance_support([
+        {
+            "frame_id": 1, "part_id": "3001", "name": "Brick 2 x 4",
+            "score": 0.81,
+            "candidates": [
+                {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.81},
+            ],
+        },
+        {
+            "frame_id": 2, "part_id": None, "name": "unknown brick",
+            "score": 0.64,
+            "candidates": [
+                {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.64},
+            ],
+        },
+    ])
+
+    support = result["candidate_support"]["3001"]
+    assert support["accepted_frame_ids"] == [1]
+    assert support["weak_frame_ids"] == [2]
+    assert support["top_frame_ids"] == [1, 2]
+    assert support["best_score"] == 0.81
+
+
+def test_appearance_support_tie_has_no_unique_top_candidate():
+    from pipeline.evidence import aggregate_appearance_support
+
+    result = aggregate_appearance_support([
+        {
+            "frame_id": 1, "part_id": None, "name": "unknown brick",
+            "score": 0.65,
+            "candidates": [
+                {"part_id": "3001", "name": "Brick 2 x 4", "score": 0.65},
+            ],
+        },
+        {
+            "frame_id": 2, "part_id": None, "name": "unknown brick",
+            "score": 0.66,
+            "candidates": [
+                {"part_id": "39789", "name": "Technic, Brick 2 x 4 with 3 Axle Holes", "score": 0.66},
+            ],
+        },
+    ])
+
+    assert result["unique_top_candidate"] is None
+    assert result["unique_top_count"] == 1
