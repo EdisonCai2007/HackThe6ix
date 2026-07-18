@@ -53,9 +53,11 @@ function renderShapes() {
     const classes = ["shape-button"];
     if (index === state.index) classes.push("selected");
     if (row.review.confirmed) classes.push(row.review.included ? "confirmed" : "excluded");
+    const label = String(index).padStart(3, "0");
     return `<button class="${classes.join(" ")}" data-index="${index}"
+      aria-label="Select piece ${label}" title="Piece ${label}"
       style="left:${100*x0/width}%;top:${100*y0/height}%;width:${100*(x1-x0)/width}%;height:${100*(y1-y0)/height}%">
-      ${String(index).padStart(3, "0")}</button>`;
+      </button>`;
   }).join("");
   document.querySelectorAll(".shape-button").forEach((button) => {
     button.addEventListener("click", () => { state.index = Number(button.dataset.index); render(); });

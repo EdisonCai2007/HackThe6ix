@@ -149,10 +149,13 @@ def test_browser_client_is_served(tmp_path):
     workspace, _ = _workspace(tmp_path)
     client = TestClient(create_app(workspace))
 
-    assert 'id="segmentation-stage"' in client.get("/").text
+    index = client.get("/").text
+    assert 'id="segmentation-stage"' in index
+    assert '/app.js?v=2' in index
     assert client.get("/app.js").headers["content-type"].startswith(
         "text/javascript"
     )
     assert client.get("/styles.css").headers["content-type"].startswith(
         "text/css"
     )
+    assert 'aria-label="Select piece' in client.get("/app.js").text
