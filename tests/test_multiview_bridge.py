@@ -514,3 +514,7 @@ def test_family_review_uses_distinct_frame_consensus(tmp_path, monkeypatch):
     assert "family_reviewed" in id_crops[0]["flags"]
     assert len({entry["frame_id"]
                 for entry in id_crops[0]["brickognize_views"]}) == 3
+    support = id_crops[0]["appearance_support"]
+    assert support["unique_top_candidate"] == "3002"
+    assert support["unique_top_count"] == 2
+    assert support["candidate_support"]["3002"]["accepted_frame_ids"] == [2, 3]

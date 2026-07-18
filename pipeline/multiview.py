@@ -20,7 +20,10 @@ from pipeline.color import (
 from pipeline.detect import Box, crop_box, detect
 from pipeline.depth_height import measure_instance_height
 from pipeline.dimensions import parse_regular_dimensions, resolve_dimensions
-from pipeline.evidence import arbitrate_identification
+from pipeline.evidence import (
+    aggregate_appearance_support,
+    arbitrate_identification,
+)
 from pipeline.footprint import aggregate_measurements, measure_observation
 from pipeline.identify import MIN_SCORE, identify_all, identify_crop
 from pipeline.inventory import build_inventory
@@ -946,6 +949,7 @@ def _second_chance(
             info["identity_support"] = (
                 {primary.part_id: 1} if primary.part_id is not None else {}
             )
+            info["appearance_support"] = aggregate_appearance_support(entries)
             continue
         if segmentation_review and _regular_family(primary.name) is not None:
             flags.append("family_reviewed")
@@ -1015,6 +1019,7 @@ def _second_chance(
         per_frame = _identity_entries_by_frame(entries)
         info["brickognize_views"] = per_frame
         info["identity_support"] = support
+        info["appearance_support"] = aggregate_appearance_support(per_frame)
         if disagreement:
             flags.append("identity_view_disagreement")
         matches = [
@@ -1134,6 +1139,7 @@ def _apply_stud_advisory(
             stud_proposal=proposal,
             stud_action=proposal_action,
             identity_support=info.get("identity_support", {}),
+            appearance_evidence=info.get("appearance_support", {}),
         )
         info["stud"] = consensus.to_dict()
         info["stud"].update({
