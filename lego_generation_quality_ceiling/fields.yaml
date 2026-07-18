@@ -1,0 +1,235 @@
+output_format:
+  structure: flat_json
+  instruction: >-
+    Write every defined field at the top level of the JSON object. Complex fields may contain arrays
+    or objects. Use [uncertain] in uncertain values and list their field names in the reserved uncertain array.
+
+field_categories:
+  - category: Track Identity
+    fields:
+      - name: item_name
+        description: Exact research item name from outline.yaml.
+        detail_level: brief
+        required: true
+      - name: category
+        description: Research domain and pipeline layer addressed by the item.
+        detail_level: brief
+        required: true
+      - name: scope
+        description: Boundaries of the investigation, including what was deliberately excluded.
+        detail_level: moderate
+        required: true
+      - name: relevance_to_current_system
+        description: Concrete connection to the verified HackThe6ix project snapshot and live repository paths.
+        detail_level: detailed
+        required: true
+      - name: bottleneck_layer
+        description: Inventory, sensing, intent, representation, planning, placement, verification, search, evaluation, interaction, or multiple layers.
+        detail_level: brief
+        required: true
+      - name: ceiling_hypothesis
+        description: Falsifiable statement describing the suspected quality-ceiling mechanism.
+        detail_level: moderate
+        required: true
+
+  - category: Diagnosis
+    fields:
+      - name: observed_project_evidence
+        description: Facts visible in the project snapshot or live repository; distinguish direct observations from interpretations.
+        detail_level: detailed
+        required: true
+      - name: mechanisms
+        description: Causal mechanisms that could produce the observed failure pattern.
+        detail_level: detailed
+        required: true
+      - name: problem_a_impact
+        description: Effect on inventory-driven suggestions and suggestion-selected builds.
+        detail_level: detailed
+        required: true
+      - name: problem_b_impact
+        description: Effect on direct user-request builds.
+        detail_level: detailed
+        required: true
+      - name: confirmed_facts
+        description: Claims established by direct project evidence or strong external evidence.
+        detail_level: detailed
+        required: true
+      - name: plausible_inferences
+        description: Reasonable but unconfirmed conclusions, each labeled as inference and linked to evidence.
+        detail_level: detailed
+        required: true
+      - name: unresolved_questions
+        description: Unknowns that cannot be established from available evidence.
+        detail_level: detailed
+        required: true
+      - name: confidence
+        description: Overall confidence with reasons and evidence-quality caveats.
+        detail_level: moderate
+        required: true
+      - name: expected_impact
+        description: Expected quality impact if this bottleneck is addressed, with separate confidence where useful.
+        detail_level: moderate
+        required: true
+
+  - category: External Evidence
+    fields:
+      - name: key_external_findings
+        description: Synthesized research findings and how they apply; do not merely list sources.
+        detail_level: detailed
+        required: true
+      - name: primary_sources
+        description: Array of sources with title, URL, source type, publication or update date, supported claim, and relevance.
+        detail_level: detailed
+        required: true
+      - name: contradicting_evidence
+        description: Evidence that challenges the main hypothesis or shows important boundary cases.
+        detail_level: detailed
+        required: true
+      - name: transfer_limits
+        description: What does not transfer cleanly from adjacent domains and why.
+        detail_level: detailed
+        required: true
+      - name: capability_snapshot
+        description: Exact provider, model, API surface, schema or tool mode, maturity status, and verification date for date-sensitive claims.
+        detail_level: detailed
+        required: false
+      - name: data_target_match
+        description: Dataset or benchmark overlap with the deployment task across part set, counts, topology, style, inventory conditioning, and synthetic-to-real gap.
+        detail_level: detailed
+        required: false
+      - name: source_quality_notes
+        description: Peer-review status, first-party status, reproducibility, repository health, and material conflicts of interest.
+        detail_level: moderate
+        required: true
+
+  - category: Recommendations
+    fields:
+      - name: near_term_recommendations
+        description: Changes possible without a ground-up rewrite, prioritized by expected gain per unit effort.
+        detail_level: detailed
+        required: true
+      - name: longer_term_architecture_options
+        description: Credible redesign options with strengths, weaknesses, dataset needs, and failure modes.
+        detail_level: detailed
+        required: true
+      - name: expected_signal
+        description: Observable metric movement expected if the recommendation addresses the real bottleneck.
+        detail_level: moderate
+        required: true
+      - name: likely_ceiling
+        description: Why the recommendation alone will eventually saturate or fail to address other layers.
+        detail_level: moderate
+        required: true
+      - name: implementation_effort
+        description: Relative engineering and research effort with major work components.
+        detail_level: moderate
+        required: true
+      - name: latency_token_cost
+        description: Expected inference latency, token, compute, and provider-cost effects.
+        detail_level: moderate
+        required: true
+      - name: risks
+        description: Technical, evaluation, product, data, and operational risks.
+        detail_level: detailed
+        required: true
+      - name: dependencies
+        description: Measurements, data, infrastructure, or previous changes required first.
+        detail_level: moderate
+        required: true
+      - name: sequencing
+        description: Recommended order across immediate diagnostics, near-term trials, and architecture work.
+        detail_level: detailed
+        required: true
+      - name: rollback_criteria
+        description: Measurable condition for stopping, reverting, or deprioritizing the recommendation.
+        detail_level: moderate
+        required: true
+      - name: anti_recommendations
+        description: Attractive actions that should not be prioritized yet and the measurement prerequisite that could change the decision.
+        detail_level: detailed
+        required: true
+      - name: selective_generation_policy
+        description: Abstention, simpler-object fallback, deterministic fallback, or escalation policy when confidence or feasibility is low.
+        detail_level: moderate
+        required: false
+
+  - category: Controlled Experiments
+    fields:
+      - name: smallest_discriminating_experiments
+        description: Minimal experiments that can confirm or weaken each major causal hypothesis.
+        detail_level: detailed
+        required: true
+      - name: variables_and_controls
+        description: Changed variable, fixed variables, randomization, seeds where possible, and comparison groups.
+        detail_level: detailed
+        required: true
+      - name: dataset_and_slices
+        description: Prompt suite, inventories, fixture or reference builds, stratification, robustness slices, and exclusions.
+        detail_level: detailed
+        required: true
+      - name: metrics_and_scoring
+        description: Automatic, human, and model-assisted measures with rubrics and evaluator-gaming controls.
+        detail_level: detailed
+        required: true
+      - name: sample_size_or_confidence_method
+        description: Appropriate early-stage sample size, paired design, intervals, bootstrap, or sequential decision method.
+        detail_level: moderate
+        required: true
+      - name: success_thresholds
+        description: Quantitative or rubric-based thresholds that justify a product or architecture decision.
+        detail_level: detailed
+        required: true
+      - name: decision_enabled
+        description: Specific decision each experiment enables and what opposing result would imply.
+        detail_level: detailed
+        required: true
+      - name: oracle_replacement_test
+        description: Substitute one stage with a skilled-human or ground-truth oracle to estimate that layer's maximum contribution to the ceiling.
+        detail_level: detailed
+        required: true
+      - name: marginal_gain_curve
+        description: Plan to measure saturation versus added model scale, candidates, repair passes, shapes, data, or compute.
+        detail_level: moderate
+        required: true
+      - name: validator_soundness_and_completeness
+        description: Method to estimate validator false accepts and false rejects against expert or physical-build ground truth.
+        detail_level: moderate
+        required: false
+
+  - category: Quality and Buildability
+    fields:
+      - name: semantic_validation_required
+        description: Semantic checks still required after schema-valid and deterministically legal output.
+        detail_level: detailed
+        required: true
+      - name: objective_vector_and_pareto_status
+        description: Unaggregated objectives, tradeoffs, stakeholder weights, and when Pareto analysis is preferable to one scalar score.
+        detail_level: detailed
+        required: true
+      - name: representation_efficiency
+        description: Tokens per brick, constraint locality, branching factor, parse survival, and maximum reliable sequence length where relevant.
+        detail_level: moderate
+        required: false
+      - name: physical_and_assembly_implications
+        description: Typed connections, stability assumptions, handling margins, placement accessibility, prefix validity, reversibility, and instruction complexity where relevant.
+        detail_level: detailed
+        required: true
+      - name: feature_retention_and_edit_locality
+        description: How requested or approved features survive repair and how many unaffected bricks or regions a correction changes.
+        detail_level: moderate
+        required: true
+      - name: failure_onset_and_propagation
+        description: Earliest defective stage or brick, downstream consequences, rollback depth, and recovery probability.
+        detail_level: moderate
+        required: true
+      - name: real_world_build_validation
+        description: Human or robot completion rate, build time, instruction errors, substitutions, collapses, and digital-to-physical mismatch where applicable.
+        detail_level: moderate
+        required: false
+
+  - category: Reserved
+    fields:
+      - name: uncertain
+        description: Reserved array containing every field name whose value is marked uncertain.
+        detail_level: brief
+        required: true

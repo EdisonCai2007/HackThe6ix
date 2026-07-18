@@ -1,0 +1,221 @@
+topic: LEGO generation quality ceiling in an inventory-constrained AI design system
+research_date: 2026-07-17
+project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+items:
+  - name: Suggestion to build continuity and inventory grounded ideation
+    category: Problem A and shared pipeline diagnosis
+    description: >-
+      Investigate why inventory-driven ideation remains repetitive, linguistically appealing but
+      geometrically infeasible, and weakly coupled to construction. Compare disposable prose against
+      persistent canonical design briefs, feature anchors, part and color budgets, feasibility checks,
+      provisional sketches, diversity-aware search, and accountable handoff into planning and placement.
+      Explain why the supposedly easier choose-your-own-object case still fails and how a fire hydrant,
+      park bench, or coffee mug should retain its defining intent through the pipeline.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/generationPrompts.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/service.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/preview/main.js
+    research_questions:
+      - How should ideas be generated, feasibility checked, diversified, and ranked for a fixed inventory?
+      - Which intent artifact should persist so the final model is accountable to the selected suggestion?
+      - Which continuity and feature-retention measurements discriminate prompt failure from pipeline information loss?
+    abstraction_rule: >-
+      Search direct LEGO and constrained assembly evidence first. Only when direct evidence is thin,
+      abstract to program synthesis, CAD, procedural design, recommender diversity, or planning systems;
+      label the transfer argument and its limits explicitly.
+    date_sensitive_requirement: Verify current product and model capability claims as of 2026-07-17.
+
+  - name: Model capability and stage allocation
+    category: Model behavior and inference allocation
+    description: >-
+      Assess the spatial reasoning, long structured-output reliability, instruction following, planning,
+      visual reasoning, and repair capability classes required by suggestion, structure planning, exact
+      placement, semantic repair, and visual critique. Determine what stronger models or stage-specific
+      allocation could improve without an architectural rewrite, while avoiding the assumption that a
+      model swap alone solves missing representations, search, or evaluators.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/modelConfig.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/generationPrompts.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/service.js
+    research_questions:
+      - Which measured capability classes correlate with success on discrete 3D composition and long JSON placement?
+      - What stage-level model A/B tests isolate model capability from prompt, representation, and search effects?
+      - Where do marginal gains from model scale or test-time compute plausibly saturate?
+    abstraction_rule: >-
+      Prefer direct spatial reasoning, structured generation, program synthesis, and assembly evidence.
+      Use adjacent benchmarks only with an explicit explanation of why they transfer to exact-inventory brick design.
+    date_sensitive_requirement: Verify model IDs, provider availability, schema support, and tool capabilities as of 2026-07-17.
+
+  - name: Provider structured output and tool orchestration
+    category: Provider and agent execution layer
+    description: >-
+      Investigate the current Backboard translation of Gemini-oriented requests, text-embedded response
+      schemas, removed inline inventory, inventory retrieval tool, validation tool, disabled memory,
+      isolated calls, and missing intermediate tool traces. Compare this path with the strongest available
+      native structured-output and tool-use path. Specify instrumentation and controlled A/B tests for
+      grounding, schema adherence, retrieval frequency, validator use, revision behavior, latency, and cost.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/server/backboardGenerationClient.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/server/generationRuntimeLogger.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/server/generationServer.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/geminiClient.js
+    research_questions:
+      - Can translation, retrieval, or unobserved tool behavior plausibly weaken inventory grounding or spatial output?
+      - What trace schema is required to confirm or reject that hypothesis?
+      - What is the fairest native-versus-Backboard A/B design with fixed models, prompts, inventory, and seeds where possible?
+    abstraction_rule: >-
+      Use first-party provider documentation and measured agent/tool-use research first. Do not infer
+      causation from architecture alone; state the smallest experiment needed for any unobserved behavior.
+    date_sensitive_requirement: Verify every provider and API capability claim as of 2026-07-17.
+
+  - name: Intermediate representations and connection semantics
+    category: Representation and design language
+    description: >-
+      Compare high-level prose plus raw brick coordinates against layered occupancy maps, voxel or stud
+      grids, semantic part and feature graphs, typed connection graphs, subassemblies, symmetry and
+      proportion constraints, shape grammars, procedural programs, and hybrid representations. Include
+      representation efficiency, constraint locality, sequence-length survival, geometry and part identity,
+      and the distinction between rectangular occupancy support and physically meaningful LEGO connections.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/designPlan.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/generatedModelSchema.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/partCatalog.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/validator.js
+    research_questions:
+      - Is one-shot coordinate emission a fundamental bottleneck, and what evidence supports or challenges that claim?
+      - Which intermediate representation best preserves semantic features while enabling legal deterministic placement?
+      - How should typed connections, symmetry, proportions, subassemblies, and feature anchors be represented?
+    abstraction_rule: >-
+      Search direct brick assembly and LEGO generation work first. If needed, abstract to voxel generation,
+      CAD programs, scene graphs, inverse graphics, or procedural modeling and document the transfer limits.
+    date_sensitive_requirement: Prefer current implementations while retaining foundational representation evidence.
+
+  - name: Deterministic search and buildable assembly
+    category: Construction algorithms and verification
+    description: >-
+      Research how an AI-authored semantic plan can become inventory-bounded legal placements through CSP,
+      SAT, ILP, graph search, packing, procedural grammars, program synthesis, constrained decoding, or
+      hybrid search. Distinguish occupancy legality, typed connection validity, physical stability, handling
+      robustness, and assembly-sequence feasibility. Explain objectives, heuristics, scaling limits, and why
+      a deterministic solver is not useful without a sufficiently expressive semantic target and quality score.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/validator.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/inventoryCleanup.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/service.js
+    research_questions:
+      - Which solver or search family best matches at most 100 rectangular bricks with exact inventory counts?
+      - What semantic objective must the planner supply so deterministic placement improves resemblance rather than only legality?
+      - How should physical stability and build sequence be evaluated beyond the current support and connectivity rules?
+    abstraction_rule: >-
+      Prefer constructable brick sculpture, sequential brick assembly, stability, and assembly-planning
+      research. Abstract to packing or general constraint solving only where the mapping is explicit.
+    date_sensitive_requirement: Include credible open-source implementations and current reproducibility status where available.
+
+  - name: Candidate search and test time compute
+    category: Inference search and selection
+    description: >-
+      Investigate best-of-N, diverse sampling, beam or tree search, self-consistency, verifier-guided
+      generation, iterative refinement, local rollback, and learned or rule-based reranking for ideas,
+      semantic plans, geometry, and repairs. Determine when additional candidates improve quality, when
+      they merely multiply mediocre outputs, what scorer is needed, and how latency and token cost should
+      shape an interactive product policy including abstention and simpler-build fallbacks.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/service.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/server/generationRuntimeLogger.js
+    research_questions:
+      - What evidence shows best-of-N or verifier-guided inference helps structured spatial design?
+      - At which stage does candidate diversity create the most quality gain per unit cost?
+      - How should first-error onset, rollback depth, and feature preservation guide local refinement?
+    abstraction_rule: >-
+      Use direct structured generation or spatial design evidence where available. Abstract to test-time
+      compute and program synthesis only after checking direct evidence, and identify scorer dependence.
+    date_sensitive_requirement: Verify current inference-time methods and provider controls as of 2026-07-17.
+
+  - name: Multi view critique and quality evaluation
+    category: Semantic and aesthetic feedback
+    description: >-
+      Design multi-view render critique and a calibrated evaluator for semantic fidelity, defining feature
+      coverage, silhouette, proportion, symmetry or intentional asymmetry, color composition, detail,
+      creativity, diversity, inventory use, edit burden, and human preference. Compare VLM critique,
+      image-text similarity, geometry metrics, pairwise human ratings, and hybrid scoring. Address evaluator
+      gaming, prompt leakage, calibration, confidence, safe local repairs, and preservation of correct regions.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/preview/brickScene.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/preview/cameraFraming.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/validator.js
+    research_questions:
+      - Which metrics can be automated, which require humans, and which can be VLM-assisted?
+      - What views and rubrics reliably distinguish a legal stack from a recognizable crafted model?
+      - How can critique drive local changes without regressing already-correct features or gaming the evaluator?
+    abstraction_rule: >-
+      Search direct 3D, CAD, assembly, and multi-view evaluation evidence first. Use text-to-image or
+      generic VLM-as-judge work only with explicit calibration and domain-transfer caveats.
+    date_sensitive_requirement: Verify current multimodal model and evaluation capabilities as of 2026-07-17.
+
+  - name: Inventory expressivity data and reference builds
+    category: Catalog ceiling and learning resources
+    description: >-
+      Design a controlled comparison that separates the achievable quality of the 17 rectangular shapes
+      from AI underperformance using skilled manual or deterministic reference builds on identical
+      inventories and piece caps. Estimate marginal gains from added shape categories without using catalog
+      expansion as a substitute for better composition. Assess curated exemplars, retrieval, LDraw and
+      brick datasets, voxel conversions, synthetic data, preference data, fine-tuning thresholds, licensing,
+      part identity mappings, near-duplicate leakage, and deployment-domain mismatch.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/partCatalog.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/fixtures/randomBuildInventory.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/fixtures/carModel.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/fixtures/daisyModel.js
+    research_questions:
+      - How should the 17-shape ceiling be measured against skilled same-inventory references?
+      - Which new shape families have the highest marginal quality gain after the current catalog is exploited well?
+      - Which datasets or exemplars match exact-inventory small builds, and what licensing or leakage risks apply?
+    abstraction_rule: >-
+      Prefer datasets and systems with explicit brick geometry, part sets, or constructability. Abstract to
+      voxel or CAD datasets only after measuring part-set, piece-count, topology, and conditioning mismatch.
+    date_sensitive_requirement: Verify dataset availability, licenses, repositories, and known limitations as of 2026-07-17.
+
+  - name: Telemetry causal experiments and product roadmap
+    category: Measurement and decision program
+    description: >-
+      Specify the end-to-end telemetry, stratified offline benchmark, online outcomes, causal ceiling
+      decomposition, oracle substitutions, multi-objective quality frontier, experiment sequence, success
+      thresholds, and ranked roadmap required to turn tuning into measurable progress. Cover both direct
+      requests and inventory suggestions, varied inventories, deterministic fixtures, legality, semantic
+      fidelity, design quality, user acceptance, regeneration, edit burden, abandonment, latency, and cost.
+      Produce 48-hour, one-to-two-week, and longer-term decisions plus an anti-roadmap.
+    project_context_path: /Users/edisoncai/Documents/GitHub/HackThe6ix/docs/research/2026-07-17-generation-quality-deep-research-prompt.md
+    live_repo_paths:
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/server/generationRuntimeLogger.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/src/generation/service.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/test/generation/service.test.js
+      - /Users/edisoncai/Documents/GitHub/HackThe6ix/test/generation/validator.test.js
+    research_questions:
+      - What minimum benchmark and telemetry make prompt, model, search, and architecture comparisons trustworthy?
+      - Which oracle substitutions isolate inventory, planning, representation, placement, scoring, and evaluator ceilings?
+      - What prioritized program maximizes expected quality gain per unit effort and identifies clear stop or rollback criteria?
+    abstraction_rule: >-
+      Prefer evaluation designs from structured generation, human preference, interactive systems, and
+      early-stage product experimentation. Abstract only where metrics and causal assumptions are made explicit.
+    date_sensitive_requirement: Verify current evaluation practice and report date-sensitive baselines as of 2026-07-17.
+
+execution:
+  batch_size: 3
+  items_per_agent: 3
+  output_dir: /Users/edisoncai/Documents/GitHub/HackThe6ix/lego_generation_quality_ceiling/results
+  time_range: Unlimited historical range while prioritizing current evidence
+  source_priority:
+    - Peer reviewed papers and author project pages
+    - Official technical and provider documentation
+    - Credible open source repositories
+    - First party product documentation
+  direct_evidence_first: true
+  date_sensitive_verification_date: 2026-07-17
