@@ -150,6 +150,7 @@ def test_load_views_accepts_view_ray_geometry(tmp_path):
     manifest["views"][0].update({
         "viewing_ray_table_xyz": [0.3, 0.0, -0.9539],
         "view_tilt_deg": 17.46,
+        "selection_role": "confirmation",
     })
     manifest_path.write_text(json.dumps(manifest))
 
@@ -159,6 +160,7 @@ def test_load_views_accepts_view_ray_geometry(tmp_path):
         (0.3, 0.0, -0.9539)
     )
     assert views[0].view_tilt_deg == pytest.approx(17.46)
+    assert views[0].selection_role == "confirmation"
 
 
 def test_legacy_v3_view_geometry_defaults_to_unavailable(tmp_path):
@@ -177,6 +179,7 @@ def test_legacy_v3_view_geometry_defaults_to_unavailable(tmp_path):
     assert views[0].camera_bearing_deg is None
     assert views[0].viewing_ray_table_xyz is None
     assert views[0].view_tilt_deg is None
+    assert views[0].selection_role is None
 
 
 def _obs(view_index, box, complete, clearance=10.0):

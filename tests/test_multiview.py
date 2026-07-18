@@ -10,6 +10,7 @@ from pipeline.multiview import (
     consensus_color,
     filter_unconfirmed_instances,
     fuse_observations,
+    reassign_confirmation_only_instances,
 )
 
 
@@ -220,6 +221,67 @@ def test_boundary_only_segmentation_needs_majority_view_support():
     ]
 
     assert filter_unconfirmed_instances([instance], views) == []
+
+
+def test_confirmation_only_cross_match_is_reassigned_to_coverage_anchors():
+    image = np.full((100, 120, 3), 220, dtype=np.uint8)
+    valid = np.full((100, 120), 255, dtype=np.uint8)
+    views = [
+        RectifiedView(
+            frame_id=index,
+            view_index=index,
+            image=image,
+            valid_mask=valid,
+            quality=1.0,
+            selection_role=("coverage" if index < 3 else "confirmation"),
+        )
+        for index in range(5)
+    ]
+    blue_top = _obs(0, (40, 40, 70, 70), color="blue")
+    blue_top.view_index = 0
+    blue_second = _obs(1, (41, 41, 71, 71), color="blue")
+    blue_second.view_index = 1
+    blue_existing_confirmation = _obs(
+        4, (43, 42, 73, 72), color="blue"
+    )
+    blue_existing_confirmation.view_index = 4
+    white_top = _obs(0, (20, 30, 48, 55), color="white")
+    white_top.view_index = 0
+    white_second = _obs(1, (21, 31, 49, 56), color="white")
+    white_second.view_index = 1
+    white_existing_confirmation = _obs(
+        3, (18, 28, 52, 60), color="white"
+    )
+    white_existing_confirmation.view_index = 3
+    orphan_blue = _obs(3, (38, 37, 74, 75), color="blue")
+    orphan_blue.view_index = 3
+    orphan_white = _obs(4, (16, 26, 55, 63), color="light gray")
+    orphan_white.view_index = 4
+    blue = FusedInstance(
+        [blue_top, blue_second, blue_existing_confirmation], blue_top
+    )
+    white = FusedInstance(
+        [white_top, white_second, white_existing_confirmation], white_top
+    )
+    crossed = FusedInstance([orphan_blue, orphan_white], orphan_blue)
+
+    reassigned = reassign_confirmation_only_instances(
+        [blue, white, crossed], views
+    )
+
+    assert len(reassigned) == 2
+    blue_result = next(
+        instance for instance in reassigned
+        if instance.best.color.name == "blue"
+    )
+    white_result = next(
+        instance for instance in reassigned
+        if instance.best.color.name == "white"
+    )
+    assert orphan_blue in blue_result.observations
+    assert orphan_white in white_result.observations
+    assert len({obs.view_index for obs in blue_result.observations}) == 4
+    assert len({obs.view_index for obs in white_result.observations}) == 4
 
 
 def test_mosaic_contains_one_intact_selected_object_without_source_ghost():

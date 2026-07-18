@@ -107,6 +107,7 @@ class RectifiedView:
     camera_bearing_deg: float | None = None
     viewing_ray_table_xyz: tuple[float, float, float] | None = None
     view_tilt_deg: float | None = None
+    selection_role: str | None = None
 
 
 @dataclass
@@ -154,14 +155,22 @@ def _box_iou(first: Box, second: Box) -> float:
     return intersection / union if union else 0.0
 
 
-def _compatibility(first: Observation, second: Observation) -> float | None:
+def _compatibility(
+    first: Observation,
+    second: Observation,
+    min_area_ratio: float | None = None,
+) -> float | None:
     if first.view_index == second.view_index:
         return None
     first_family = _COLOR_FAMILY.get(first.color.name, first.color.name)
     second_family = _COLOR_FAMILY.get(second.color.name, second.color.name)
     areas = (_box_area(first.box), _box_area(second.box))
-    min_area_ratio = 0.40 if first.complete and second.complete else 0.20
-    if min(areas) / max(1, max(areas)) < min_area_ratio:
+    required_area_ratio = (
+        min_area_ratio
+        if min_area_ratio is not None
+        else (0.40 if first.complete and second.complete else 0.20)
+    )
+    if min(areas) / max(1, max(areas)) < required_area_ratio:
         return None
     c1 = np.array(((first.box[0] + first.box[2]) / 2,
                    (first.box[1] + first.box[3]) / 2))
@@ -262,6 +271,91 @@ def fuse_observations(observations: list[Observation]) -> list[FusedInstance]:
     ]
     return sorted(
         instances,
+        key=lambda instance: (
+            instance.best.box[1], instance.best.box[0], instance.best.frame_id
+        ),
+    )
+
+
+def reassign_confirmation_only_instances(
+    instances: list[FusedInstance], views: list[RectifiedView]
+) -> list[FusedInstance]:
+    """Repair cross-matches caused solely by oblique confirmation views.
+
+    Table-plane homographies can shift raised bricks in oblique views. Two
+    unrelated confirmation detections may therefore overlap more strongly
+    with each other than with their coverage-view anchors. Reassign such an
+    orphan only when every observation has a defensible, unambiguous anchor;
+    otherwise preserve the original evidence unchanged.
+    """
+    roles = {view.view_index: view.selection_role for view in views}
+    if not any(role == "confirmation" for role in roles.values()):
+        return instances
+
+    working = [
+        FusedInstance(list(instance.observations), instance.best)
+        for instance in instances
+    ]
+    confirmation_only = [
+        instance for instance in working
+        if instance.observations
+        and all(
+            roles.get(observation.view_index) == "confirmation"
+            for observation in instance.observations
+        )
+    ]
+
+    for orphan in confirmation_only:
+        anchors = [
+            instance for instance in working
+            if instance is not orphan
+            and any(
+                roles.get(observation.view_index) == "coverage"
+                for observation in instance.observations
+            )
+        ]
+        assignments: list[tuple[Observation, FusedInstance]] = []
+        for observation in orphan.observations:
+            candidates: list[tuple[float, FusedInstance]] = []
+            for anchor in anchors:
+                if any(
+                    existing.view_index == observation.view_index
+                    for existing in anchor.observations
+                ):
+                    continue
+                scores = [
+                    score
+                    for existing in anchor.observations
+                    if (
+                        score := _compatibility(
+                            observation, existing, min_area_ratio=0.20
+                        )
+                    ) is not None
+                ]
+                if scores:
+                    candidates.append((min(scores), anchor))
+            candidates.sort(key=lambda candidate: candidate[0])
+            if not candidates:
+                assignments = []
+                break
+            # A very small score gap means geometry does not identify a
+            # unique physical anchor. Keep the orphan intact in that case.
+            if (
+                len(candidates) > 1
+                and candidates[1][0] - candidates[0][0] < 0.03
+            ):
+                assignments = []
+                break
+            assignments.append((observation, candidates[0][1]))
+
+        if len(assignments) != len(orphan.observations):
+            continue
+        for observation, anchor in assignments:
+            anchor.observations.append(observation)
+        working.remove(orphan)
+
+    return sorted(
+        working,
         key=lambda instance: (
             instance.best.box[1], instance.best.box[0], instance.best.frame_id
         ),
@@ -391,6 +485,7 @@ def load_views(manifest_path) -> tuple[dict, list[RectifiedView]]:
                 None if view.get("view_tilt_deg") is None
                 else float(view["view_tilt_deg"])
             ),
+            selection_role=view.get("selection_role"),
         ))
     return manifest, views
 
@@ -1126,9 +1221,10 @@ def scan_manifest(
     else:
         observations = observations_from_views(views, detector=detector)
     detected = time.perf_counter()
-    instances = filter_unconfirmed_instances(
+    instances = reassign_confirmation_only_instances(
         fuse_observations(observations), views
     )
+    instances = filter_unconfirmed_instances(instances, views)
     fused = time.perf_counter()
     session_dir = Path(manifest["session_dir"])
     crops, id_crops = _identification_crops(instances, views, session_dir)
