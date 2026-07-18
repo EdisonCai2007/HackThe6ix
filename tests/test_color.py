@@ -5,10 +5,13 @@ from skimage.color import deltaE_ciede2000, rgb2lab
 import pipeline.color as color_module
 from pipeline.color import (
     PALETTE,
+    apply_illuminant_correction,
+    choose_illuminant_correction,
     dominant_rgb,
     dominant_rgb_masked,
     match_color,
     normalize_illumination,
+    rank_color_candidates,
 )
 
 
@@ -69,6 +72,72 @@ def test_rectified_view_can_use_a_slightly_wider_neutral_tolerance():
     )
 
     assert match_color(corrected).name == "orange"
+
+
+def test_gray_world_plan_preserves_brightness_instead_of_whitening_table():
+    plan = choose_illuminant_correction(
+        [(175, 165, 148), (174, 165, 149), (166, 156, 140)]
+    )
+
+    corrected, details = apply_illuminant_correction(
+        (175, 165, 148), (175, 165, 148), plan
+    )
+
+    assert plan["method"] == "gray_world"
+    assert max(corrected) < 200
+    assert max(corrected) - min(corrected) <= 2
+    assert details["applied"] is True
+
+
+def test_unreliable_colored_reference_falls_back_to_raw():
+    plan = choose_illuminant_correction(
+        [(160, 90, 40), (80, 150, 45), (45, 75, 160)]
+    )
+
+    corrected, details = apply_illuminant_correction(
+        (100, 50, 25), (160, 90, 40), plan
+    )
+
+    assert plan["method"] == "raw_fallback"
+    assert corrected == (100, 50, 25)
+    assert details["applied"] is False
+
+
+def test_gray_world_does_not_turn_low_chroma_black_sample_blue():
+    plan = choose_illuminant_correction(
+        [(175, 165, 148), (174, 165, 149), (166, 156, 140)]
+    )
+
+    corrected, details = apply_illuminant_correction(
+        (50, 59, 68), (175, 165, 148), plan
+    )
+
+    assert corrected == (50, 59, 68)
+    assert details["rejection_reason"] == "low_chroma_amplification"
+
+
+def test_chroma_gate_keeps_dark_neutral_out_of_blue_palette():
+    matches, decision = rank_color_candidates((50, 59, 68), limit=3)
+
+    assert decision["gate"] == "neutral"
+    assert {match["name"] for match in matches} <= {
+        "black", "dark gray", "gray", "light gray", "white"
+    }
+
+
+def test_chromatic_ranking_prioritizes_hue_over_brightness():
+    matches, decision = rank_color_candidates((15, 60, 127), limit=3)
+
+    assert decision["gate"] == "chromatic"
+    assert matches[0]["name"] == "blue"
+    assert matches[0]["decision_score"] < matches[1]["decision_score"]
+
+
+def test_chroma_gate_keeps_yellow_out_of_neutral_and_lime_confusion():
+    matches, decision = rank_color_candidates((227, 200, 27), limit=3)
+
+    assert decision["gate"] == "chromatic"
+    assert matches[0]["name"] == "yellow"
 
 
 def test_palette_has_expected_colors():

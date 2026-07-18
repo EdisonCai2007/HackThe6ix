@@ -12,6 +12,7 @@ Independently runnable: python -m pipeline.color crop.jpg
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,6 +61,12 @@ PALETTE: list[LegoColor] = [
     LegoColor(8, "dark gray", _hx("3E4044")),
     LegoColor(0, "black", _hx("05131D")),
 ]
+
+NEUTRAL_COLOR_NAMES = frozenset(
+    {"white", "light gray", "gray", "dark gray", "black"}
+)
+CHROMA_GATE = 18.0
+STRONG_CHROMA = 50.0
 
 
 def load_colors(csv_path: Path = Path("data/colors.csv")) -> list[LegoColor]:
@@ -148,6 +155,121 @@ def normalize_illumination(
     return scaled  # type: ignore[return-value]
 
 
+def _lab_chroma(rgb: tuple[int, int, int]) -> float:
+    lab = _rgb_lab(rgb)
+    return float(np.hypot(lab[1], lab[2]))
+
+
+def _lab_hue(lab: np.ndarray) -> float:
+    return float(math.degrees(math.atan2(float(lab[2]), float(lab[1]))) % 360)
+
+
+def _hue_distance(first: float, second: float) -> float:
+    difference = abs(first - second)
+    return min(difference, 360.0 - difference)
+
+
+def choose_illuminant_correction(
+    background_rgbs: list[tuple[int, int, int]],
+) -> dict:
+    """Select one correction for a session from table reference samples.
+
+    A gray-world/von-Kries correction is only defensible when the putative
+    neutral surface is bright, only mildly chromatic, and consistent across
+    views.  Otherwise the surface may be colored or unstable and raw samples
+    are safer.  Unlike the legacy white-patch operation, gray-world maps the
+    reference channels to their mean and therefore does not force exposure to
+    white.
+    """
+    if not background_rgbs:
+        return {
+            "method": "raw_fallback",
+            "reason": "no_neutral_reference",
+            "reference_count": 0,
+        }
+    values = np.asarray(background_rgbs, dtype=float)
+    labs = np.asarray([_rgb_lab(tuple(map(int, rgb))) for rgb in values])
+    chromas = np.hypot(labs[:, 1], labs[:, 2])
+    means = values.mean(axis=1)
+    channel_ratios = values.max(axis=1) / np.maximum(1.0, values.min(axis=1))
+    normalized = values / np.maximum(1.0, values.sum(axis=1, keepdims=True))
+    consistency_spread = float(
+        np.max(np.linalg.norm(normalized - np.median(normalized, axis=0), axis=1))
+    )
+    reliable = bool(
+        np.median(means) >= 100.0
+        and np.median(chromas) <= CHROMA_GATE
+        and np.max(channel_ratios) <= 1.40
+        and consistency_spread <= 0.06
+    )
+    raw_score = float(np.median(chromas))
+    gray_world_score = 0.0
+    if not reliable:
+        method = "raw_fallback"
+        reason = "neutral_reference_unreliable"
+    elif raw_score <= 2.0:
+        method = "raw_fallback"
+        reason = "reference_already_neutral"
+    else:
+        method = "gray_world"
+        reason = "gray_world_best_neutrality"
+    return {
+        "method": method,
+        "reason": reason,
+        "reference_count": int(len(values)),
+        "raw_neutrality_score": raw_score,
+        "gray_world_neutrality_score": gray_world_score,
+        "reference_chroma_median": float(np.median(chromas)),
+        "reference_consistency_spread": consistency_spread,
+        "reference_reliable": reliable,
+    }
+
+
+def apply_illuminant_correction(
+    rgb: tuple[int, int, int],
+    bg_rgb: tuple[int, int, int],
+    plan: dict,
+) -> tuple[tuple[int, int, int], dict]:
+    """Apply a session plan, rejecting per-object chroma/hue damage."""
+    details = {
+        "method": plan.get("method", "raw_fallback"),
+        "applied": False,
+        "rejection_reason": None,
+        "channel_gains": [1.0, 1.0, 1.0],
+    }
+    if plan.get("method") != "gray_world":
+        details["rejection_reason"] = plan.get("reason", "raw_fallback")
+        return rgb, details
+
+    background = np.asarray(bg_rgb, dtype=float)
+    target = float(background.mean())
+    gains = np.clip(target / np.maximum(1.0, background), 0.75, 1.35)
+    candidate = tuple(
+        int(value)
+        for value in np.clip(np.rint(np.asarray(rgb, dtype=float) * gains), 0, 255)
+    )
+    raw_lab, corrected_lab = _rgb_lab(rgb), _rgb_lab(candidate)
+    raw_chroma = float(np.hypot(raw_lab[1], raw_lab[2]))
+    corrected_chroma = float(np.hypot(corrected_lab[1], corrected_lab[2]))
+    hue_shift = _hue_distance(_lab_hue(raw_lab), _lab_hue(corrected_lab))
+    rejection_reason = None
+    if raw_chroma >= STRONG_CHROMA:
+        rejection_reason = "strong_chroma_stable"
+    elif raw_chroma <= CHROMA_GATE and corrected_chroma > raw_chroma + 4.0:
+        rejection_reason = "low_chroma_amplification"
+    elif raw_chroma > CHROMA_GATE and hue_shift > 12.0:
+        rejection_reason = "excessive_hue_shift"
+    details.update({
+        "channel_gains": [float(value) for value in gains],
+        "raw_chroma": raw_chroma,
+        "corrected_chroma": corrected_chroma,
+        "hue_shift_deg": hue_shift,
+        "rejection_reason": rejection_reason,
+        "applied": rejection_reason is None,
+    })
+    return (candidate if rejection_reason is None else rgb), details
+
+
 _lab_cache: dict[int, np.ndarray] = {}
 
 
@@ -182,6 +304,63 @@ def palette_matches(
     ]
 
 
+def rank_color_candidates(
+    rgb: tuple[int, int, int],
+    colors: list[LegoColor] | None = None,
+    limit: int = 3,
+) -> tuple[list[dict], dict]:
+    """Rank candidates with a chroma gate and hue-first chromatic score."""
+    if colors is None:
+        colors = PALETTE
+    lab = _rgb_lab(rgb)
+    chroma = float(np.hypot(lab[1], lab[2]))
+    neutral = chroma <= CHROMA_GATE
+    candidates = [
+        color for color in colors
+        if (color.name in NEUTRAL_COLOR_NAMES) == neutral
+    ]
+    if not candidates:
+        candidates = list(colors)
+    candidate_labs = np.asarray([_rgb_lab(color.rgb) for color in candidates])
+    delta_es = deltaE_ciede2000(lab[None, :], candidate_labs)
+    scores = []
+    target_hue = _lab_hue(lab)
+    for index, (color, candidate_lab) in enumerate(zip(candidates, candidate_labs)):
+        if neutral:
+            score = float(delta_es[index])
+            hue_delta = None
+        else:
+            candidate_chroma = float(np.hypot(candidate_lab[1], candidate_lab[2]))
+            hue_delta = _hue_distance(target_hue, _lab_hue(candidate_lab))
+            # Hue leads; lightness supports but cannot turn a dim blue into
+            # dark blue solely because the exposure is low.
+            score = (
+                hue_delta
+                + 0.10 * abs(float(lab[0] - candidate_lab[0]))
+                + 0.20 * abs(chroma - candidate_chroma)
+            )
+        scores.append((score, index, hue_delta))
+    ranked = []
+    for score, index, hue_delta in sorted(scores)[:max(0, int(limit))]:
+        color = candidates[index]
+        row = {
+            "color_id": color.id,
+            "name": color.name,
+            "rgb": list(color.rgb),
+            "delta_e": float(delta_es[index]),
+            "decision_score": float(score),
+        }
+        if hue_delta is not None:
+            row["hue_delta_deg"] = float(hue_delta)
+        ranked.append(row)
+    return ranked, {
+        "gate": "neutral" if neutral else "chromatic",
+        "chroma": chroma,
+        "chroma_gate": CHROMA_GATE,
+        "chromatic_score": "hue+0.10*lightness+0.20*chroma",
+    }
+
+
 def _masked_interior_pixels(
     image_bgr: np.ndarray, mask: np.ndarray
 ) -> np.ndarray:
@@ -208,16 +387,19 @@ def color_evidence(
     view_tilt_deg: float | None = None,
     segmentation_confidence: float | None = None,
     boundary_zone: bool = False,
+    correction_plan: dict | None = None,
+    view_quality: float | None = None,
 ) -> dict:
-    """Describe the existing color decision without changing that decision."""
+    """Describe the sample, correction, and gated palette decision."""
     raw_rgb = (
         dominant_rgb_masked(image_bgr, mask)
         if sampled_rgb is None else sampled_rgb
     )
-    corrected_rgb = normalize_illumination(
-        raw_rgb, bg_rgb, neutral_tolerance=neutral_tolerance
+    plan = correction_plan or choose_illuminant_correction([bg_rgb])
+    corrected_rgb, correction = apply_illuminant_correction(
+        raw_rgb, bg_rgb, plan
     )
-    matches = palette_matches(corrected_rgb, limit=3)
+    matches, decision = rank_color_candidates(corrected_rgb, limit=3)
     pixels = _masked_interior_pixels(image_bgr, mask)
     gray = cv2.cvtColor(
         pixels.reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_BGR2GRAY
@@ -226,10 +408,12 @@ def color_evidence(
     low_fraction = float(np.mean(gray <= 25))
     high_fraction = float(np.mean(gray >= 245))
     spread = float(p90 - p10)
-    background_neutral = max(bg_rgb) - min(bg_rgb) <= neutral_tolerance
+    background_neutral = bool(plan.get("reference_reliable", False))
     flags = []
     if raw_rgb != corrected_rgb:
-        flags.append("white_patch_applied")
+        flags.append("gray_world_applied")
+    if correction.get("rejection_reason"):
+        flags.append(f"correction_rejected:{correction['rejection_reason']}")
     if not background_neutral:
         flags.append("background_not_neutral")
     if low_fraction >= 0.10 and spread >= 40.0:
@@ -245,12 +429,19 @@ def color_evidence(
     return {
         "raw_rgb": list(raw_rgb),
         "corrected_rgb": list(corrected_rgb),
+        "decision_rgb": list(corrected_rgb),
         "lab": [float(value) for value in _rgb_lab(corrected_rgb)],
         "top_palette_matches": matches,
         "delta_e_margin": (
             float(matches[1]["delta_e"] - matches[0]["delta_e"])
             if len(matches) >= 2 else None
         ),
+        "decision_margin": (
+            float(matches[1]["decision_score"] - matches[0]["decision_score"])
+            if len(matches) >= 2 else None
+        ),
+        "decision": decision,
+        "correction": {"session_plan": plan, **correction},
         "luminance": {
             "pixel_count": int(gray.size),
             "p10": float(p10),
@@ -269,6 +460,7 @@ def color_evidence(
             "tilt_deg": view_tilt_deg,
             "segmentation_confidence": segmentation_confidence,
             "boundary_zone": bool(boundary_zone),
+            "view_quality": view_quality,
         },
         "flags": flags,
     }

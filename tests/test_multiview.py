@@ -123,6 +123,50 @@ def test_consensus_color_overrules_one_bad_best_crop():
     assert consensus_color(instance).name == "orange"
 
 
+def test_consensus_color_downweights_oblique_shadowed_observation():
+    observations = [
+        _obs(1, (30, 30, 80, 100), color="blue"),
+        _obs(2, (31, 30, 81, 100), color="blue"),
+        _obs(3, (30, 31, 80, 101), color="light blue"),
+    ]
+    for observation, rgb, flags, tilt in zip(
+        observations,
+        [(0, 75, 180), (5, 70, 170), (90, 147, 219)],
+        [[], [], ["possible_specular", "oblique_view"]],
+        [12.0, 18.0, 52.0],
+    ):
+        observation.color_evidence = {
+            "decision_rgb": list(rgb),
+            "raw_rgb": list(rgb),
+            "background": {"rgb": [175, 165, 148]},
+            "decision": {"gate": "chromatic"},
+            "flags": flags,
+            "view_quality": {"tilt_deg": tilt},
+        }
+    instance = FusedInstance(observations, observations[2])
+
+    assert consensus_color(instance).name == "blue"
+
+
+def test_consensus_color_emits_ambiguity_for_dark_low_light_neutral():
+    observations = [
+        _obs(1, (30, 30, 80, 100), color="dark gray"),
+        _obs(2, (31, 30, 81, 100), color="dark gray"),
+    ]
+    for observation, rgb in zip(observations, [(50, 59, 68), (45, 52, 62)]):
+        observation.color_evidence = {
+            "decision_rgb": list(rgb),
+            "raw_rgb": list(rgb),
+            "background": {"rgb": [175, 165, 148]},
+            "decision": {"gate": "neutral"},
+            "flags": [],
+            "view_quality": {"tilt_deg": 15.0},
+        }
+    instance = FusedInstance(observations, observations[0])
+
+    assert consensus_color(instance).name == "ambiguous(black/dark gray)"
+
+
 def test_unconfirmed_singleton_requires_two_contradicting_views_to_remove():
     observation = _obs(1, (30, 30, 60, 60), color="dark gray")
     instance = FusedInstance([observation], observation)

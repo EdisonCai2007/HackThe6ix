@@ -12,11 +12,13 @@ import numpy as np
 from pipeline.color import (
     PALETTE,
     LegoColor,
+    choose_illuminant_correction,
     color_evidence,
     dominant_rgb,
     dominant_rgb_masked,
     match_color,
     normalize_illumination,
+    rank_color_candidates,
 )
 from pipeline.detect import Box, crop_box, detect
 from pipeline.depth_height import measure_instance_height
@@ -239,8 +241,7 @@ def _best_observation(observations: list[Observation]) -> Observation:
     )
 
 
-def consensus_color(instance: FusedInstance) -> LegoColor:
-    """Choose color across views instead of trusting one shadow-prone crop."""
+def _legacy_consensus_color(instance: FusedInstance) -> LegoColor:
     votes: dict[str, int] = {}
     for observation in instance.observations:
         name = observation.color.name
@@ -250,21 +251,200 @@ def consensus_color(instance: FusedInstance) -> LegoColor:
     return next(color for color in PALETTE if color.name == winner)
 
 
+def _ambiguous_color(first: str, second: str) -> LegoColor:
+    names = sorted({first, second})
+    palette = {color.name: color for color in PALETTE}
+    rgb = tuple(
+        int(round((palette[names[0]].rgb[index] + palette[names[1]].rgb[index]) / 2))
+        for index in range(3)
+    )
+    return LegoColor(-1, f"ambiguous({names[0]}/{names[1]})", rgb)
+
+
+def _color_observation_weight(
+    observation: Observation, max_quality: float
+) -> tuple[float, list[str]]:
+    evidence = observation.color_evidence or {}
+    flags = set(evidence.get("flags", []))
+    quality = max(0.0, float(observation.quality))
+    weight = 0.5 + 0.5 * quality / max(1e-9, max_quality)
+    reasons = []
+    if "possible_shadow" in flags or "possible_specular" in flags:
+        weight *= 0.55
+        reasons.append("lighting_artifact")
+    if "boundary_view" in flags:
+        weight *= 0.65
+        reasons.append("boundary")
+    view_quality = evidence.get("view_quality", {})
+    tilt = view_quality.get("tilt_deg")
+    if tilt is not None and float(tilt) >= 45.0:
+        weight *= 0.35
+        reasons.append("strong_oblique")
+    elif tilt is not None and float(tilt) >= 30.0:
+        weight *= 0.60
+        reasons.append("oblique")
+    confidence = view_quality.get("segmentation_confidence")
+    if confidence is not None:
+        weight *= max(0.35, min(1.0, float(confidence)))
+    return float(weight), reasons
+
+
+def _weighted_median(values: list[tuple[float, float]]) -> float:
+    ordered = sorted(values)
+    threshold = sum(weight for _, weight in ordered) / 2
+    cumulative = 0.0
+    for value, weight in ordered:
+        cumulative += weight
+        if cumulative >= threshold:
+            return value
+    return ordered[-1][0]
+
+
+def consensus_color_details(instance: FusedInstance) -> tuple[LegoColor, dict]:
+    """Aggregate numeric color evidence with view-quality weights."""
+    usable = [
+        observation for observation in instance.observations
+        if (observation.color_evidence or {}).get("decision_rgb") is not None
+        and (observation.color_evidence or {}).get("decision", {}).get("gate")
+    ]
+    if not usable:
+        color = _legacy_consensus_color(instance)
+        return color, {
+            "strategy": "legacy_unweighted_name_vote",
+            "predicted_color": color.name,
+        }
+    max_quality = max(1e-9, *(max(0.0, float(obs.quality)) for obs in usable))
+    weighted = []
+    gate_weights = {"neutral": 0.0, "chromatic": 0.0}
+    for observation in usable:
+        weight, reasons = _color_observation_weight(observation, max_quality)
+        evidence = observation.color_evidence or {}
+        gate = evidence["decision"]["gate"]
+        gate_weights[gate] += weight
+        weighted.append((observation, weight, reasons, gate))
+    winning_gate = max(
+        gate_weights,
+        key=lambda gate: (gate_weights[gate], gate == (instance.best.color_evidence or {}).get("decision", {}).get("gate")),
+    )
+    selected = [row for row in weighted if row[3] == winning_gate]
+
+    relative_luminances = []
+    if winning_gate == "neutral":
+        for observation, weight, _, _ in selected:
+            evidence = observation.color_evidence or {}
+            raw_lab = np.asarray(evidence.get("raw_rgb"), dtype=float)
+            bg_lab = np.asarray(evidence.get("background", {}).get("rgb"), dtype=float)
+            if raw_lab.size == 3 and bg_lab.size == 3:
+                from pipeline.color import _rgb_lab
+                ratio = float(_rgb_lab(tuple(map(int, raw_lab)))[0]) / max(
+                    1e-9, float(_rgb_lab(tuple(map(int, bg_lab)))[0])
+                )
+                relative_luminances.append((ratio, weight))
+        relative_luminance = (
+            _weighted_median(relative_luminances) if relative_luminances else None
+        )
+        if relative_luminance is not None and relative_luminance >= 1.05:
+            color = next(color for color in PALETTE if color.name == "white")
+            return color, {
+                "strategy": "quality_weighted_gated_scores",
+                "predicted_color": color.name,
+                "gate": winning_gate,
+                "gate_weights": gate_weights,
+                "relative_luminance": relative_luminance,
+                "ambiguity_reason": None,
+            }
+        if relative_luminance is not None and relative_luminance < 0.25:
+            color = next(color for color in PALETTE if color.name == "black")
+            return color, {
+                "strategy": "quality_weighted_gated_scores",
+                "predicted_color": color.name,
+                "gate": winning_gate,
+                "gate_weights": gate_weights,
+                "relative_luminance": relative_luminance,
+                "ambiguity_reason": None,
+            }
+        if relative_luminance is not None and relative_luminance < 0.42:
+            color = _ambiguous_color("black", "dark gray")
+            return color, {
+                "strategy": "quality_weighted_gated_scores",
+                "predicted_color": color.name,
+                "gate": winning_gate,
+                "gate_weights": gate_weights,
+                "relative_luminance": relative_luminance,
+                "ambiguity_reason": "dark_neutral_exposure_overlap",
+            }
+
+    totals: dict[str, float] = {}
+    weights_by_name: dict[str, float] = {}
+    for observation, weight, _, _ in selected:
+        rgb = tuple(map(int, (observation.color_evidence or {})["decision_rgb"]))
+        matches, _ = rank_color_candidates(rgb, limit=len(PALETTE))
+        for match in matches:
+            name = match["name"]
+            totals[name] = totals.get(name, 0.0) + weight * float(match["decision_score"])
+            weights_by_name[name] = weights_by_name.get(name, 0.0) + weight
+    ranking = sorted(
+        (totals[name] / weights_by_name[name], name) for name in totals
+    )
+    best_score, best_name = ranking[0]
+    second_score, second_name = ranking[1] if len(ranking) > 1 else (float("inf"), best_name)
+    margin = float(second_score - best_score)
+    ambiguity_reason = None
+    shade_pairs = {
+        frozenset({"green", "dark green"}),
+        frozenset({"blue", "dark blue"}),
+        frozenset({"red", "dark red"}),
+        frozenset({"brown", "dark brown"}),
+    }
+    if margin < 4.0:
+        ambiguity_reason = "small_aggregate_margin"
+    elif frozenset({best_name, second_name}) in shade_pairs and best_name.startswith("dark "):
+        ambiguity_reason = "shade_exposure_overlap"
+    if ambiguity_reason:
+        color = _ambiguous_color(best_name, second_name)
+    else:
+        color = next(color for color in PALETTE if color.name == best_name)
+    return color, {
+        "strategy": "quality_weighted_gated_scores",
+        "predicted_color": color.name,
+        "gate": winning_gate,
+        "gate_weights": gate_weights,
+        "aggregate_top_matches": [
+            {"name": name, "score": float(score)}
+            for score, name in ranking[:3]
+        ],
+        "aggregate_margin": margin,
+        "ambiguity_reason": ambiguity_reason,
+    }
+
+
+def consensus_color(instance: FusedInstance) -> LegoColor:
+    return consensus_color_details(instance)[0]
+
+
 def color_provenance(instance: FusedInstance) -> dict:
     """Serialize the exact per-view evidence behind the current color vote."""
     votes: dict[str, int] = {}
     rows = []
+    max_quality = max(
+        1e-9, *(max(0.0, float(obs.quality)) for obs in instance.observations)
+    )
     for observation in instance.observations:
         votes[observation.color.name] = votes.get(observation.color.name, 0) + 1
+        weight, downweight_reasons = _color_observation_weight(
+            observation, max_quality
+        )
         row = {
             "frame_id": observation.frame_id,
             "predicted_color": observation.color.name,
+            "aggregation_weight": weight,
+            "downweight_reasons": downweight_reasons,
             **(observation.color_evidence or {}),
         }
         rows.append(row)
+    _, aggregation = consensus_color_details(instance)
     return {
-        "strategy": "unweighted_name_vote",
-        "predicted_color": consensus_color(instance).name,
+        **aggregation,
         "vote_counts": votes,
         "observations": rows,
     }
@@ -543,17 +723,17 @@ def observations_from_views(
     views: list[RectifiedView], detector: str = "cv"
 ) -> list[Observation]:
     observations: list[Observation] = []
+    backgrounds = {
+        view.view_index: _background_rgb(view.image) for view in views
+    }
+    correction_plan = choose_illuminant_correction(list(backgrounds.values()))
     for view in views:
         image, valid_mask = view.image, view.valid_mask
-        background_rgb = _background_rgb(image)
+        background_rgb = backgrounds[view.view_index]
         detections = detect(image, method=detector)
         for box in detections.boxes:
             crop = crop_box(image, box)
             raw_rgb = dominant_rgb(crop)
-            corrected_rgb = normalize_illumination(
-                raw_rgb, background_rgb, neutral_tolerance=45
-            )
-            color = match_color(corrected_rgb)
             crop_mask = np.ones(crop.shape[:2], dtype=bool)
             evidence = color_evidence(
                 crop,
@@ -563,6 +743,15 @@ def observations_from_views(
                 neutral_tolerance=45,
                 view_tilt_deg=view.view_tilt_deg,
                 boundary_zone=not box_is_complete(box, valid_mask),
+                correction_plan=correction_plan,
+                view_quality=view.quality,
+            )
+            # Preserve the historical association hint: final color is decided
+            # from the new evidence only after geometry-based fusion.
+            color = match_color(
+                normalize_illumination(
+                    raw_rgb, background_rgb, neutral_tolerance=45
+                )
             )
             observations.append(Observation(
                 frame_id=view.frame_id,
@@ -585,17 +774,20 @@ def observations_from_segmentations(
     """Convert accepted original-frame masks into table-canvas observations."""
     by_index = {view.view_index: view for view in views}
     observations = []
+    backgrounds = {}
+    for detection in detections:
+        if detection.accepted and detection.view_index not in backgrounds:
+            backgrounds[detection.view_index] = _background_rgb(
+                detection.image_original
+            )
+    correction_plan = choose_illuminant_correction(list(backgrounds.values()))
     for detection in detections:
         if not detection.accepted:
             continue
         view = by_index[detection.view_index]
         original = detection.image_original
-        background_rgb = _background_rgb(original)
+        background_rgb = backgrounds[detection.view_index]
         raw_rgb = dominant_rgb_masked(original, detection.mask_original)
-        corrected_rgb = normalize_illumination(
-            raw_rgb, background_rgb, neutral_tolerance=45
-        )
-        color = match_color(corrected_rgb)
         gate = detection.gate
         evidence = color_evidence(
             original,
@@ -606,6 +798,15 @@ def observations_from_segmentations(
             view_tilt_deg=view.view_tilt_deg,
             segmentation_confidence=detection.confidence,
             boundary_zone=gate.boundary_zone,
+            correction_plan=correction_plan,
+            view_quality=view.quality,
+        )
+        # Preserve the historical association hint: final color is decided
+        # from the new evidence only after geometry-based fusion.
+        color = match_color(
+            normalize_illumination(
+                raw_rgb, background_rgb, neutral_tolerance=45
+            )
         )
         observations.append(Observation(
             frame_id=detection.frame_id,

@@ -85,12 +85,18 @@ def test_session_cli_identifies_one_best_crop_and_writes_outputs(
     assert result["instance_count"] == 1
     assert result["instances"][0]["id_crop"]["source"] == "rectified-fallback"
     color_evidence = result["instances"][0]["color_evidence"]
-    assert color_evidence["strategy"] == "unweighted_name_vote"
+    assert color_evidence["strategy"] == "quality_weighted_gated_scores"
     assert color_evidence["predicted_color"] == "red"
     assert color_evidence["vote_counts"] == {"red": 2}
     assert [row["frame_id"] for row in color_evidence["observations"]] == [1, 2]
     assert all(
         len(row["top_palette_matches"]) == 3
+        for row in color_evidence["observations"]
+    )
+    assert all("correction" in row for row in color_evidence["observations"])
+    assert all("decision" in row for row in color_evidence["observations"])
+    assert all(
+        row["aggregation_weight"] > 0
         for row in color_evidence["observations"]
     )
     assert set(result["timings_s"]) == {

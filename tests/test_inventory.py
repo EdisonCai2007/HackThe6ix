@@ -6,6 +6,8 @@ from pipeline.inventory import build_inventory, draw_debug, merge_inventories
 
 RED = LegoColor(4, "red", (201, 26, 9))
 BLUE = LegoColor(23, "blue", (0, 85, 191))
+AMBIGUOUS_DARK = LegoColor(-1, "ambiguous(black/dark gray)", (34, 42, 49))
+AMBIGUOUS_WARM = LegoColor(-1, "ambiguous(orange/red)", (228, 82, 16))
 
 BRICK_2X4 = Identification("3001", "Brick 2 x 4", "Bricks", 0.93)
 BRICK_2X2 = Identification("3003", "Brick 2 x 2", "Bricks", 0.88)
@@ -30,6 +32,17 @@ def test_unknown_bricks_group_by_color():
     assert red_unknown["part_id"] is None
     assert red_unknown["name"] == "unknown brick"
     assert red_unknown["quantity"] == 2
+
+
+def test_distinct_ambiguities_do_not_merge_under_placeholder_color_id():
+    inv = build_inventory(
+        [(BRICK_2X4, AMBIGUOUS_DARK), (BRICK_2X4, AMBIGUOUS_WARM)]
+    )
+
+    assert len(inv) == 2
+    assert {item["color"] for item in inv} == {
+        "ambiguous(black/dark gray)", "ambiguous(orange/red)"
+    }
 
 
 def test_sorted_by_quantity_desc():

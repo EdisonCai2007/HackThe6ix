@@ -17,18 +17,18 @@ def build_inventory(items: list[tuple[Identification, LegoColor]]) -> list[dict]
     counts: Counter = Counter()
     meta: dict[tuple, tuple[str, str]] = {}
     for ident, color in items:
-        key = (ident.part_id, color.id)
+        key = (ident.part_id, color.id, color.name)
         counts[key] += 1
         meta[key] = (ident.name, color.name)
     inventory = [
         {
             "part_id": part_id,
-            "name": meta[(part_id, color_id)][0],
-            "color": meta[(part_id, color_id)][1],
+            "name": meta[(part_id, color_id, color_name)][0],
+            "color": color_name,
             "color_id": color_id,
             "quantity": qty,
         }
-        for (part_id, color_id), qty in counts.items()
+        for (part_id, color_id, color_name), qty in counts.items()
     ]
     inventory.sort(key=lambda e: (-e["quantity"], e["name"], e["color"]))
     return inventory
@@ -39,18 +39,18 @@ def merge_inventories(*inventories: list[dict]) -> list[dict]:
     meta: dict[tuple, tuple[str, str]] = {}
     for inv in inventories:
         for e in inv:
-            key = (e["part_id"], e["color_id"])
+            key = (e["part_id"], e["color_id"], e["color"])
             counts[key] += e["quantity"]
             meta[key] = (e["name"], e["color"])
     merged = [
         {
             "part_id": part_id,
-            "name": meta[(part_id, color_id)][0],
-            "color": meta[(part_id, color_id)][1],
+            "name": meta[(part_id, color_id, color_name)][0],
+            "color": color_name,
             "color_id": color_id,
             "quantity": qty,
         }
-        for (part_id, color_id), qty in counts.items()
+        for (part_id, color_id, color_name), qty in counts.items()
     ]
     merged.sort(key=lambda e: (-e["quantity"], e["name"], e["color"]))
     return merged
