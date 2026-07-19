@@ -13,6 +13,26 @@ function serializeError(error) {
   };
 }
 
+function optionalMetadata(metadata, fields) {
+  return Object.fromEntries(
+    fields
+      .filter((field) => metadata[field] !== undefined)
+      .map((field) => [field, metadata[field]]),
+  );
+}
+
+function aiCallLogMetadata(metadata = {}) {
+  return optionalMetadata(metadata, [
+    "repairKind",
+    "repairAttempt",
+    "repairSource",
+    "repairOutcome",
+    "retryOf",
+    "fallbackKind",
+    "fallbackReason",
+  ]);
+}
+
 export function redactInlineImagesForLogging(value) {
   if (Array.isArray(value)) {
     return value.map(redactInlineImagesForLogging);
@@ -98,6 +118,7 @@ export function createLoggedGenerationClient({ client, logger, now = () => new D
       stage: metadata.stage ?? "unknown",
       label: metadata.label ?? metadata.stage ?? "AI call",
       model: request?.model,
+      ...aiCallLogMetadata(metadata),
     };
     logger.write({
       type: "ai_request",
@@ -155,6 +176,7 @@ export function createLoggedGenerationClient({ client, logger, now = () => new D
         stage: metadata.stage ?? "unknown",
         label: metadata.label ?? metadata.stage ?? "AI call",
         model: request?.model,
+        ...aiCallLogMetadata(metadata),
       };
 
       logger.write({
@@ -184,6 +206,9 @@ export function createLoggedGenerationClient({ client, logger, now = () => new D
         });
         throw error;
       }
+    },
+    logServiceEvent(event) {
+      logger.write(redactInlineImagesForLogging(event));
     },
   };
 }

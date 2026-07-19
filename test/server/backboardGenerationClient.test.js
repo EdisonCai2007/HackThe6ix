@@ -62,7 +62,9 @@ describe("Backboard generation client", () => {
     for await (const item of client.streamWithMetadata(backboardRequest())) output.push(item);
     assert.equal(requestBody.stream, true);
     assert.deepEqual(output.map((item) => item.text), ['{"bricks":[', '{"id":"a"}', "]}"]);
-    assert.equal(output.at(-1).metadata.finishReason, "COMPLETED");
+    assert.equal(output.at(-1).metadata.providerStatus, "COMPLETED");
+    assert.equal(output.at(-1).metadata.jsonValidation, "not_validated_by_backboard");
+    assert.equal(output.at(-1).metadata.finishReason, undefined);
   });
 
   it("keeps reasoning out of JSON, treats run_ended as terminal metadata, and rejects tools", async () => {
@@ -84,7 +86,9 @@ describe("Backboard generation client", () => {
     const output = [];
     for await (const item of client.streamWithMetadata(backboardRequest())) output.push(item);
     assert.deepEqual(output.map((item) => item.text), ['{"bricks":[', ""]);
-    assert.equal(output.at(-1).metadata.finishReason, "COMPLETED");
+    assert.equal(output.at(-1).metadata.providerStatus, "COMPLETED");
+    assert.equal(output.at(-1).metadata.backboard.status, "COMPLETED");
+    assert.equal(output.at(-1).metadata.finishReason, undefined);
 
     const toolClient = createBackboardGenerationClient({
       apiKey: "test-key",
@@ -136,7 +140,10 @@ describe("Backboard generation client", () => {
     const result = await client.completeWithMetadata(backboardRequest());
 
     assert.equal(result.text, "{\"ok\":true}");
-    assert.equal(result.metadata.finishReason, "COMPLETED");
+    assert.equal(result.metadata.providerStatus, "COMPLETED");
+    assert.equal(result.metadata.jsonValidation, "not_validated_by_backboard");
+    assert.equal(result.metadata.backboard.status, "COMPLETED");
+    assert.equal(result.metadata.finishReason, undefined);
     assert.equal(result.metadata.usageMetadata.totalTokenCount, 123);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].body.content.includes("duck-demo"), true);
@@ -145,6 +152,28 @@ describe("Backboard generation client", () => {
     assert.equal(calls[0].body.content.includes("\"items\""), true);
     assert.equal(calls[0].body.content.includes("\"count\""), true);
     assert.equal(Object.hasOwn(calls[0].body, "tools"), false);
+  });
+
+  it("treats Backboard COMPLETED as provider status, not JSON validity", async () => {
+    const client = createBackboardGenerationClient({
+      apiKey: "test-key",
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            status: "COMPLETED",
+            content: "not json",
+          };
+        },
+      }),
+    });
+
+    const result = await client.completeWithMetadata(backboardRequest());
+
+    assert.equal(result.text, "not json");
+    assert.equal(result.metadata.providerStatus, "COMPLETED");
+    assert.equal(result.metadata.jsonValidation, "not_validated_by_backboard");
+    assert.equal(result.metadata.finishReason, undefined);
   });
 
   it("throws a clear error when Backboard requests tool action", async () => {

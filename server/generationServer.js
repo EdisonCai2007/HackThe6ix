@@ -264,12 +264,21 @@ async function createGenerationResult(body, onProgress, { streamPlacement = fals
     generationClient,
     structureModel: models.structureModel,
     placementModel: models.placementModel,
+    repairModel: models.repairModel,
     onProgress: trackProgress,
     streamPlacement,
   });
 
   if (!result.ok) {
     return result;
+  }
+
+  if (result.requiresRefinement === false || result.complete === true) {
+    return {
+      ...result,
+      complete: true,
+      requiresRefinement: false,
+    };
   }
 
   const refinementSession = getRefinementSessionStore().create({

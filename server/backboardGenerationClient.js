@@ -58,6 +58,15 @@ function usageMetadataFromBackboard(response) {
   };
 }
 
+function backboardStatusMetadata(status) {
+  return status
+    ? {
+        providerStatus: status,
+        jsonValidation: "not_validated_by_backboard",
+      }
+    : {};
+}
+
 function assertBackboardResponse(response, url) {
   if (!response.ok) {
     throw new Error(`Backboard request failed for ${url}: HTTP ${response.status}`);
@@ -102,7 +111,7 @@ function streamItemFromPayload(payload) {
     ? ""
     : payload.content ?? payload.text ?? payload.delta?.content ?? payload.delta?.text ?? "";
   const metadata = {
-    ...(status ? { finishReason: status } : {}),
+    ...backboardStatusMetadata(status),
     usageMetadata: usageMetadataFromBackboard(payload),
     backboard: {
       threadId: payload.thread_id,
@@ -110,6 +119,7 @@ function streamItemFromPayload(payload) {
       modelProvider: payload.model_provider,
       modelName: payload.model_name,
       contextUsage: payload.context_usage,
+      ...(status ? { status } : {}),
       ...(eventType ? { eventType } : {}),
     },
   };
@@ -231,7 +241,7 @@ export function createBackboardGenerationClient({
     return {
       text: response.content ?? "",
       metadata: {
-        finishReason: response.status,
+        ...backboardStatusMetadata(response.status),
         usageMetadata: usageMetadataFromBackboard(response),
         backboard: {
           threadId: response.thread_id,
@@ -239,6 +249,7 @@ export function createBackboardGenerationClient({
           modelProvider: response.model_provider,
           modelName: response.model_name,
           contextUsage: response.context_usage,
+          status: response.status,
         },
       },
     };

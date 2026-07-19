@@ -135,6 +135,75 @@ describe("generation runtime logger", () => {
     }
   });
 
+  it("logs repair service events and AI patch repair metadata", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "generation-runtime-logger-"));
+
+    try {
+      const logger = createGenerationRuntimeLogger({
+        rootDir,
+        now: () => new Date("2026-07-17T18:01:02.003Z"),
+        pid: 1234,
+      });
+      const rawClient = {
+        async complete() {
+          return '{"operations":[]}';
+        },
+      };
+      const client = createLoggedGenerationClient({ client: rawClient, logger });
+      const request = {
+        model: "gemini-test-model",
+        contents: [{ role: "user", parts: [{ text: "repair patch" }] }],
+      };
+
+      client.logServiceEvent({
+        type: "local_deterministic_repair",
+        repairKind: "local_deterministic_repair",
+        stage: "validation",
+        removedBrickCount: 1,
+      });
+      await client.complete(request, {
+        phase: "repair",
+        stage: "validation_patch_repair",
+        label: "Patch repair",
+        repairKind: "ai_patch_repair",
+        repairAttempt: 1,
+      });
+      await client.complete(request, {
+        phase: "repair",
+        stage: "validation_patch_retry",
+        label: "Patch repair retry",
+        repairKind: "ai_patch_retry",
+        repairAttempt: 2,
+        retryOf: "validation_patch_repair",
+      });
+      client.logServiceEvent({
+        type: "full_model_fallback",
+        repairKind: "full_model_fallback",
+        stage: "refinement",
+        outcome: "cleaned_initial_parse_fallback",
+      });
+
+      const events = await readJsonLines(logger.filePath);
+      assert.deepEqual(events.map((event) => event.type), [
+        "runtime_start",
+        "local_deterministic_repair",
+        "ai_request",
+        "ai_response",
+        "ai_request",
+        "ai_response",
+        "full_model_fallback",
+      ]);
+      assert.equal(events[1].repairKind, "local_deterministic_repair");
+      assert.equal(events[2].repairKind, "ai_patch_repair");
+      assert.equal(events[3].repairKind, "ai_patch_repair");
+      assert.equal(events[4].repairKind, "ai_patch_retry");
+      assert.equal(events[4].retryOf, "validation_patch_repair");
+      assert.equal(events[6].repairKind, "full_model_fallback");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("logs AI model errors with the original input", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "generation-runtime-logger-"));
 
