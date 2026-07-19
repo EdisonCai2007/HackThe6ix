@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { randomBuildInventory } from "../../src/generation/fixtures/randomBuildInventory.js";
 import { randomInventoryV2 } from "../../src/generation/fixtures/randomInventoryV2.js";
+import { fixedDemoInventory } from "../../src/generation/fixtures/fixedDemoInventory.js";
 import { validateModel } from "../../src/generation/validator.js";
 import {
   buildFixturePreviewModel,
@@ -20,6 +21,8 @@ describe("fixture preview picker", () => {
         "castle-gate",
         "blocky-globe",
         "lighthouse",
+        "scarlet-steam-locomotive",
+        "midnight-grand-piano",
       ],
     );
   });
@@ -48,6 +51,24 @@ describe("fixture preview picker", () => {
     assert.equal(
       buildFixturePreviewModel("horse", randomBuildInventory).created_from_inventory_id,
       randomInventoryV2.inventory_id,
+    );
+  });
+
+  it("uses the fixed physical inventory for showcase previews", () => {
+    const locomotive = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "scarlet-steam-locomotive",
+    );
+    const piano = FIXTURE_PREVIEWS.find(({ id }) => id === "midnight-grand-piano");
+
+    assert.equal(locomotive.inventory, fixedDemoInventory);
+    assert.equal(piano.inventory, fixedDemoInventory);
+    assert.equal(
+      buildFixturePreviewModel(locomotive.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(piano.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
     );
   });
 

@@ -4,13 +4,17 @@ import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
 import { buildCampfireModel } from "../generation/fixtures/campfireModel.js";
+import { fixedDemoInventory } from "../generation/fixtures/fixedDemoInventory.js";
 import { randomBuildInventory } from "../generation/fixtures/randomBuildInventory.js";
 import { validateGeneratedModelShape } from "../generation/generatedModelSchema.js";
 import { validateModel } from "../generation/validator.js";
 import { exportModelToLDraw } from "../ldraw/exportLDraw.js";
 import { createBrickScene } from "./brickScene.js";
 import { promptTextForBuildSuggestion } from "./buildSuggestionPrompt.js";
-import { cameraFrameForModelSize } from "./cameraFraming.js";
+import {
+  cameraFrameForModelSize,
+  generationCameraDistanceMode,
+} from "./cameraFraming.js";
 import { createCatalogueThumbnailRenderer } from "./catalogueThumbnailRenderer.js";
 import {
   CATALOGUE_PREVIEW_BRICK_ID,
@@ -31,6 +35,7 @@ import { countInventoryBricks } from "./inventoryPieceCount.js";
 import { getInventorySessionId } from "./inventorySessions.js";
 import { createLeftPanelResizer } from "./leftPanelResize.js";
 import { placementOffsetForBox } from "./modelPlacement.js";
+import { createShowcaseSelection } from "./showcaseSelection.js";
 import {
   catalogueItemsForModel,
   validateForInstructions,
@@ -77,6 +82,11 @@ const rightDrawer = document.querySelector("#right-drawer");
 const rightDrawerToggle = document.querySelector("#right-drawer-toggle");
 
 const timelineStages = [
+  { id: "geometry_generate", label: "BrickGPT geometry generation" },
+  { id: "geometry_normalize", label: "Target-volume normalization" },
+  { id: "inventory_compile", label: "Exact-inventory compilation" },
+  { id: "candidate_validate", label: "Candidate validation" },
+  { id: "candidate_select", label: "Best-candidate selection" },
   { id: "structure_generate", label: "Structure generation" },
   { id: "structure_parse", label: "Structure JSON parse" },
   { id: "placement_generate", label: "Placement generation" },
@@ -102,6 +112,7 @@ const resultStageTimelineMap = {
 };
 
 const inventories = [
+  { id: "fixed-demo", label: "Fixed 787-piece inventory", inventory: fixedDemoInventory },
   { id: "random-build", label: "Random build assortment", inventory: randomBuildInventory },
 ];
 
@@ -112,11 +123,12 @@ for (const option of inventories) {
   inventorySelect.append(element);
 }
 
-inventorySelect.value = "random-build";
+inventorySelect.value = "fixed-demo";
 
 let isLeftPanelCollapsed = false;
 let isRightDrawerCollapsed = false;
 let buildSuggestionsRequestVersion = 0;
+const showcaseSelection = createShowcaseSelection();
 const leftPanelResizer = createLeftPanelResizer({
   container: leftPanelColumn,
   panels: [statusPanel, buildSuggestionsPanel, form],
@@ -182,6 +194,7 @@ function showBuildSuggestions(suggestions) {
       button.className = "build-suggestion";
       button.textContent = suggestion.label;
       button.addEventListener("click", () => {
+        showcaseSelection.selectSuggestion(suggestion);
         promptInput.value = promptTextForBuildSuggestion(suggestion);
         promptInput.focus();
       });
@@ -396,14 +409,16 @@ function frameCameraForBox(box, { distanceMode = "initial" } = {}) {
   return true;
 }
 
-function frameBrickSceneCameraForGeneration() {
+function frameBrickSceneCameraForGeneration({ streaming = true } = {}) {
   if (!brickScene) {
     return false;
   }
 
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(brickScene.root);
-  return frameCameraForBox(box, { distanceMode: "max" });
+  return frameCameraForBox(box, {
+    distanceMode: generationCameraDistanceMode({ streaming }),
+  });
 }
 
 function isActiveStreamingRequest(generationRequest) {
@@ -1006,7 +1021,7 @@ function showModel(model, validation, options = {}) {
     invalidateCurrentRender();
     enterEditorScene(model, options.editorInventory ?? selectedInventory());
     if (options.generationRequest) {
-      frameBrickSceneCameraForGeneration();
+      frameBrickSceneCameraForGeneration({ streaming: false });
     }
     renderCatalogue();
     setStatusLine("Editing");
@@ -1107,7 +1122,11 @@ buildSuggestionsPanelClose.addEventListener("click", () => {
   collapseLeftPanelWhenEmpty();
 });
 buildSuggestionsRefresh.addEventListener("click", requestBuildSuggestions);
-inventorySelect.addEventListener("change", requestBuildSuggestions);
+inventorySelect.addEventListener("change", () => {
+  showcaseSelection.clear();
+  requestBuildSuggestions();
+});
+promptInput.addEventListener("input", () => showcaseSelection.clear());
 promptPanelClose.addEventListener("click", () => {
   form.hidden = true;
   leftPanelResizer.update();
@@ -1214,6 +1233,9 @@ async function requestInitialGeneration(generationRequest) {
       userPrompt: generationRequest.userPrompt,
       inventory_id: inventoryId,
       targetPieceCount: generationRequest.targetPieceCount,
+      ...(generationRequest.showcaseId
+        ? { showcase_id: generationRequest.showcaseId }
+        : {}),
     }),
     signal: generationRequest.controller.signal,
   });
@@ -1375,7 +1397,9 @@ function handleDraftEvent(payload, generationRequest) {
     const model = replaceProvisionalModel(generationRequest, payload.model);
     const statusText = payload.stage === "cleaned_placement_draft"
       ? "Refining cleaned draft"
-      : "Generating draft";
+      : payload.stage === "inventory_compile"
+        ? "Compiling best inventory-safe candidate"
+        : "Generating draft";
 
     showStreamingModel(model, validation, generationRequest, {
       statusText,
@@ -1448,12 +1472,16 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   activeGenerationRequest?.controller.abort();
   const inventory = selectedInventory();
+  const selectedPayload = showcaseSelection.extendGenerationPayload({
+    userPrompt: promptInput.value.trim(),
+  });
   const generationRequest = {
     hasRenderedDraft: false,
     streamingLocked: true,
     streamEventsOpen: true,
     inventory,
-    userPrompt: promptInput.value.trim(),
+    userPrompt: selectedPayload.userPrompt,
+    showcaseId: selectedPayload.showcase_id,
     targetPieceCount: countInventoryBricks(inventory),
     controller: new AbortController(),
   };
@@ -1463,7 +1491,7 @@ form.addEventListener("submit", async (event) => {
   zoomCameraOutToMaxDistance();
   generateButton.disabled = true;
   validationStatus.textContent = "Generating";
-  modelName.textContent = "Calling Backboard";
+  modelName.textContent = "Generating model";
   pieceCount.textContent = "-";
   setNotes([]);
   hideErrors();

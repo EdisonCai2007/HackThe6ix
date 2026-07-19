@@ -1,0 +1,148 @@
+piece_type,color,quantity
+Brick 1 x 1,red,30
+Brick 1 x 1,green,27
+Brick 1 x 1,blue,20
+Brick 1 x 1,white,17
+Brick 1 x 1,light gray,2
+Brick 1 x 1,dark gray,5
+Brick 1 x 1,black,15
+Brick 1 x 2,red,32
+Brick 1 x 2,orange,2
+Brick 1 x 2,yellow,23
+Brick 1 x 2,beige,8
+Brick 1 x 2,brown,17
+Brick 1 x 2,green,15
+Brick 1 x 2,dark green,1
+Brick 1 x 2,blue,33
+Brick 1 x 2,white,23
+Brick 1 x 2,light gray,1
+Brick 1 x 2,dark gray,14
+Brick 1 x 2,black,20
+Brick 1 x 3,red,7
+Brick 1 x 3,brown,2
+Brick 1 x 3,green,7
+Brick 1 x 3,blue,2
+Brick 1 x 3,white,9
+Brick 1 x 3,dark gray,2
+Brick 1 x 3,black,1
+Brick 1 x 4,red,7
+Brick 1 x 4,orange,3
+Brick 1 x 4,yellow,6
+Brick 1 x 4,brown,2
+Brick 1 x 4,green,4
+Brick 1 x 4,dark green,1
+Brick 1 x 4,blue,8
+Brick 1 x 4,white,6
+Brick 1 x 4,light gray,2
+Brick 1 x 4,dark gray,6
+Brick 1 x 4,black,1
+Brick 1 x 6,red,4
+Brick 1 x 6,yellow,4
+Brick 1 x 6,green,1
+Brick 1 x 6,blue,4
+Brick 1 x 6,white,5
+Brick 1 x 6,black,1
+Brick 1 x 8,red,2
+Brick 1 x 8,orange,1
+Brick 1 x 8,yellow,2
+Brick 1 x 8,blue,4
+Brick 1 x 8,light gray,1
+Brick 1 x 8,black,1
+Brick 1 x 12,white,2
+Brick 1 x 12,black,1
+Brick 2 x 2,red,25
+Brick 2 x 2,orange,3
+Brick 2 x 2,yellow,16
+Brick 2 x 2,beige,8
+Brick 2 x 2,brown,9
+Brick 2 x 2,green,12
+Brick 2 x 2,dark green,1
+Brick 2 x 2,blue,26
+Brick 2 x 2,white,15
+Brick 2 x 2,dark gray,9
+Brick 2 x 2,black,2
+Brick 2 x 3,red,5
+Brick 2 x 3,yellow,2
+Brick 2 x 3,brown,1
+Brick 2 x 3,green,1
+Brick 2 x 3,blue,3
+Brick 2 x 3,dark gray,1
+Brick 2 x 3,black,1
+Brick 2 x 4,red,4
+Brick 2 x 4,yellow,3
+Brick 2 x 4,green,2
+Brick 2 x 4,blue,5
+Brick 2 x 4,white,5
+Brick 2 x 4,dark gray,3
+Brick 2 x 4,black,11
+Brick 2 x 6,red,1
+Brick 2 x 8,red,1
+Plate 1 x 2,red,10
+Plate 1 x 2,brown,2
+Plate 1 x 2,blue,5
+Plate 1 x 2,white,3
+Plate 1 x 2,light gray,1
+Plate 1 x 2,dark gray,5
+Plate 1 x 2,black,3
+Plate 1 x 3,red,3
+Plate 1 x 3,yellow,1
+Plate 1 x 3,brown,1
+Plate 1 x 3,white,2
+Plate 1 x 3,black,4
+Plate 1 x 4,red,6
+Plate 1 x 4,blue,4
+Plate 1 x 4,white,3
+Plate 1 x 4,light gray,1
+Plate 1 x 4,dark gray,2
+Plate 1 x 4,black,6
+Plate 1 x 6,dark green,1
+Plate 1 x 6,white,5
+Plate 1 x 6,dark gray,1
+Plate 1 x 6,black,1
+Plate 1 x 8,red,5
+Plate 1 x 8,blue,3
+Plate 1 x 8,white,1
+Plate 1 x 10,red,5
+Plate 1 x 10,blue,3
+Plate 1 x 10,black,1
+Plate 2 x 2,red,8
+Plate 2 x 2,yellow,5
+Plate 2 x 2,green,1
+Plate 2 x 2,blue,4
+Plate 2 x 2,white,2
+Plate 2 x 2,light gray,1
+Plate 2 x 2,dark gray,4
+Plate 2 x 2,black,1
+Plate 2 x 3,red,6
+Plate 2 x 3,yellow,1
+Plate 2 x 3,brown,4
+Plate 2 x 3,green,1
+Plate 2 x 3,blue,2
+Plate 2 x 3,white,3
+Plate 2 x 3,dark gray,1
+Plate 2 x 3,black,2
+Plate 2 x 4,red,2
+Plate 2 x 4,yellow,3
+Plate 2 x 4,brown,3
+Plate 2 x 4,green,1
+Plate 2 x 4,white,7
+Plate 2 x 4,black,15
+Plate 2 x 6,red,2
+Plate 2 x 6,brown,1
+Plate 2 x 6,blue,3
+Plate 2 x 6,light gray,1
+Plate 2 x 6,black,3
+Plate 2 x 8,brown,2
+Plate 2 x 8,white,1
+Plate 2 x 8,light gray,1
+Plate 2 x 10,brown,2
+Plate 2 x 16,black,4
+Plate 4 x 4,brown,1
+Plate 4 x 6,white,1
+Plate 4 x 6,black,3
+Plate 4 x 10,brown,1
+Plate 4 x 12,black,1
+Plate 6 x 6,beige,1
+Plate 6 x 8,black,1
+Plate 6 x 10,dark green,1
+Plate 6 x 10,blue,3

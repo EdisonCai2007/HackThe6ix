@@ -47,4 +47,19 @@ describe("server package scripts", () => {
       "node --env-file=.env server/generationServer.js",
     );
   });
+
+  it("runs every nested Node test file explicitly", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url)));
+
+    assert.equal(packageJson.scripts.test, "node --test test/**/*.test.js");
+  });
+
+  it("loads local environment variables before checking BrickGPT setup", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url)));
+
+    assert.equal(
+      packageJson.scripts["check:brickgpt"],
+      "node --env-file=.env scripts/checkBrickGptSetup.js",
+    );
+  });
 });

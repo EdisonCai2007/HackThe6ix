@@ -191,11 +191,25 @@ function itemFor(partId, colorName, count) {
   };
 }
 
+function completeInventoryPlan() {
+  const plannedCounts = new Map(
+    INVENTORY_PLAN.map(([partId, colorName, count]) => [`${partId}:${colorName}`, count]),
+  );
+
+  return Object.keys(SUPPORTED_PARTS).flatMap((partId) =>
+    Object.keys(COLORS).map((colorName) => [
+      partId,
+      colorName,
+      plannedCounts.get(`${partId}:${colorName}`) ?? 0,
+    ]),
+  );
+}
+
 /** @type {import("../types.js").Inventory} */
 export const randomBuildInventory = {
   inventory_id: "random-build-assortment",
   source: "manual_test_fixture",
-  items: INVENTORY_PLAN.map(([partId, colorName, count]) =>
+  items: completeInventoryPlan().map(([partId, colorName, count]) =>
     itemFor(partId, colorName, count),
   ),
 };

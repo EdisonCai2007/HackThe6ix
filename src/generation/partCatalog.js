@@ -1,4 +1,4 @@
-export const MAX_MODEL_PIECES = 100;
+export const LEGACY_AI_MODEL_PIECE_CAP = 100;
 
 export const PART_HEIGHTS = {
   brick: 3,
@@ -54,6 +54,14 @@ export const SUPPORTED_PARTS = {
     width: 1,
     depth: 8,
   },
+  6112: {
+    label: "1x12 brick",
+    category: "brick",
+    part_id: "6112",
+    ldraw_id: "6112.dat",
+    width: 1,
+    depth: 12,
+  },
   3003: {
     label: "2x2 brick",
     category: "brick",
@@ -77,6 +85,22 @@ export const SUPPORTED_PARTS = {
     ldraw_id: "3001.dat",
     width: 2,
     depth: 4,
+  },
+  2456: {
+    label: "2x6 brick",
+    category: "brick",
+    part_id: "2456",
+    ldraw_id: "2456.dat",
+    width: 2,
+    depth: 6,
+  },
+  3007: {
+    label: "2x8 brick",
+    category: "brick",
+    part_id: "3007",
+    ldraw_id: "3007.dat",
+    width: 2,
+    depth: 8,
   },
   3023: {
     label: "1x2 plate",
@@ -109,6 +133,22 @@ export const SUPPORTED_PARTS = {
     ldraw_id: "3666.dat",
     width: 1,
     depth: 6,
+  },
+  3460: {
+    label: "1x8 plate",
+    category: "plate",
+    part_id: "3460",
+    ldraw_id: "3460.dat",
+    width: 1,
+    depth: 8,
+  },
+  4477: {
+    label: "1x10 plate",
+    category: "plate",
+    part_id: "4477",
+    ldraw_id: "4477.dat",
+    width: 1,
+    depth: 10,
   },
   3022: {
     label: "2x2 plate",
@@ -150,6 +190,22 @@ export const SUPPORTED_PARTS = {
     width: 2,
     depth: 8,
   },
+  3832: {
+    label: "2x10 plate",
+    category: "plate",
+    part_id: "3832",
+    ldraw_id: "3832.dat",
+    width: 2,
+    depth: 10,
+  },
+  4282: {
+    label: "2x16 plate",
+    category: "plate",
+    part_id: "4282",
+    ldraw_id: "4282.dat",
+    width: 2,
+    depth: 16,
+  },
   3031: {
     label: "4x4 plate",
     category: "plate",
@@ -173,6 +229,46 @@ export const SUPPORTED_PARTS = {
     ldraw_id: "3035.dat",
     width: 4,
     depth: 8,
+  },
+  3030: {
+    label: "4x10 plate",
+    category: "plate",
+    part_id: "3030",
+    ldraw_id: "3030.dat",
+    width: 4,
+    depth: 10,
+  },
+  3029: {
+    label: "4x12 plate",
+    category: "plate",
+    part_id: "3029",
+    ldraw_id: "3029.dat",
+    width: 4,
+    depth: 12,
+  },
+  3958: {
+    label: "6x6 plate",
+    category: "plate",
+    part_id: "3958",
+    ldraw_id: "3958.dat",
+    width: 6,
+    depth: 6,
+  },
+  3036: {
+    label: "6x8 plate",
+    category: "plate",
+    part_id: "3036",
+    ldraw_id: "3036.dat",
+    width: 6,
+    depth: 8,
+  },
+  3033: {
+    label: "6x10 plate",
+    category: "plate",
+    part_id: "3033",
+    ldraw_id: "3033.dat",
+    width: 6,
+    depth: 10,
   },
 };
 

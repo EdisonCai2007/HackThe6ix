@@ -2,6 +2,10 @@ export const MODEL_INITIAL_DISTANCE_MULTIPLIER = 1.45;
 export const MODEL_MIN_ZOOM_DISTANCE_MULTIPLIER = 0.35;
 export const MODEL_MAX_ZOOM_DISTANCE_MULTIPLIER = 3.2;
 
+export function generationCameraDistanceMode({ streaming }) {
+  return streaming ? "max" : "initial";
+}
+
 export function cameraFrameForModelSize(
   size,
   verticalFovRadians,

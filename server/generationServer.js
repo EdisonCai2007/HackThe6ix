@@ -5,6 +5,8 @@ import { corsHeadersForOrigin } from "./cors.js";
 import { createGeminiClient } from "../src/generation/geminiClient.js";
 import {
   resolveGenerationModels,
+  resolveGenerationMode,
+  resolveHybridGenerationConfig,
   resolveRefinementModel,
   resolveSuggestionModel,
 } from "../src/generation/modelConfig.js";
@@ -13,6 +15,13 @@ import {
   generateModel,
   refineModel,
 } from "../src/generation/service.js";
+import { createBrickGptClient } from "../src/generation/hybrid/brickGptClient.js";
+import { generateHybridModel } from "../src/generation/hybrid/service.js";
+import {
+  generateShowcaseBuild,
+  isShowcaseBuildRequest,
+  listShowcaseBuildSuggestions,
+} from "../src/generation/showcaseBuilds.js";
 import { createBackboardGenerationClient } from "./backboardGenerationClient.js";
 import { createInventorySessionStore } from "./inventorySessions.js";
 import {
@@ -130,6 +139,13 @@ export function validateRequestBody(body) {
     errors.push("inventory_id must be a string.");
   }
 
+  if (
+    body.showcase_id !== undefined &&
+    (typeof body.showcase_id !== "string" || body.showcase_id.trim() === "")
+  ) {
+    errors.push("showcase_id must be a non-empty string.");
+  }
+
   return errors;
 }
 
@@ -205,6 +221,39 @@ function shouldUseBackboardGeneration(env = process.env) {
   return env.GENERATION_PROVIDER === "backboard";
 }
 
+function aiCredentialError(env = process.env) {
+  return !env.GEMINI_API_KEY && !shouldUseBackboardGeneration(env)
+    ? "GEMINI_API_KEY is required."
+    : null;
+}
+
+export function generationCredentialError(env = process.env, body) {
+  if (isShowcaseBuildRequest(body)) {
+    return null;
+  }
+
+  if (resolveGenerationMode(env) === "brickgpt_inventory") {
+    return null;
+  }
+
+  return aiCredentialError(env);
+}
+
+function showcaseStreamDelayMs(env = process.env) {
+  const raw = env.SHOWCASE_STREAM_DELAY_MS;
+
+  if (raw === undefined || raw === "") {
+    return 35;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("SHOWCASE_STREAM_DELAY_MS must be a non-negative integer.");
+  }
+
+  return value;
+}
+
 export function createGenerationClientForBody({
   env = process.env,
   logger = getRuntimeLogger(),
@@ -247,9 +296,45 @@ function createFailureResult(stage, errors) {
 
 async function createGenerationResult(body, onProgress, { streamPlacement = false } = {}) {
   const inventory = await resolveInventoryFromBody(body);
+  const userPrompt = body.userPrompt.trim();
+
+  if (isShowcaseBuildRequest(body)) {
+    return generateShowcaseBuild({
+      showcaseId: body.showcase_id,
+      userPrompt,
+      inventory,
+      onProgress,
+      delayMs: streamPlacement ? showcaseStreamDelayMs(process.env) : 0,
+    });
+  }
+
+  if (resolveGenerationMode(process.env) === "brickgpt_inventory") {
+    const config = resolveHybridGenerationConfig(process.env);
+    const geometryProvider = createBrickGptClient({
+      pythonExecutable: config.pythonExecutable,
+      sidecarPath: config.sidecarPath,
+      timeoutMs: config.timeoutMs,
+      maxOutputBytes: config.maxOutputBytes,
+    });
+
+    return generateHybridModel({
+      userPrompt,
+      inventory,
+      geometryProvider,
+      candidateCount: config.candidateCount,
+      seedBase: config.seedBase,
+      worldDim: config.worldDim,
+      useGurobi: config.useGurobi,
+      compilerOptions: {
+        beamWidth: config.beamWidth,
+        variants: config.variants,
+      },
+      onProgress,
+    });
+  }
+
   const generationClient = createGenerationClientForBody({ body });
   const models = resolveGenerationModels(process.env);
-  const userPrompt = body.userPrompt.trim();
   const streamedBrickIds = new Set();
   const trackProgress = async (event) => {
     if (event?.type === "brick" && typeof event.brick?.id === "string") {
@@ -324,13 +409,35 @@ async function createRefinementResult(body, onProgress, { streamRefinement = fal
 
 async function createSuggestionResult(body) {
   const inventory = await resolveInventoryFromBody(body);
-  const generationClient = createGenerationClientForBody({ body });
+  const showcaseSuggestions = listShowcaseBuildSuggestions(inventory);
 
-  return generateBuildSuggestions({
+  if (aiCredentialError(process.env)) {
+    return { ok: true, suggestions: showcaseSuggestions };
+  }
+
+  const generationClient = createGenerationClientForBody({ body });
+  const providerResult = await generateBuildSuggestions({
     inventory,
     generationClient,
     suggestionModel: resolveSuggestionModel(process.env),
   });
+
+  if (!providerResult.ok) {
+    return { ok: true, suggestions: showcaseSuggestions };
+  }
+
+  const seenLabels = new Set(showcaseSuggestions.map(({ label }) => label.toLowerCase()));
+  const providerSuggestions = providerResult.suggestions.filter(({ label }) => {
+    const key = label.toLowerCase();
+    if (seenLabels.has(key)) return false;
+    seenLabels.add(key);
+    return true;
+  });
+
+  return {
+    ok: true,
+    suggestions: [...showcaseSuggestions, ...providerSuggestions].slice(0, 5),
+  };
 }
 
 async function handleCreateInventorySession(request, response) {
@@ -352,21 +459,22 @@ async function handleCreateInventorySession(request, response) {
 }
 
 async function handleGenerateJson(request, response) {
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
-    sendJson(
-      request,
-      response,
-      500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
-    );
-    return;
-  }
-
   const body = await readJson(request);
   const requestErrors = validateRequestBody(body);
 
   if (requestErrors.length > 0) {
     sendJson(request, response, 400, createFailureResult("request", requestErrors));
+    return;
+  }
+
+  const credentialError = generationCredentialError(process.env, body);
+  if (credentialError) {
+    sendJson(
+      request,
+      response,
+      500,
+      createFailureResult("configuration", [credentialError]),
+    );
     return;
   }
 
@@ -376,12 +484,13 @@ async function handleGenerateJson(request, response) {
 }
 
 async function handleRefineGeneration(request, response) {
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
+  const credentialError = aiCredentialError(process.env);
+  if (credentialError) {
     sendJson(
       request,
       response,
       500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
+      createFailureResult("configuration", [credentialError]),
     );
     return;
   }
@@ -459,16 +568,6 @@ async function handleSuggestBuilds(request, response) {
     return;
   }
 
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
-    sendJson(
-      request,
-      response,
-      500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
-    );
-    return;
-  }
-
   const requestErrors = validateSuggestionRequestBody(body);
 
   if (requestErrors.length > 0) {
@@ -495,22 +594,23 @@ async function handleGenerateStream(request, response) {
 
   sendSseHeaders(request, response);
 
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
-    response.write(formatSseEvent("failure", { phase: "placement", error: "GEMINI_API_KEY is required." }));
-    response.end(
-      formatSseEvent(
-        "result",
-        createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
-      ),
-    );
-    return;
-  }
-
   const requestErrors = validateRequestBody(body);
 
   if (requestErrors.length > 0) {
     response.write(formatSseEvent("failure", { phase: "placement", error: requestErrors.join(" ") }));
     response.end(formatSseEvent("result", createFailureResult("request", requestErrors)));
+    return;
+  }
+
+  const credentialError = generationCredentialError(process.env, body);
+  if (credentialError) {
+    response.write(formatSseEvent("failure", { phase: "placement", error: credentialError }));
+    response.end(
+      formatSseEvent(
+        "result",
+        createFailureResult("configuration", [credentialError]),
+      ),
+    );
     return;
   }
 
@@ -539,53 +639,57 @@ async function handleGenerateStream(request, response) {
   }
 }
 
-const server = createServer(async (request, response) => {
-  if (request.method === "OPTIONS") {
-    sendJson(request, response, 204, {});
-    return;
-  }
+export function createGenerationServer() {
+  return createServer(async (request, response) => {
+    if (request.method === "OPTIONS") {
+      sendJson(request, response, 204, {});
+      return;
+    }
 
-  if (request.method !== "POST") {
+    if (request.method !== "POST") {
+      sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
+      return;
+    }
+
+    if (request.url === "/api/generate/stream") {
+      await handleGenerateStream(request, response);
+      return;
+    }
+
+    try {
+      if (request.url === "/api/generate") {
+        await handleGenerateJson(request, response);
+        return;
+      }
+
+      if (request.url === "/api/generate/refine") {
+        await handleRefineGeneration(request, response);
+        return;
+      }
+
+      if (request.url === "/api/suggest-builds") {
+        await handleSuggestBuilds(request, response);
+        return;
+      }
+
+      if (request.url === "/api/inventory-sessions") {
+        await handleCreateInventorySession(request, response);
+        return;
+      }
+    } catch (error) {
+      sendJson(request, response, 500, {
+        ok: false,
+        stage: "server",
+        errors: [error.message],
+      });
+      return;
+    }
+
     sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
-    return;
-  }
+  });
+}
 
-  if (request.url === "/api/generate/stream") {
-    await handleGenerateStream(request, response);
-    return;
-  }
-
-  try {
-    if (request.url === "/api/generate") {
-      await handleGenerateJson(request, response);
-      return;
-    }
-
-    if (request.url === "/api/generate/refine") {
-      await handleRefineGeneration(request, response);
-      return;
-    }
-
-    if (request.url === "/api/suggest-builds") {
-      await handleSuggestBuilds(request, response);
-      return;
-    }
-
-    if (request.url === "/api/inventory-sessions") {
-      await handleCreateInventorySession(request, response);
-      return;
-    }
-  } catch (error) {
-    sendJson(request, response, 500, {
-      ok: false,
-      stage: "server",
-      errors: [error.message],
-    });
-    return;
-  }
-
-  sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
-});
+const server = createGenerationServer();
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
   const logger = getRuntimeLogger();

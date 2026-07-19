@@ -6,6 +6,7 @@ import {
   MODEL_MIN_ZOOM_DISTANCE_MULTIPLIER,
   MODEL_MAX_ZOOM_DISTANCE_MULTIPLIER,
   cameraFrameForModelSize,
+  generationCameraDistanceMode,
 } from "../../src/preview/cameraFraming.js";
 
 test("cameraFrameForModelSize keeps initial framing while allowing more zoom-out range", () => {
@@ -31,4 +32,9 @@ test("cameraFrameForModelSize can select max-distance framing for generation", (
   assert.equal(frame.distance, initialDistance * MODEL_MAX_ZOOM_DISTANCE_MULTIPLIER);
   assert.equal(frame.maxDistance, initialDistance * MODEL_MAX_ZOOM_DISTANCE_MULTIPLIER);
   assert.equal(frame.minDistance, initialDistance * MODEL_MIN_ZOOM_DISTANCE_MULTIPLIER);
+});
+
+test("generation camera stays wide while streaming and reframes when complete", () => {
+  assert.equal(generationCameraDistanceMode({ streaming: true }), "max");
+  assert.equal(generationCameraDistanceMode({ streaming: false }), "initial");
 });

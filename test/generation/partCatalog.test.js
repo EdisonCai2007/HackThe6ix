@@ -3,13 +3,13 @@ import { describe, it } from "node:test";
 
 import {
   getPartDimensions,
-  MAX_MODEL_PIECES,
+  LEGACY_AI_MODEL_PIECE_CAP,
   SUPPORTED_PARTS,
 } from "../../src/generation/partCatalog.js";
 
 describe("supported part catalog", () => {
-  it("uses the documented MVP max model piece count", () => {
-    assert.equal(MAX_MODEL_PIECES, 100);
+  it("keeps a 100-piece cap for legacy AI coordinate prompts", () => {
+    assert.equal(LEGACY_AI_MODEL_PIECE_CAP, 100);
   });
 
   it("includes longer 1-wide bricks with brick-height dimensions", () => {
@@ -186,5 +186,33 @@ describe("supported part catalog", () => {
       depth: 4,
       height: 1,
     });
+  });
+
+  it("includes every larger footprint in the fixed inventory", () => {
+    const expected = {
+      6112: ["brick", 1, 12],
+      2456: ["brick", 2, 6],
+      3007: ["brick", 2, 8],
+      3460: ["plate", 1, 8],
+      4477: ["plate", 1, 10],
+      3832: ["plate", 2, 10],
+      4282: ["plate", 2, 16],
+      3030: ["plate", 4, 10],
+      3029: ["plate", 4, 12],
+      3958: ["plate", 6, 6],
+      3036: ["plate", 6, 8],
+      3033: ["plate", 6, 10],
+    };
+
+    for (const [partId, [category, width, depth]] of Object.entries(expected)) {
+      assert.deepEqual(SUPPORTED_PARTS[partId], {
+        label: `${width}x${depth} ${category}`,
+        category,
+        part_id: partId,
+        ldraw_id: `${partId}.dat`,
+        width,
+        depth,
+      });
+    }
   });
 });

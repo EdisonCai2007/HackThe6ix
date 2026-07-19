@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   createGenerationClientForBody,
   formatSseEvent,
+  generationCredentialError,
   resolveInventoryFromBody,
   shouldStoreGeminiLogs,
   validateRequestBody,
@@ -11,6 +12,40 @@ import {
 } from "../../server/generationServer.js";
 
 describe("generation server SSE events", () => {
+  it("does not require Gemini or Backboard credentials in hybrid mode", () => {
+    assert.equal(
+      generationCredentialError({ GENERATION_MODE: "brickgpt_inventory" }),
+      null,
+    );
+    assert.equal(
+      generationCredentialError({}),
+      "GEMINI_API_KEY is required.",
+    );
+  });
+
+  it("does not require provider credentials for recognized showcase builds", () => {
+    assert.equal(
+      generationCredentialError({}, {
+        showcase_id: "scarlet-steam-locomotive",
+        userPrompt: "build it",
+      }),
+      null,
+    );
+    assert.equal(
+      generationCredentialError({}, {
+        userPrompt: "Please build the Midnight Grand Piano showcase",
+      }),
+      null,
+    );
+    assert.equal(
+      generationCredentialError({}, {
+        showcase_id: "not-a-showcase",
+        userPrompt: "build it",
+      }),
+      "GEMINI_API_KEY is required.",
+    );
+  });
+
   it("formats named SSE events with a JSON payload", () => {
     const event = formatSseEvent("progress", {
       stage: "validation",
@@ -50,6 +85,33 @@ describe("generation server SSE events", () => {
         inventory_id: "inv_test_123",
       }),
       [],
+    );
+  });
+
+  it("accepts only nonempty string showcase ids", () => {
+    assert.deepEqual(
+      validateRequestBody({
+        userPrompt: "build it",
+        inventory_id: "inv_test_123",
+        showcase_id: "midnight-grand-piano",
+      }),
+      [],
+    );
+    assert.deepEqual(
+      validateRequestBody({
+        userPrompt: "build it",
+        inventory_id: "inv_test_123",
+        showcase_id: "",
+      }),
+      ["showcase_id must be a non-empty string."],
+    );
+    assert.deepEqual(
+      validateRequestBody({
+        userPrompt: "build it",
+        inventory_id: "inv_test_123",
+        showcase_id: 42,
+      }),
+      ["showcase_id must be a non-empty string."],
     );
   });
 
