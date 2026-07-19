@@ -6,6 +6,7 @@ import { placementOffsetForModel } from "./modelPlacement.js";
 
 const COLOR_HEX = {
   0: 0x05131d,
+  1: 0x0055bf,
   2: 0x237841,
   4: 0xc91a09,
   6: 0x583927,

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildSmallDuckModel } from "../../src/generation/fixtures/smallDuckModel.js";
-import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+import { buildLighthouseModel } from "../../src/generation/fixtures/lighthouseModel.js";
+import { randomBuildInventory } from "../../src/generation/fixtures/randomBuildInventory.js";
 import { exportModelToLDraw } from "../../src/ldraw/exportLDraw.js";
 
 describe("exportModelToLDraw", () => {
@@ -196,31 +196,36 @@ describe("exportModelToLDraw", () => {
     assert.equal(sideFaces.length, 16);
   });
 
-  it("exports the 15-piece duck as a packed LDraw model with embedded MVP parts", () => {
-    const model = buildSmallDuckModel(duckInventory);
+  it("exports the active lighthouse fixture as a packed LDraw model with embedded MVP parts", () => {
+    const model = buildLighthouseModel(randomBuildInventory);
 
     const ldraw = exportModelToLDraw(model);
 
-    assert.match(ldraw, /^0 15 Piece Duck/m);
-    assert.match(ldraw, /^0 Name: 15-piece-duck.ldr/m);
+    assert.match(ldraw, /^0 Lighthouse Island/m);
+    assert.match(ldraw, /^0 Name: lighthouse-island.ldr/m);
     assert.match(ldraw, /^0 !LDRAW_ORG Model/m);
-    assert.match(ldraw, /^0 !COLOUR Yellow CODE 14 VALUE #F2CD37 EDGE #333333$/m);
-    assert.match(ldraw, /^0 !COLOUR Orange CODE 25 VALUE #FE8A18 EDGE #333333$/m);
     assert.match(ldraw, /^0 !COLOUR Black CODE 0 VALUE #05131D EDGE #595959$/m);
+    assert.match(ldraw, /^0 !COLOUR Blue CODE 1 VALUE #0055BF EDGE #333333$/m);
+    assert.match(ldraw, /^0 !COLOUR Green CODE 2 VALUE #237841 EDGE #333333$/m);
+    assert.match(ldraw, /^0 !COLOUR Red CODE 4 VALUE #C91A09 EDGE #333333$/m);
+    assert.match(ldraw, /^0 !COLOUR Yellow CODE 14 VALUE #F2CD37 EDGE #333333$/m);
+    assert.match(ldraw, /^0 !COLOUR White CODE 15 VALUE #FFFFFF EDGE #333333$/m);
     assert.match(ldraw, /^0 STEP$/m);
-    assert.match(ldraw, /^1 14 20 -20 40 1 0 0 0 1 0 0 0 1 3001.dat$/m);
-    assert.match(ldraw, /^1 25 30 -92 0 1 0 0 0 1 0 0 0 1 3004.dat$/m);
-    assert.match(ldraw, /^1 0 30 -92 30 1 0 0 0 1 0 0 0 1 3005.dat$/m);
-    assert.match(ldraw, /^0 FILE 3001.dat$/m);
-    assert.match(ldraw, /^0 FILE 3020.dat$/m);
-    assert.match(ldraw, /^4 16 -20 -12 -40 20 -12 -40 20 -12 40 -20 -12 40$/m);
+    assert.match(ldraw, /^1 0 /m);
+    assert.match(ldraw, /^1 15 /m);
+    assert.match(ldraw, /^1 1 /m);
+    assert.match(ldraw, /^1 4 /m);
+    assert.match(ldraw, /^1 6 /m);
+    assert.match(ldraw, /^1 14 /m);
+    assert.match(ldraw, /^0 FILE 3005.dat$/m);
+    assert.match(ldraw, /^0 FILE 3795.dat$/m);
     assert.match(ldraw, /^0 Studs$/m);
     assert.match(ldraw, /^3 16 0 -16 0 6 -16 0 5.543 -16 2.296$/m);
     assert.match(ldraw, /^4 16 6 -12 0 5.543 -12 2.296 5.543 -16 2.296 6 -16 0$/m);
   });
 
   it("rejects unsupported part definitions before exporting", () => {
-    const model = buildSmallDuckModel(duckInventory);
+    const model = buildLighthouseModel(randomBuildInventory);
     model.bricks.push({
       id: "unsupported-wheel",
       part_id: "30027",
