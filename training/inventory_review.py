@@ -75,7 +75,7 @@ def new_review_document(
     }
 
 
-def _validate_review(review: dict) -> None:
+def _validate_review(review: dict, *, require_color: bool = True) -> None:
     segmentation = review.get("segmentation")
     if segmentation not in SEGMENTATION_STATES:
         raise ValueError(f"invalid segmentation state: {segmentation}")
@@ -85,11 +85,9 @@ def _validate_review(review: dict) -> None:
     if segmentation == "duplicate" and included:
         raise ValueError("duplicate detections cannot be included")
     if included:
-        if not str(review.get("part_id") or "").strip():
-            raise ValueError("included piece requires part ID")
         if not str(review.get("part_name") or "").strip():
             raise ValueError("included piece requires part name")
-        if review.get("color") not in INVENTORY_COLORS:
+        if require_color and review.get("color") not in INVENTORY_COLORS:
             raise ValueError("included piece requires a valid inventory color")
     elif not str(review.get("exclusion_reason") or "").strip():
         raise ValueError("excluded piece requires an exclusion reason")
@@ -111,7 +109,9 @@ def apply_component_review(
     if row is None:
         raise KeyError(f"unknown component: {component_id}")
     updated = {**row["review"], **copy.deepcopy(patch)}
-    _validate_review(updated)
+    _validate_review(
+        updated, require_color=not bool(document.get("showcase_only"))
+    )
     row["review"] = updated
     row["reviewed_at"] = _now()
     document["updated_at"] = _now()
@@ -150,6 +150,205 @@ def add_manual_piece(
     return row
 
 
+def add_waypoint_component(document: dict, waypoint_id: str) -> dict:
+    """Promote one secondary-frame waypoint into independent review."""
+    if document.get("locked"):
+        raise ValueError("locked review documents cannot be edited")
+    pool_row = next(
+        (
+            row for row in document.get("waypoint_pool", [])
+            if row.get("waypoint_id") == waypoint_id
+        ),
+        None,
+    )
+    if pool_row is None:
+        raise KeyError(f"unknown waypoint: {waypoint_id}")
+    component = copy.deepcopy(pool_row["component"])
+    component_id = component.get("component_id")
+    if any(
+        row.get("component_id") == component_id
+        for row in document.get("components", [])
+    ):
+        raise ValueError(f"waypoint already added: {waypoint_id}")
+    component["review"] = _default_review(component.get("prediction") or {})
+    document.setdefault("components", []).append(component)
+    document["updated_at"] = _now()
+    return component
+
+
+def add_manual_waypoint_component(document: dict, component: dict) -> dict:
+    """Add one manually boxed source-frame region as an unconfirmed item."""
+    if document.get("locked"):
+        raise ValueError("locked review documents cannot be edited")
+    row = copy.deepcopy(component)
+    component_id = str(row.get("component_id") or "")
+    if not component_id or any(
+        item.get("component_id") == component_id
+        for item in document.get("components", [])
+    ):
+        raise ValueError("manual waypoint component ID must be unique")
+    row["review"] = _default_review(row.get("prediction") or {})
+    row["review"]["segmentation"] = "missed"
+    document.setdefault("components", []).append(row)
+    document["updated_at"] = _now()
+    return row
+
+
+def _pair_key(component_a: str, component_b: str) -> str:
+    return "::".join(sorted((str(component_a), str(component_b))))
+
+
+def _box_overlap(box_a: list, box_b: list) -> tuple[float, float]:
+    if len(box_a) != 4 or len(box_b) != 4:
+        return 0.0, 0.0
+    try:
+        ax0, ay0, ax1, ay1 = map(float, box_a)
+        bx0, by0, bx1, by1 = map(float, box_b)
+    except (TypeError, ValueError):
+        return 0.0, 0.0
+    area_a = max(0.0, ax1 - ax0) * max(0.0, ay1 - ay0)
+    area_b = max(0.0, bx1 - bx0) * max(0.0, by1 - by0)
+    if area_a <= 0.0 or area_b <= 0.0:
+        return 0.0, 0.0
+    intersection = (
+        max(0.0, min(ax1, bx1) - max(ax0, bx0))
+        * max(0.0, min(ay1, by1) - max(ay0, by0))
+    )
+    if intersection <= 0.0:
+        return 0.0, 0.0
+    union = area_a + area_b - intersection
+    return intersection / union, intersection / min(area_a, area_b)
+
+
+def _overlap_component(row: dict) -> dict:
+    review = row.get("review") or {}
+    anchor = row.get("source_anchor") or {}
+    view = next(iter((row.get("assets") or {}).get("views") or []), {})
+    return {
+        "component_id": str(row.get("component_id") or ""),
+        "box_original": list(anchor.get("box_original") or []),
+        "part_id": str(review.get("part_id") or ""),
+        "part_name": str(review.get("part_name") or ""),
+        "color": str(review.get("color") or ""),
+        "crop": view.get("crop") or view.get("masked_crop"),
+    }
+
+
+def overlap_candidates(document: dict) -> list[dict]:
+    """Return unresolved, same-frame overlap pairs for explicit review."""
+    dismissed = {
+        str(row.get("pair_key") or "")
+        for row in (document.get("overlap_cleanup") or {}).get("decisions", [])
+        if row.get("action") == "separate"
+    }
+    eligible = []
+    for row in document.get("components", []):
+        review = row.get("review") or {}
+        anchor = row.get("source_anchor") or {}
+        if not (
+            review.get("confirmed")
+            and review.get("included")
+            and review.get("segmentation") != "duplicate"
+            and anchor.get("frame_id") is not None
+            and len(anchor.get("box_original") or []) == 4
+        ):
+            continue
+        eligible.append(row)
+    eligible.sort(key=lambda row: str(row.get("component_id") or ""))
+    candidates = []
+    for index, first in enumerate(eligible):
+        first_anchor = first["source_anchor"]
+        for second in eligible[index + 1:]:
+            second_anchor = second["source_anchor"]
+            if int(first_anchor["frame_id"]) != int(second_anchor["frame_id"]):
+                continue
+            pair_key = _pair_key(first["component_id"], second["component_id"])
+            if pair_key in dismissed:
+                continue
+            iou, containment = _box_overlap(
+                first_anchor["box_original"], second_anchor["box_original"]
+            )
+            if iou < 0.20 and containment < 0.55:
+                continue
+            candidates.append({
+                "pair_key": pair_key,
+                "frame_id": int(first_anchor["frame_id"]),
+                "iou": iou,
+                "containment": containment,
+                "a": _overlap_component(first),
+                "b": _overlap_component(second),
+            })
+    return sorted(
+        candidates,
+        key=lambda row: (
+            -float(row["containment"]),
+            -float(row["iou"]),
+            row["pair_key"],
+        ),
+    )
+
+
+def apply_overlap_decision(
+    document: dict,
+    component_a: str,
+    component_b: str,
+    action: str,
+) -> dict:
+    """Persist one explicit keep/separate decision for an overlap pair."""
+    if document.get("locked"):
+        raise ValueError("locked review documents cannot be edited")
+    if action not in {"keep_a", "keep_b", "separate"}:
+        raise ValueError(f"invalid overlap action: {action}")
+    pair_key = _pair_key(component_a, component_b)
+    candidate = next(
+        (
+            row for row in overlap_candidates(document)
+            if row["pair_key"] == pair_key
+        ),
+        None,
+    )
+    if candidate is None:
+        raise ValueError(
+            f"pair is not a current overlap candidate: {pair_key}"
+        )
+    decision = {
+        "pair_key": pair_key,
+        "action": action,
+        "component_a": str(component_a),
+        "component_b": str(component_b),
+        "kept_component_id": None,
+        "removed_component_id": None,
+        "removed_review": None,
+        "decided_at": _now(),
+    }
+    if action != "separate":
+        kept_id = str(component_a if action == "keep_a" else component_b)
+        removed_id = str(component_b if action == "keep_a" else component_a)
+        removed = next(
+            row for row in document.get("components", [])
+            if row.get("component_id") == removed_id
+        )
+        decision["kept_component_id"] = kept_id
+        decision["removed_component_id"] = removed_id
+        decision["removed_review"] = copy.deepcopy(removed.get("review") or {})
+        apply_component_review(document, removed_id, {
+            "confirmed": True,
+            "part_id": "",
+            "part_name": "",
+            "color": "",
+            "included": False,
+            "exclusion_reason": (
+                "duplicate overcount candidate; kept component " + kept_id
+            ),
+            "segmentation": "duplicate",
+        })
+    document.setdefault("overlap_cleanup", {}).setdefault(
+        "decisions", []
+    ).append(decision)
+    document["updated_at"] = decision["decided_at"]
+    return decision
+
+
 def reconciliation(document: dict) -> dict:
     included = excluded = duplicates = unresolved = 0
     accounted = 0
@@ -162,7 +361,7 @@ def reconciliation(document: dict) -> dict:
         if segmentation == "duplicate":
             duplicates += 1
             continue
-        if segmentation in {"merged", "incomplete", "missed"}:
+        if segmentation in {"merged", "incomplete"}:
             unresolved += 1
             continue
         accounted += 1
@@ -182,8 +381,12 @@ def reconciliation(document: dict) -> dict:
         else:
             excluded += 1
     expected = int(document.get("expected_physical_count", 0))
+    segmentations_total = len(document.get("components", []))
     return {
         "expected": expected,
+        "segmentations_total": segmentations_total,
+        "segmentations_active": segmentations_total - duplicates,
+        "segmentations_removed": duplicates,
         "accounted_physical": accounted,
         "included": included,
         "excluded": excluded,

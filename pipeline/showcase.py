@@ -101,7 +101,11 @@ def _veto_reasons(candidate: ShowcaseCandidate) -> list[str]:
     return reasons
 
 
-def _quality_reasons(candidate: ShowcaseCandidate) -> list[str]:
+def _quality_reasons(
+    candidate: ShowcaseCandidate,
+    *,
+    single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
+) -> list[str]:
     """Identification-quality floors applied to survivors of the prefilter."""
     reasons = []
     if candidate.top1_score < SAFE_MIN_TOP1:
@@ -110,7 +114,7 @@ def _quality_reasons(candidate: ShowcaseCandidate) -> list[str]:
         reasons.append("low_margin")
     if candidate.single_view:
         if (
-            candidate.top1_score < SINGLE_VIEW_MIN_TOP1
+            candidate.top1_score < single_view_min_top1
             or candidate.margin < SINGLE_VIEW_MIN_MARGIN
         ):
             reasons.append("single_view_not_exceptional")
@@ -177,6 +181,8 @@ def _selection_reasons(candidate: ShowcaseCandidate) -> list[str]:
 
 def select_showcase(
     candidates: list[ShowcaseCandidate], n: int = 5,
+    *,
+    single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
 ) -> dict:
     """Run the full funnel and return the selected pieces + rejection audit."""
     survivors = []
@@ -186,7 +192,9 @@ def select_showcase(
         if veto:
             rejected.append((candidate, "prefilter", veto, None))
             continue
-        quality = _quality_reasons(candidate)
+        quality = _quality_reasons(
+            candidate, single_view_min_top1=single_view_min_top1
+        )
         if quality:
             rejected.append((candidate, "quality_floor", quality, None))
             continue
@@ -270,7 +278,13 @@ def _chosen_view_flags(instance, id_crop) -> tuple[str, ...]:
     return ()
 
 
-def build_showcase(result, n: int = 5, *, colors: list[str] | None = None) -> dict:
+def build_showcase(
+    result,
+    n: int = 5,
+    *,
+    colors: list[str] | None = None,
+    single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
+) -> dict:
     """Extract candidates from a completed scan and run the funnel."""
     colors = colors or []
     candidates: list[ShowcaseCandidate] = []
@@ -319,14 +333,22 @@ def build_showcase(result, n: int = 5, *, colors: list[str] | None = None) -> di
                 ],
             },
         ))
-    return select_showcase(candidates, n)
+    return select_showcase(
+        candidates, n, single_view_min_top1=single_view_min_top1
+    )
 
 
 def write_showcase(
     result, output_dir, n: int = 5, *, colors: list[str] | None = None,
     scene_state_ref: str = "scene_state.json",
+    single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
 ) -> Path:
-    payload = build_showcase(result, n, colors=colors)
+    payload = build_showcase(
+        result,
+        n,
+        colors=colors,
+        single_view_min_top1=single_view_min_top1,
+    )
     payload["scene_state"] = scene_state_ref  # viewer joins by instance_id
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

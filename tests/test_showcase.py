@@ -114,6 +114,16 @@ def test_single_view_needs_to_be_exceptional():
     assert exceptional["selected_count"] == 1
 
 
+def test_fast_showcase_can_use_explicit_clean_single_view_floor():
+    result = select_showcase(
+        [_cand(0, agreement=1, num_views=1, top1=0.86, top2=0.20)],
+        n=5,
+        single_view_min_top1=0.85,
+    )
+
+    assert result["selected_count"] == 1
+
+
 def test_low_yolo_confidence_rejected():
     out = select_showcase([_cand(0, seg=0.30)], n=5)
     assert out["selected_count"] == 0

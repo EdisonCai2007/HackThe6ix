@@ -1,4 +1,6 @@
 import json
+import sys
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -15,6 +17,59 @@ from pipeline.segdetect import (
     projected_workspace_roi,
     suppress_same_view_duplicates,
 )
+
+
+def test_yolo_model_forwards_live_mask_quality_options(tmp_path, monkeypatch):
+    from pipeline.segdetect import YoloSegModel
+
+    calls = []
+
+    class _Tensor:
+        def __init__(self, values):
+            self.values = np.asarray(values)
+
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return self.values
+
+    class _FakeYOLO:
+        def __init__(self, weights):
+            self.weights = weights
+
+        def predict(self, **kwargs):
+            calls.append(kwargs)
+            return [SimpleNamespace(
+                masks=SimpleNamespace(
+                    data=_Tensor(np.ones((1, 2, 3), dtype=np.float32))
+                ),
+                boxes=SimpleNamespace(conf=_Tensor([0.91])),
+            )]
+
+    monkeypatch.setitem(
+        sys.modules, "ultralytics", SimpleNamespace(YOLO=_FakeYOLO)
+    )
+    weights = tmp_path / "lego.pt"
+    weights.write_bytes(b"fixture")
+    model = YoloSegModel(
+        weights=weights,
+        device="cpu",
+        confidence=0.42,
+        imgsz=512,
+        retina_masks=False,
+        max_det=123,
+    )
+
+    result = model.predict(np.zeros((8, 10, 3), dtype=np.uint8))
+
+    assert calls[0]["retina_masks"] is False
+    assert calls[0]["max_det"] == 123
+    assert calls[0]["imgsz"] == 512
+    assert result[0].mask.shape == (8, 10)
 
 
 def _accepted_detection(mask, confidence, source, view_index=0, box=None):

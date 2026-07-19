@@ -30,7 +30,7 @@ from pipeline.evidence import (
     arbitrate_identification,
 )
 from pipeline.footprint import aggregate_measurements, measure_observation
-from pipeline.identify import MIN_SCORE, identify_all, identify_crop
+from pipeline.identify import MIN_SCORE, UNKNOWN, identify_all, identify_crop
 from pipeline.inventory import build_inventory
 from pipeline.model_fit import (
     FitObservation,
@@ -1777,9 +1777,13 @@ def scan_manifest(
     seg_model=None, gate_config=None, analysis_dir=None,
     review_draft: bool = False, identify_workers: int = 4,
     identify_min_interval: float = 1.0,
+    view_limit: int | None = None,
+    identify_limit: int | None = None,
 ) -> MultiViewScanResult:
     started = time.perf_counter()
     manifest, views = load_views(manifest_path)
+    if view_limit is not None:
+        views = views[:max(1, int(view_limit))]
     loaded = time.perf_counter()
     segmentation_detections = []
     if detector == "seg":
@@ -1818,7 +1822,23 @@ def scan_manifest(
             else DEFAULT_IDENTIFY_MIN_INTERVAL
         ),
     }
-    identifications = identify_all(crops, **identify_options)
+    if identify_limit is None:
+        identification_indices = list(range(len(crops)))
+    else:
+        from pipeline.fast_showcase import rank_showcase_indices
+
+        identification_indices = rank_showcase_indices(
+            instances, limit=max(0, int(identify_limit))
+        )
+    selected_identifications = identify_all(
+        [crops[index] for index in identification_indices],
+        **identify_options,
+    )
+    identifications = [UNKNOWN for _ in crops]
+    for index, identification in zip(
+        identification_indices, selected_identifications
+    ):
+        identifications[index] = identification
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize_primary"] = {
             "part_id": identification.part_id,

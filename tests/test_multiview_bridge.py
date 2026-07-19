@@ -107,6 +107,28 @@ def test_v2_identifies_from_original_pixels(tmp_path, monkeypatch):
     assert prov["brickognize"]["score"] == pytest.approx(0.9)
 
 
+def test_fast_review_limits_views_and_identification_calls(tmp_path, monkeypatch):
+    manifest = _write_session(
+        tmp_path / "session", with_bridge=True, second_view=True
+    )
+    captured = []
+    monkeypatch.setattr(
+        pipeline.multiview, "identify_all", _fake_identify(captured)
+    )
+
+    result = scan_manifest(
+        manifest,
+        detector="cv",
+        view_limit=1,
+        identify_limit=1,
+        review_draft=True,
+        identify_min_interval=0.0,
+    )
+
+    assert len(result.views) == 1
+    assert len(captured) <= 1
+
+
 def test_review_draft_uses_bounded_parallel_primary_identification_only(
     tmp_path, monkeypatch
 ):
