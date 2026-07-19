@@ -215,22 +215,18 @@ function addCurvedRimAndLid(bricks, brick) {
     feature: "curved-rim",
     step: 6,
   });
-  addRimCourse(bricks, brick, {
-    idPrefix: "rim-upper",
-    partId: "3005",
-    colorName: "black",
-    z: 10,
-    feature: "curved-rim",
-    step: 8,
-  });
-  addRimCourse(bricks, brick, {
-    idPrefix: "lid-hinge",
-    partId: "3004",
-    colorName: "dark gray",
-    z: 13,
-    feature: "lid-support",
-    step: 9,
-  });
+  for (const x of [3, 6]) {
+    for (let y = 5; y <= 10; y += 1) {
+      bricks.push(brick({
+        id: `rim-upper-${x}-${y}`,
+        part_id: "3005",
+        color_name: "black",
+        position: { x, y, z: 10 },
+        feature: "curved-rim",
+        step: 8,
+      }));
+    }
+  }
 
   for (const x of [3, 5]) {
     bricks.push(
@@ -238,25 +234,25 @@ function addCurvedRimAndLid(bricks, brick) {
         id: `raised-lid-lower-${x}`,
         part_id: "3795",
         color_name: "black",
-        position: { x, y: 5, z: 16 },
+        position: { x, y: 5, z: 13 },
         feature: "raised-lid",
-        step: 10,
+        step: 9,
       }),
       brick({
         id: `raised-lid-middle-${x}`,
         part_id: "3020",
         color_name: "black",
-        position: { x, y: 9, z: 17 },
+        position: { x, y: 9, z: 14 },
         feature: "raised-lid",
-        step: 11,
+        step: 10,
       }),
       brick({
         id: `raised-lid-upper-${x}`,
         part_id: "3021",
         color_name: "black",
-        position: { x, y: 11, z: 18 },
+        position: { x, y: 11, z: 15 },
         feature: "raised-lid",
-        step: 12,
+        step: 11,
       }),
     );
   }
@@ -265,10 +261,10 @@ function addCurvedRimAndLid(bricks, brick) {
     id: "raised-lid-tip",
     part_id: "3623",
     color_name: "black",
-    position: { x: 4, y: 13, z: 19 },
+    position: { x: 4, y: 13, z: 16 },
     rotation: 90,
     feature: "raised-lid",
-    step: 13,
+    step: 12,
   }));
 }
 

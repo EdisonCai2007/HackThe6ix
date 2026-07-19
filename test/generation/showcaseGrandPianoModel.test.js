@@ -38,7 +38,7 @@ describe("buildShowcaseGrandPianoModel", () => {
 
     assert.equal(validateGeneratedModelShape(model).ok, true);
     assert.deepEqual(buildShowcaseGrandPianoModel(fixedDemoInventory), model);
-    assert.ok(model.piece_count >= 110);
+    assert.ok(model.piece_count >= 95);
     assert.equal(model.bricks.length, model.piece_count);
     assert.ok(model.dimensions.depth_studs >= 16);
   });
@@ -81,6 +81,15 @@ describe("buildShowcaseGrandPianoModel", () => {
     assert.equal(featureBricks(model, "soundboard").every(({ color_name }) => color_name === "brown"), true);
     assert.equal(featureBricks(model, "bench").every(({ color_name }) => color_name === "brown"), true);
     assert.equal(featureBricks(model, "pedal").every(({ color_name }) => color_name === "yellow"), true);
+  });
+
+  it("keeps the raised case silhouette black instead of adding a gray wall", () => {
+    const model = buildShowcaseGrandPianoModel(fixedDemoInventory);
+
+    assert.equal(
+      model.bricks.some(({ color_name }) => color_name === "dark gray"),
+      false,
+    );
   });
 
   it("independently stays within every fixed part/color quantity", () => {

@@ -11,7 +11,10 @@ import { validateModel } from "../generation/validator.js";
 import { exportModelToLDraw } from "../ldraw/exportLDraw.js";
 import { createBrickScene } from "./brickScene.js";
 import { promptTextForBuildSuggestion } from "./buildSuggestionPrompt.js";
-import { cameraFrameForModelSize } from "./cameraFraming.js";
+import {
+  cameraFrameForModelSize,
+  generationCameraDistanceMode,
+} from "./cameraFraming.js";
 import { createCatalogueThumbnailRenderer } from "./catalogueThumbnailRenderer.js";
 import {
   CATALOGUE_PREVIEW_BRICK_ID,
@@ -406,14 +409,16 @@ function frameCameraForBox(box, { distanceMode = "initial" } = {}) {
   return true;
 }
 
-function frameBrickSceneCameraForGeneration() {
+function frameBrickSceneCameraForGeneration({ streaming = true } = {}) {
   if (!brickScene) {
     return false;
   }
 
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(brickScene.root);
-  return frameCameraForBox(box, { distanceMode: "max" });
+  return frameCameraForBox(box, {
+    distanceMode: generationCameraDistanceMode({ streaming }),
+  });
 }
 
 function isActiveStreamingRequest(generationRequest) {
@@ -1016,7 +1021,7 @@ function showModel(model, validation, options = {}) {
     invalidateCurrentRender();
     enterEditorScene(model, options.editorInventory ?? selectedInventory());
     if (options.generationRequest) {
-      frameBrickSceneCameraForGeneration();
+      frameBrickSceneCameraForGeneration({ streaming: false });
     }
     renderCatalogue();
     setStatusLine("Editing");
