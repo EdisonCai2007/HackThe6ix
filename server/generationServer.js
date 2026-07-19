@@ -5,6 +5,8 @@ import { corsHeadersForOrigin } from "./cors.js";
 import { createGeminiClient } from "../src/generation/geminiClient.js";
 import {
   resolveGenerationModels,
+  resolveGenerationMode,
+  resolveHybridGenerationConfig,
   resolveRefinementModel,
   resolveSuggestionModel,
 } from "../src/generation/modelConfig.js";
@@ -13,6 +15,8 @@ import {
   generateModel,
   refineModel,
 } from "../src/generation/service.js";
+import { createBrickGptClient } from "../src/generation/hybrid/brickGptClient.js";
+import { generateHybridModel } from "../src/generation/hybrid/service.js";
 import { createBackboardGenerationClient } from "./backboardGenerationClient.js";
 import { createInventorySessionStore } from "./inventorySessions.js";
 import {
@@ -205,6 +209,20 @@ function shouldUseBackboardGeneration(env = process.env) {
   return env.GENERATION_PROVIDER === "backboard";
 }
 
+function aiCredentialError(env = process.env) {
+  return !env.GEMINI_API_KEY && !shouldUseBackboardGeneration(env)
+    ? "GEMINI_API_KEY is required."
+    : null;
+}
+
+export function generationCredentialError(env = process.env) {
+  if (resolveGenerationMode(env) === "brickgpt_inventory") {
+    return null;
+  }
+
+  return aiCredentialError(env);
+}
+
 export function createGenerationClientForBody({
   env = process.env,
   logger = getRuntimeLogger(),
@@ -247,9 +265,35 @@ function createFailureResult(stage, errors) {
 
 async function createGenerationResult(body, onProgress, { streamPlacement = false } = {}) {
   const inventory = await resolveInventoryFromBody(body);
+  const userPrompt = body.userPrompt.trim();
+
+  if (resolveGenerationMode(process.env) === "brickgpt_inventory") {
+    const config = resolveHybridGenerationConfig(process.env);
+    const geometryProvider = createBrickGptClient({
+      pythonExecutable: config.pythonExecutable,
+      sidecarPath: config.sidecarPath,
+      timeoutMs: config.timeoutMs,
+      maxOutputBytes: config.maxOutputBytes,
+    });
+
+    return generateHybridModel({
+      userPrompt,
+      inventory,
+      geometryProvider,
+      candidateCount: config.candidateCount,
+      seedBase: config.seedBase,
+      worldDim: config.worldDim,
+      useGurobi: config.useGurobi,
+      compilerOptions: {
+        beamWidth: config.beamWidth,
+        variants: config.variants,
+      },
+      onProgress,
+    });
+  }
+
   const generationClient = createGenerationClientForBody({ body });
   const models = resolveGenerationModels(process.env);
-  const userPrompt = body.userPrompt.trim();
   const streamedBrickIds = new Set();
   const trackProgress = async (event) => {
     if (event?.type === "brick" && typeof event.brick?.id === "string") {
@@ -352,12 +396,13 @@ async function handleCreateInventorySession(request, response) {
 }
 
 async function handleGenerateJson(request, response) {
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
+  const credentialError = generationCredentialError(process.env);
+  if (credentialError) {
     sendJson(
       request,
       response,
       500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
+      createFailureResult("configuration", [credentialError]),
     );
     return;
   }
@@ -376,12 +421,13 @@ async function handleGenerateJson(request, response) {
 }
 
 async function handleRefineGeneration(request, response) {
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
+  const credentialError = aiCredentialError(process.env);
+  if (credentialError) {
     sendJson(
       request,
       response,
       500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
+      createFailureResult("configuration", [credentialError]),
     );
     return;
   }
@@ -459,12 +505,13 @@ async function handleSuggestBuilds(request, response) {
     return;
   }
 
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
+  const credentialError = aiCredentialError(process.env);
+  if (credentialError) {
     sendJson(
       request,
       response,
       500,
-      createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
+      createFailureResult("configuration", [credentialError]),
     );
     return;
   }
@@ -495,12 +542,13 @@ async function handleGenerateStream(request, response) {
 
   sendSseHeaders(request, response);
 
-  if (!process.env.GEMINI_API_KEY && !shouldUseBackboardGeneration(process.env)) {
-    response.write(formatSseEvent("failure", { phase: "placement", error: "GEMINI_API_KEY is required." }));
+  const credentialError = generationCredentialError(process.env);
+  if (credentialError) {
+    response.write(formatSseEvent("failure", { phase: "placement", error: credentialError }));
     response.end(
       formatSseEvent(
         "result",
-        createFailureResult("configuration", ["GEMINI_API_KEY is required."]),
+        createFailureResult("configuration", [credentialError]),
       ),
     );
     return;

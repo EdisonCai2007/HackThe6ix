@@ -3,10 +3,43 @@ import { describe, it } from "node:test";
 
 import {
   resolveGenerationModels,
+  resolveGenerationMode,
+  resolveHybridGenerationConfig,
   resolveSuggestionModel,
 } from "../../src/generation/modelConfig.js";
 
 describe("generation model config", () => {
+  it("resolves BrickGPT inventory mode without Gemini configuration", () => {
+    const env = {
+      GENERATION_MODE: "brickgpt_inventory",
+      BRICKGPT_PYTHON: "/opt/brickgpt/bin/python",
+      BRICKGPT_CANDIDATE_COUNT: "6",
+      BRICKGPT_SEED_BASE: "100",
+      BRICKGPT_USE_GUROBI: "false",
+    };
+
+    assert.equal(resolveGenerationMode(env), "brickgpt_inventory");
+    assert.deepEqual(resolveHybridGenerationConfig(env), {
+      pythonExecutable: "/opt/brickgpt/bin/python",
+      sidecarPath: resolveHybridGenerationConfig({}).sidecarPath,
+      timeoutMs: 600000,
+      maxOutputBytes: 8388608,
+      candidateCount: 6,
+      seedBase: 100,
+      worldDim: 20,
+      useGurobi: false,
+      beamWidth: 12,
+      variants: 3,
+    });
+  });
+
+  it("rejects invalid hybrid numeric configuration", () => {
+    assert.throws(
+      () => resolveHybridGenerationConfig({ BRICKGPT_CANDIDATE_COUNT: "0" }),
+      /BRICKGPT_CANDIDATE_COUNT must be a positive integer/,
+    );
+  });
+
   it("resolves structure and placement models from stage-specific env vars", () => {
     assert.deepEqual(
       resolveGenerationModels({

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   createGenerationClientForBody,
   formatSseEvent,
+  generationCredentialError,
   resolveInventoryFromBody,
   shouldStoreGeminiLogs,
   validateRequestBody,
@@ -11,6 +12,17 @@ import {
 } from "../../server/generationServer.js";
 
 describe("generation server SSE events", () => {
+  it("does not require Gemini or Backboard credentials in hybrid mode", () => {
+    assert.equal(
+      generationCredentialError({ GENERATION_MODE: "brickgpt_inventory" }),
+      null,
+    );
+    assert.equal(
+      generationCredentialError({}),
+      "GEMINI_API_KEY is required.",
+    );
+  });
+
   it("formats named SSE events with a JSON payload", () => {
     const event = formatSseEvent("progress", {
       stage: "validation",
