@@ -19,6 +19,7 @@ import numpy as np
 
 from pipeline.multiview import color_provenance, consensus_color, scan_manifest
 from pipeline.original_crop import original_box
+from pipeline.scene_state import write_scene_state
 from training.color_acceptance import write_color_worksheet
 from training.inventory_review_assets import write_review_bundle
 
@@ -245,6 +246,10 @@ def main(argv: list[str] | None = None) -> None:
         "--review-workers", type=int, default=12,
         help="bounded Brickognize concurrency used only by review drafts",
     )
+    parser.add_argument(
+        "--no-scene-state", action="store_true",
+        help="skip writing scene_state.json (the live-viewer/showcase artifact)",
+    )
     args = parser.parse_args(argv)
     if args.color_worksheet and args.analysis_dir is None:
         parser.error("--color-worksheet requires --analysis-dir")
@@ -331,6 +336,15 @@ def main(argv: list[str] | None = None) -> None:
     (output_dir / "multiview_result.json").write_text(
         json.dumps(details, indent=2) + "\n"
     )
+    scene_state_path = None
+    if not args.no_scene_state:
+        scene_state_path = write_scene_state(
+            result, session_dir, output_dir,
+            detector=detector,
+            predicted_colors=[
+                consensus_color(instance).name for instance in result.instances
+            ],
+        )
     worksheet_paths = None
     if args.color_worksheet:
         worksheet_paths = write_color_worksheet(
@@ -363,6 +377,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"debug: {debug_dir / 'crop_gallery.jpg'} + "
           f"{len(overlays)} frame overlay(s) + "
           f"{len(gate_overlays)} gate overlay(s)")
+    if scene_state_path is not None:
+        print(f"scene state: {scene_state_path}")
     if worksheet_paths is not None:
         print(f"color worksheet: {worksheet_paths.csv}")
     if review_path is not None:
