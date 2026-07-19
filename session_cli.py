@@ -20,6 +20,7 @@ import numpy as np
 from pipeline.multiview import color_provenance, consensus_color, scan_manifest
 from pipeline.original_crop import original_box
 from pipeline.scene_state import write_scene_state
+from pipeline.showcase import write_showcase
 from training.color_acceptance import write_color_worksheet
 from training.inventory_review_assets import write_review_bundle
 
@@ -182,6 +183,45 @@ def segmentation_gate_overlays(result, debug_dir: Path) -> list[Path]:
     return written
 
 
+def _showcase_gallery(result, payload) -> np.ndarray:
+    """One labelled tile per SELECTED piece, using its identification crop."""
+    tiles = []
+    for piece in payload["selected"]:
+        idx = piece["instance_id"]
+        crop = result.crops[idx] if idx < len(result.crops) else None
+        if crop is None or crop.size == 0:
+            crop = np.zeros((8, 8, 3), dtype=np.uint8)
+        scale = GALLERY_TILE_H / crop.shape[0]
+        tile = cv2.resize(
+            crop, (max(1, int(crop.shape[1] * scale)), GALLERY_TILE_H)
+        )
+        caption = (
+            f"#{idx} {piece['part_name']} "
+            f"s={piece['top1_score']:.2f} m={piece['margin']:.2f}"
+        )
+        width = max(tile.shape[1], 8 * len(caption) + 10)
+        canvas = np.full((GALLERY_TILE_H + 24, width, 3), 24, dtype=np.uint8)
+        canvas[:GALLERY_TILE_H, :tile.shape[1]] = tile
+        cv2.putText(canvas, caption, (4, GALLERY_TILE_H + 16),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (120, 255, 120), 1,
+                    cv2.LINE_AA)
+        tiles.append(canvas)
+    if not tiles:
+        blank = np.full((60, 400, 3), 24, dtype=np.uint8)
+        cv2.putText(blank, "no piece safe enough to showcase", (8, 36),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (120, 200, 255), 1,
+                    cv2.LINE_AA)
+        return blank
+    height = max(tile.shape[0] for tile in tiles)
+    total = sum(tile.shape[1] + GALLERY_PAD for tile in tiles) - GALLERY_PAD
+    gallery = np.full((height, total, 3), 24, dtype=np.uint8)
+    x = 0
+    for tile in tiles:
+        gallery[:tile.shape[0], x:x + tile.shape[1]] = tile
+        x += tile.shape[1] + GALLERY_PAD
+    return gallery
+
+
 def _segmentation_details(result) -> dict:
     detections = result.segmentation_detections
     accepted = sum(detection.accepted for detection in detections)
@@ -250,7 +290,14 @@ def main(argv: list[str] | None = None) -> None:
         "--no-scene-state", action="store_true",
         help="skip writing scene_state.json (the live-viewer/showcase artifact)",
     )
+    parser.add_argument(
+        "--showcase", type=int, metavar="N",
+        help="surface up to N safest identified pieces to showcase.json "
+             "(+ debug/showcase_gallery.jpg) for end-of-scan confirmation",
+    )
     args = parser.parse_args(argv)
+    if args.showcase is not None and args.showcase < 0:
+        parser.error("--showcase N must be non-negative")
     if args.color_worksheet and args.analysis_dir is None:
         parser.error("--color-worksheet requires --analysis-dir")
     if args.inventory_review:
@@ -336,15 +383,23 @@ def main(argv: list[str] | None = None) -> None:
     (output_dir / "multiview_result.json").write_text(
         json.dumps(details, indent=2) + "\n"
     )
+    colors = [consensus_color(instance).name for instance in result.instances]
     scene_state_path = None
     if not args.no_scene_state:
         scene_state_path = write_scene_state(
             result, session_dir, output_dir,
-            detector=detector,
-            predicted_colors=[
-                consensus_color(instance).name for instance in result.instances
-            ],
+            detector=detector, predicted_colors=colors,
         )
+    showcase_path = None
+    showcase_payload = None
+    if args.showcase is not None:
+        showcase_path = write_showcase(
+            result, output_dir, args.showcase, colors=colors,
+        )
+        showcase_payload = json.loads(showcase_path.read_text())
+        gallery = _showcase_gallery(result, showcase_payload)
+        cv2.imwrite(str(debug_dir / "showcase_gallery.jpg"), gallery,
+                    [cv2.IMWRITE_JPEG_QUALITY, 92])
     worksheet_paths = None
     if args.color_worksheet:
         worksheet_paths = write_color_worksheet(
@@ -379,6 +434,9 @@ def main(argv: list[str] | None = None) -> None:
           f"{len(gate_overlays)} gate overlay(s)")
     if scene_state_path is not None:
         print(f"scene state: {scene_state_path}")
+    if showcase_path is not None:
+        print(f"showcase: {showcase_path} "
+              f"({showcase_payload['selected_count']}/{args.showcase} surfaced)")
     if worksheet_paths is not None:
         print(f"color worksheet: {worksheet_paths.csv}")
     if review_path is not None:

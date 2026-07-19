@@ -51,6 +51,12 @@ SECOND_CHANCE_MAX_ALTERNATES = 3
 SEG_SINGLETON_MIN_CONFIDENCE = 0.50
 SEG_ID_REVIEW_SCORE = 0.85
 CONFIRMATION_REASSIGN_MAX_SCORE = 0.15
+# Brickognize accepts a modest amount of concurrency; the old 1 req/s serial
+# pacing made a large pile take minutes. Bounded concurrency preserves results
+# (same crops, same cache, same responses) while overlapping network latency;
+# retry/backoff already handles any 429 from the free API.
+DEFAULT_IDENTIFY_WORKERS = 10
+DEFAULT_IDENTIFY_MIN_INTERVAL = 0.0
 
 
 _COLOR_FAMILY = {
@@ -1803,12 +1809,15 @@ def scan_manifest(
     fused = time.perf_counter()
     session_dir = Path(manifest["session_dir"])
     crops, id_crops = _identification_crops(instances, views, session_dir)
-    identify_options = {"cache_dir": cache_dir}
-    if review_draft:
-        identify_options.update({
-            "workers": identify_workers,
-            "min_interval": identify_min_interval,
-        })
+    identify_options = {
+        "cache_dir": cache_dir,
+        # Bounded concurrency by default; review drafts may raise the ceiling.
+        "workers": identify_workers if review_draft else DEFAULT_IDENTIFY_WORKERS,
+        "min_interval": (
+            identify_min_interval if review_draft
+            else DEFAULT_IDENTIFY_MIN_INTERVAL
+        ),
+    }
     identifications = identify_all(crops, **identify_options)
     for crop_info, identification in zip(id_crops, identifications):
         crop_info["brickognize_primary"] = {
