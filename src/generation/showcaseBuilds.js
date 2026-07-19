@@ -1,5 +1,8 @@
+import { buildShowcaseBonsaiModel } from "./fixtures/showcaseBonsaiModel.js";
 import { buildShowcaseGrandPianoModel } from "./fixtures/showcaseGrandPianoModel.js";
 import { buildShowcaseCoastalLighthouseModel } from "./fixtures/showcaseCoastalLighthouseModel.js";
+import { buildShowcaseDuckModel } from "./fixtures/showcaseDuckModel.js";
+import { buildShowcaseElectricGuitarModel } from "./fixtures/showcaseElectricGuitarModel.js";
 import { buildShowcaseFireEngineModel } from "./fixtures/showcaseFireEngineModel.js";
 import { buildShowcaseSteamLocomotiveModel } from "./fixtures/showcaseSteamLocomotiveModel.js";
 import { validateGeneratedModelShape } from "./generatedModelSchema.js";
@@ -55,6 +58,27 @@ export const SHOWCASE_BUILDS = Object.freeze([
     promptMetadata: "Detailed red emergency truck with glazed cab, block wheels, equipment compartments, hose reels, warning lights, and roof ladder",
     promptPhrases: ["red rescue fire engine"],
     buildModel: buildShowcaseFireEngineModel,
+  }),
+  descriptor({
+    id: "crimson-strat-electric-guitar",
+    label: "Crimson Strat Electric Guitar",
+    promptMetadata: "Accurate horizontal red double-cutaway electric guitar with white pickguard, pickups, bridge, controls, fretted neck, six tuners, and display support",
+    promptPhrases: ["crimson strat electric guitar", "strat electric guitar"],
+    buildModel: buildShowcaseElectricGuitarModel,
+  }),
+  descriptor({
+    id: "japanese-bonsai-display",
+    label: "Japanese Bonsai Display",
+    promptMetadata: "Layered green bonsai with exposed brown roots, asymmetric trunk and branches, dark soil, red pot, and black display plinth",
+    promptPhrases: ["japanese bonsai display"],
+    buildModel: buildShowcaseBonsaiModel,
+  }),
+  descriptor({
+    id: "golden-rubber-duck",
+    label: "Golden Rubber Duck",
+    promptMetadata: "Bright yellow rubber duck with rounded body, raised head, wings, tail, black eyes, orange beak, and rippled blue water base",
+    promptPhrases: ["golden rubber duck"],
+    buildModel: buildShowcaseDuckModel,
   }),
 ]);
 

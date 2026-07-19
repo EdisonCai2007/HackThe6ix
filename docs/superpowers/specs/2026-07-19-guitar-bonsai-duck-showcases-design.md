@@ -16,7 +16,7 @@ These colors are requirements. Builders must use exact part/color inventory entr
 
 ### Electric guitar
 
-The guitar is an upright display model with a stepped double-cutaway red body, centered white pickguard, multiple black pickups, dark-gray bridge, yellow control knobs, long brown neck, black fretboard, white fret markers, brown headstock, six contrasting tuning pegs, and a connected black floor stand. The silhouette and essential hardware take priority over decorative piece count. Target: 95–125 pieces.
+The guitar is a horizontal display model with a stepped double-cutaway red body, exposed white pickguard, multiple black pickups, dark-gray bridge, yellow control knobs, long brown neck, black fretboard, white fret markers, brown headstock, six contrasting tuning pegs, and connected black display support. The top-facing orientation keeps the silhouette and essential hardware readable. Target: 95–125 pieces.
 
 ### Bonsai
 

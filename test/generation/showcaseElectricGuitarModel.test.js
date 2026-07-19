@@ -33,7 +33,7 @@ function inventoryCounts(inventory) {
 }
 
 describe("buildShowcaseElectricGuitarModel", () => {
-  it("builds a deterministic, schema-valid upright guitar in the target piece range", () => {
+  it("builds a deterministic, schema-valid display guitar in the target piece range", () => {
     const model = buildShowcaseElectricGuitarModel(fixedDemoInventory);
 
     assert.equal(validateGeneratedModelShape(model).ok, true);
@@ -42,7 +42,8 @@ describe("buildShowcaseElectricGuitarModel", () => {
     assert.ok(model.piece_count >= 95);
     assert.ok(model.piece_count <= 125);
     assert.equal(model.bricks.length, model.piece_count);
-    assert.ok(model.dimensions.height_layers > model.dimensions.width_studs);
+    assert.ok(model.dimensions.width_studs >= 36);
+    assert.ok(model.dimensions.height_layers <= 10);
   });
 
   it("passes geometry, connectivity, build-order, and fixed-inventory validation", () => {

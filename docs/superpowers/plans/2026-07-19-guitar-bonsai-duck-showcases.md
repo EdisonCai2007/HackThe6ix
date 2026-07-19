@@ -28,10 +28,10 @@
 - Consumes: `fixedDemoInventory`, `createShowcaseBrickFactory`, `completeShowcaseModel`.
 - Produces: `buildShowcaseElectricGuitarModel(inventory = fixedDemoInventory): GeneratedModel`.
 
-- [ ] Write a failing test importing `buildShowcaseElectricGuitarModel`, asserting schema validity, determinism, 95–125 pieces, validator success, and features `display-stand`, `guitar-body`, `pickguard`, `pickup`, `bridge`, `control-knob`, `neck`, `fretboard`, `fret-marker`, `headstock`, and `tuning-peg`.
+- [ ] Write a failing test importing `buildShowcaseElectricGuitarModel`, asserting schema validity, determinism, 95–125 pieces, a horizontal display footprint, validator success, and features `display-stand`, `guitar-body`, `pickguard`, `pickup`, `bridge`, `control-knob`, `neck`, `fretboard`, `fret-marker`, `headstock`, and `tuning-peg`.
 - [ ] Assert the locked feature colors: red body, white pickguard/markers, black pickups/fretboard/stand, brown neck/headstock, dark-gray bridge, and yellow knobs.
 - [ ] Run `node --test test/generation/showcaseElectricGuitarModel.test.js`; expect module-not-found failure.
-- [ ] Implement an inventory-safe upright double-cutaway model ordered from stand/body through neck/headstock.
+- [ ] Implement an inventory-safe horizontal double-cutaway model ordered from display support/body through neck/headstock.
 - [ ] Re-run the focused test; expect all guitar cases to pass.
 
 ### Task 2: Bonsai contract and builder

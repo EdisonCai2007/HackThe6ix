@@ -6,8 +6,11 @@ import { buildLighthouseModel } from "../generation/fixtures/lighthouseModel.js"
 import { buildMailboxModel } from "../generation/fixtures/mailboxModel.js";
 import { fixedDemoInventory } from "../generation/fixtures/fixedDemoInventory.js";
 import { randomInventoryV2 } from "../generation/fixtures/randomInventoryV2.js";
+import { buildShowcaseBonsaiModel } from "../generation/fixtures/showcaseBonsaiModel.js";
 import { buildShowcaseGrandPianoModel } from "../generation/fixtures/showcaseGrandPianoModel.js";
 import { buildShowcaseCoastalLighthouseModel } from "../generation/fixtures/showcaseCoastalLighthouseModel.js";
+import { buildShowcaseDuckModel } from "../generation/fixtures/showcaseDuckModel.js";
+import { buildShowcaseElectricGuitarModel } from "../generation/fixtures/showcaseElectricGuitarModel.js";
 import { buildShowcaseFireEngineModel } from "../generation/fixtures/showcaseFireEngineModel.js";
 import { buildShowcaseSteamLocomotiveModel } from "../generation/fixtures/showcaseSteamLocomotiveModel.js";
 
@@ -50,6 +53,24 @@ export const FIXTURE_PREVIEWS = Object.freeze([
     id: "red-rescue-fire-engine",
     label: "Red Rescue Fire Engine",
     buildModel: buildShowcaseFireEngineModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "crimson-strat-electric-guitar",
+    label: "Crimson Strat Electric Guitar",
+    buildModel: buildShowcaseElectricGuitarModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "japanese-bonsai-display",
+    label: "Japanese Bonsai Display",
+    buildModel: buildShowcaseBonsaiModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "golden-rubber-duck",
+    label: "Golden Rubber Duck",
+    buildModel: buildShowcaseDuckModel,
     inventory: fixedDemoInventory,
   },
 ]);

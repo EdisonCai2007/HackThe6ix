@@ -60,6 +60,9 @@ describe("generation server showcase suggestion route", () => {
         "midnight-grand-piano",
         "coastal-beacon-lighthouse",
         "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
       ],
     );
   });

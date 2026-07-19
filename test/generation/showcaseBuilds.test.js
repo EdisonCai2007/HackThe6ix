@@ -12,7 +12,7 @@ import {
 } from "../../src/generation/showcaseBuilds.js";
 
 describe("showcase build registry", () => {
-  it("exports four immutable descriptors through stable ids", () => {
+  it("exports seven immutable descriptors through stable ids", () => {
     assert.deepEqual(
       SHOWCASE_BUILDS.map(({ id }) => id),
       [
@@ -20,6 +20,9 @@ describe("showcase build registry", () => {
         "midnight-grand-piano",
         "coastal-beacon-lighthouse",
         "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
       ],
     );
     assert.equal(Object.isFrozen(SHOWCASE_BUILDS), true);
@@ -34,6 +37,9 @@ describe("showcase build registry", () => {
       "midnight-grand-piano",
       "coastal-beacon-lighthouse",
       "red-rescue-fire-engine",
+      "crimson-strat-electric-guitar",
+      "japanese-bonsai-display",
+      "golden-rubber-duck",
     ]);
     for (const suggestion of suggestions) {
       assert.equal(typeof suggestion.label, "string");
@@ -57,6 +63,9 @@ describe("showcase build registry", () => {
         "midnight-grand-piano",
         "coastal-beacon-lighthouse",
         "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
       ],
     );
     assert.deepEqual(listShowcaseBuildSuggestions(randomBuildInventory), []);
@@ -78,6 +87,18 @@ describe("showcase build registry", () => {
     assert.equal(
       findShowcaseBuild({ userPrompt: "Build the Red Rescue Fire Engine showcase" })?.id,
       "red-rescue-fire-engine",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Crimson Strat Electric Guitar showcase" })?.id,
+      "crimson-strat-electric-guitar",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Japanese Bonsai Display showcase" })?.id,
+      "japanese-bonsai-display",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Golden Rubber Duck showcase" })?.id,
+      "golden-rubber-duck",
     );
     assert.equal(findShowcaseBuild({ userPrompt: "build a normal piano" }), undefined);
     assert.equal(
