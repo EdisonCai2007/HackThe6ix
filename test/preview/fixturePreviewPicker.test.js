@@ -23,6 +23,11 @@ describe("fixture preview picker", () => {
         "lighthouse",
         "scarlet-steam-locomotive",
         "midnight-grand-piano",
+        "coastal-beacon-lighthouse",
+        "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
       ],
     );
   });
@@ -59,15 +64,51 @@ describe("fixture preview picker", () => {
       ({ id }) => id === "scarlet-steam-locomotive",
     );
     const piano = FIXTURE_PREVIEWS.find(({ id }) => id === "midnight-grand-piano");
+    const lighthouse = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "coastal-beacon-lighthouse",
+    );
+    const fireEngine = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "red-rescue-fire-engine",
+    );
+    const guitar = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "crimson-strat-electric-guitar",
+    );
+    const bonsai = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "japanese-bonsai-display",
+    );
+    const duck = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "golden-rubber-duck",
+    );
 
-    assert.equal(locomotive.inventory, fixedDemoInventory);
-    assert.equal(piano.inventory, fixedDemoInventory);
+    for (const fixture of [locomotive, piano, lighthouse, fireEngine, guitar, bonsai, duck]) {
+      assert.equal(fixture.inventory, fixedDemoInventory);
+    }
     assert.equal(
       buildFixturePreviewModel(locomotive.id, randomBuildInventory).created_from_inventory_id,
       fixedDemoInventory.inventory_id,
     );
     assert.equal(
+      buildFixturePreviewModel(lighthouse.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(fireEngine.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
       buildFixturePreviewModel(piano.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(guitar.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(bonsai.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(duck.id, randomBuildInventory).created_from_inventory_id,
       fixedDemoInventory.inventory_id,
     );
   });

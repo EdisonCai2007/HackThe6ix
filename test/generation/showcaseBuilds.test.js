@@ -12,10 +12,18 @@ import {
 } from "../../src/generation/showcaseBuilds.js";
 
 describe("showcase build registry", () => {
-  it("exports two immutable descriptors through stable ids", () => {
+  it("exports seven immutable descriptors through stable ids", () => {
     assert.deepEqual(
       SHOWCASE_BUILDS.map(({ id }) => id),
-      ["scarlet-steam-locomotive", "midnight-grand-piano"],
+      [
+        "scarlet-steam-locomotive",
+        "midnight-grand-piano",
+        "coastal-beacon-lighthouse",
+        "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
+      ],
     );
     assert.equal(Object.isFrozen(SHOWCASE_BUILDS), true);
     assert.equal(SHOWCASE_BUILDS.every(Object.isFrozen), true);
@@ -27,6 +35,11 @@ describe("showcase build registry", () => {
     assert.deepEqual(suggestions.map(({ showcase_id }) => showcase_id), [
       "scarlet-steam-locomotive",
       "midnight-grand-piano",
+      "coastal-beacon-lighthouse",
+      "red-rescue-fire-engine",
+      "crimson-strat-electric-guitar",
+      "japanese-bonsai-display",
+      "golden-rubber-duck",
     ]);
     for (const suggestion of suggestions) {
       assert.equal(typeof suggestion.label, "string");
@@ -45,7 +58,15 @@ describe("showcase build registry", () => {
   it("only suggests showcases that the requested inventory can build", () => {
     assert.deepEqual(
       listShowcaseBuildSuggestions(fixedDemoInventory).map(({ showcase_id }) => showcase_id),
-      ["scarlet-steam-locomotive", "midnight-grand-piano"],
+      [
+        "scarlet-steam-locomotive",
+        "midnight-grand-piano",
+        "coastal-beacon-lighthouse",
+        "red-rescue-fire-engine",
+        "crimson-strat-electric-guitar",
+        "japanese-bonsai-display",
+        "golden-rubber-duck",
+      ],
     );
     assert.deepEqual(listShowcaseBuildSuggestions(randomBuildInventory), []);
   });
@@ -58,6 +79,26 @@ describe("showcase build registry", () => {
     assert.equal(
       findShowcaseBuild({ userPrompt: "Please BUILD the Midnight Grand-Piano showcase!" })?.id,
       "midnight-grand-piano",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Please build the Coastal Beacon Lighthouse showcase" })?.id,
+      "coastal-beacon-lighthouse",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Red Rescue Fire Engine showcase" })?.id,
+      "red-rescue-fire-engine",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Crimson Strat Electric Guitar showcase" })?.id,
+      "crimson-strat-electric-guitar",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Japanese Bonsai Display showcase" })?.id,
+      "japanese-bonsai-display",
+    );
+    assert.equal(
+      findShowcaseBuild({ userPrompt: "Build the Golden Rubber Duck showcase" })?.id,
+      "golden-rubber-duck",
     );
     assert.equal(findShowcaseBuild({ userPrompt: "build a normal piano" }), undefined);
     assert.equal(
