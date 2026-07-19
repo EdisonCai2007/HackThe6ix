@@ -1,22 +1,9 @@
 import * as THREE from "three";
 
+import { COLOR_HEX_BY_ID } from "../generation/colorCatalog.js";
 import { getPartDimensions, SUPPORTED_PARTS } from "../generation/partCatalog.js";
 import { PLATE_UNIT_LDU, STUD_LDU, positionToLduCenter } from "./editorGeometry.js";
 import { placementOffsetForModel } from "./modelPlacement.js";
-
-const COLOR_HEX = {
-  0: 0x05131d,
-  1: 0x0055bf,
-  2: 0x237841,
-  4: 0xc91a09,
-  6: 0x583927,
-  14: 0xf2cd37,
-  15: 0xffffff,
-  19: 0xe4cd9e,
-  25: 0xfe8a18,
-  43: 0xaeefec,
-  72: 0x6c6e68,
-};
 
 function partHeightLdu(part) {
   return part.category === "plate" ? PLATE_UNIT_LDU : PLATE_UNIT_LDU * 3;
@@ -34,7 +21,7 @@ function materialForBrick(brick) {
   const transparent = brick.preview || brick.color_id === "43";
 
   return new THREE.MeshStandardMaterial({
-    color: COLOR_HEX[brick.color_id] ?? 0xd9d9d9,
+    color: COLOR_HEX_BY_ID[brick.color_id] ?? 0xd9d9d9,
     roughness: 0.46,
     metalness: 0.02,
     transparent,

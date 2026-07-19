@@ -150,3 +150,34 @@ test("createBrickScene does not recenter the committed model around drag preview
 
   assert.deepEqual(brickScene.root.position.toArray(), [-10, 0, -10]);
 });
+
+test("createBrickScene renders every fixed-inventory color distinctly", () => {
+  const scene = new THREE.Scene();
+  const brickScene = createBrickScene(scene);
+
+  brickScene.setModel({
+    bricks: [
+      {
+        id: "dark-green",
+        part_id: "3005",
+        color_id: "288",
+        position: { x: 0, y: 0, z: 0 },
+        rotation: 0,
+      },
+      {
+        id: "light-gray",
+        part_id: "3005",
+        color_id: "71",
+        position: { x: 1, y: 0, z: 0 },
+        rotation: 0,
+      },
+    ],
+  });
+
+  const darkGreen = brickScene.getBrickObject("dark-green").children[0].material.color.getHex();
+  const lightGray = brickScene.getBrickObject("light-gray").children[0].material.color.getHex();
+
+  assert.equal(darkGreen, 0x184632);
+  assert.equal(lightGray, 0xa0a5a9);
+  assert.notEqual(darkGreen, lightGray);
+});

@@ -187,4 +187,32 @@ describe("supported part catalog", () => {
       height: 1,
     });
   });
+
+  it("includes every larger footprint in the fixed inventory", () => {
+    const expected = {
+      6112: ["brick", 1, 12],
+      2456: ["brick", 2, 6],
+      3007: ["brick", 2, 8],
+      3460: ["plate", 1, 8],
+      4477: ["plate", 1, 10],
+      3832: ["plate", 2, 10],
+      4282: ["plate", 2, 16],
+      3030: ["plate", 4, 10],
+      3029: ["plate", 4, 12],
+      3958: ["plate", 6, 6],
+      3036: ["plate", 6, 8],
+      3033: ["plate", 6, 10],
+    };
+
+    for (const [partId, [category, width, depth]] of Object.entries(expected)) {
+      assert.deepEqual(SUPPORTED_PARTS[partId], {
+        label: `${width}x${depth} ${category}`,
+        category,
+        part_id: partId,
+        ldraw_id: `${partId}.dat`,
+        width,
+        depth,
+      });
+    }
+  });
 });
