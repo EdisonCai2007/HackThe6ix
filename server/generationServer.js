@@ -17,6 +17,11 @@ import {
 } from "../src/generation/service.js";
 import { createBrickGptClient } from "../src/generation/hybrid/brickGptClient.js";
 import { generateHybridModel } from "../src/generation/hybrid/service.js";
+import {
+  generateShowcaseBuild,
+  isShowcaseBuildRequest,
+  listShowcaseBuildSuggestions,
+} from "../src/generation/showcaseBuilds.js";
 import { createBackboardGenerationClient } from "./backboardGenerationClient.js";
 import { createInventorySessionStore } from "./inventorySessions.js";
 import {
@@ -134,6 +139,13 @@ export function validateRequestBody(body) {
     errors.push("inventory_id must be a string.");
   }
 
+  if (
+    body.showcase_id !== undefined &&
+    (typeof body.showcase_id !== "string" || body.showcase_id.trim() === "")
+  ) {
+    errors.push("showcase_id must be a non-empty string.");
+  }
+
   return errors;
 }
 
@@ -215,12 +227,31 @@ function aiCredentialError(env = process.env) {
     : null;
 }
 
-export function generationCredentialError(env = process.env) {
+export function generationCredentialError(env = process.env, body) {
+  if (isShowcaseBuildRequest(body)) {
+    return null;
+  }
+
   if (resolveGenerationMode(env) === "brickgpt_inventory") {
     return null;
   }
 
   return aiCredentialError(env);
+}
+
+function showcaseStreamDelayMs(env = process.env) {
+  const raw = env.SHOWCASE_STREAM_DELAY_MS;
+
+  if (raw === undefined || raw === "") {
+    return 35;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("SHOWCASE_STREAM_DELAY_MS must be a non-negative integer.");
+  }
+
+  return value;
 }
 
 export function createGenerationClientForBody({
@@ -266,6 +297,16 @@ function createFailureResult(stage, errors) {
 async function createGenerationResult(body, onProgress, { streamPlacement = false } = {}) {
   const inventory = await resolveInventoryFromBody(body);
   const userPrompt = body.userPrompt.trim();
+
+  if (isShowcaseBuildRequest(body)) {
+    return generateShowcaseBuild({
+      showcaseId: body.showcase_id,
+      userPrompt,
+      inventory,
+      onProgress,
+      delayMs: streamPlacement ? showcaseStreamDelayMs(process.env) : 0,
+    });
+  }
 
   if (resolveGenerationMode(process.env) === "brickgpt_inventory") {
     const config = resolveHybridGenerationConfig(process.env);
@@ -368,13 +409,35 @@ async function createRefinementResult(body, onProgress, { streamRefinement = fal
 
 async function createSuggestionResult(body) {
   const inventory = await resolveInventoryFromBody(body);
-  const generationClient = createGenerationClientForBody({ body });
+  const showcaseSuggestions = listShowcaseBuildSuggestions();
 
-  return generateBuildSuggestions({
+  if (aiCredentialError(process.env)) {
+    return { ok: true, suggestions: showcaseSuggestions };
+  }
+
+  const generationClient = createGenerationClientForBody({ body });
+  const providerResult = await generateBuildSuggestions({
     inventory,
     generationClient,
     suggestionModel: resolveSuggestionModel(process.env),
   });
+
+  if (!providerResult.ok) {
+    return { ok: true, suggestions: showcaseSuggestions };
+  }
+
+  const seenLabels = new Set(showcaseSuggestions.map(({ label }) => label.toLowerCase()));
+  const providerSuggestions = providerResult.suggestions.filter(({ label }) => {
+    const key = label.toLowerCase();
+    if (seenLabels.has(key)) return false;
+    seenLabels.add(key);
+    return true;
+  });
+
+  return {
+    ok: true,
+    suggestions: [...showcaseSuggestions, ...providerSuggestions].slice(0, 5),
+  };
 }
 
 async function handleCreateInventorySession(request, response) {
@@ -396,7 +459,15 @@ async function handleCreateInventorySession(request, response) {
 }
 
 async function handleGenerateJson(request, response) {
-  const credentialError = generationCredentialError(process.env);
+  const body = await readJson(request);
+  const requestErrors = validateRequestBody(body);
+
+  if (requestErrors.length > 0) {
+    sendJson(request, response, 400, createFailureResult("request", requestErrors));
+    return;
+  }
+
+  const credentialError = generationCredentialError(process.env, body);
   if (credentialError) {
     sendJson(
       request,
@@ -404,14 +475,6 @@ async function handleGenerateJson(request, response) {
       500,
       createFailureResult("configuration", [credentialError]),
     );
-    return;
-  }
-
-  const body = await readJson(request);
-  const requestErrors = validateRequestBody(body);
-
-  if (requestErrors.length > 0) {
-    sendJson(request, response, 400, createFailureResult("request", requestErrors));
     return;
   }
 
@@ -505,17 +568,6 @@ async function handleSuggestBuilds(request, response) {
     return;
   }
 
-  const credentialError = aiCredentialError(process.env);
-  if (credentialError) {
-    sendJson(
-      request,
-      response,
-      500,
-      createFailureResult("configuration", [credentialError]),
-    );
-    return;
-  }
-
   const requestErrors = validateSuggestionRequestBody(body);
 
   if (requestErrors.length > 0) {
@@ -542,7 +594,15 @@ async function handleGenerateStream(request, response) {
 
   sendSseHeaders(request, response);
 
-  const credentialError = generationCredentialError(process.env);
+  const requestErrors = validateRequestBody(body);
+
+  if (requestErrors.length > 0) {
+    response.write(formatSseEvent("failure", { phase: "placement", error: requestErrors.join(" ") }));
+    response.end(formatSseEvent("result", createFailureResult("request", requestErrors)));
+    return;
+  }
+
+  const credentialError = generationCredentialError(process.env, body);
   if (credentialError) {
     response.write(formatSseEvent("failure", { phase: "placement", error: credentialError }));
     response.end(
@@ -551,14 +611,6 @@ async function handleGenerateStream(request, response) {
         createFailureResult("configuration", [credentialError]),
       ),
     );
-    return;
-  }
-
-  const requestErrors = validateRequestBody(body);
-
-  if (requestErrors.length > 0) {
-    response.write(formatSseEvent("failure", { phase: "placement", error: requestErrors.join(" ") }));
-    response.end(formatSseEvent("result", createFailureResult("request", requestErrors)));
     return;
   }
 

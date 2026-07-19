@@ -32,6 +32,7 @@ import { countInventoryBricks } from "./inventoryPieceCount.js";
 import { getInventorySessionId } from "./inventorySessions.js";
 import { createLeftPanelResizer } from "./leftPanelResize.js";
 import { placementOffsetForBox } from "./modelPlacement.js";
+import { createShowcaseSelection } from "./showcaseSelection.js";
 import {
   catalogueItemsForModel,
   validateForInstructions,
@@ -124,6 +125,7 @@ inventorySelect.value = "fixed-demo";
 let isLeftPanelCollapsed = false;
 let isRightDrawerCollapsed = false;
 let buildSuggestionsRequestVersion = 0;
+const showcaseSelection = createShowcaseSelection();
 const leftPanelResizer = createLeftPanelResizer({
   container: leftPanelColumn,
   panels: [statusPanel, buildSuggestionsPanel, form],
@@ -189,6 +191,7 @@ function showBuildSuggestions(suggestions) {
       button.className = "build-suggestion";
       button.textContent = suggestion.label;
       button.addEventListener("click", () => {
+        showcaseSelection.selectSuggestion(suggestion);
         promptInput.value = promptTextForBuildSuggestion(suggestion);
         promptInput.focus();
       });
@@ -1114,7 +1117,11 @@ buildSuggestionsPanelClose.addEventListener("click", () => {
   collapseLeftPanelWhenEmpty();
 });
 buildSuggestionsRefresh.addEventListener("click", requestBuildSuggestions);
-inventorySelect.addEventListener("change", requestBuildSuggestions);
+inventorySelect.addEventListener("change", () => {
+  showcaseSelection.clear();
+  requestBuildSuggestions();
+});
+promptInput.addEventListener("input", () => showcaseSelection.clear());
 promptPanelClose.addEventListener("click", () => {
   form.hidden = true;
   leftPanelResizer.update();
@@ -1221,6 +1228,9 @@ async function requestInitialGeneration(generationRequest) {
       userPrompt: generationRequest.userPrompt,
       inventory_id: inventoryId,
       targetPieceCount: generationRequest.targetPieceCount,
+      ...(generationRequest.showcaseId
+        ? { showcase_id: generationRequest.showcaseId }
+        : {}),
     }),
     signal: generationRequest.controller.signal,
   });
@@ -1457,12 +1467,16 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   activeGenerationRequest?.controller.abort();
   const inventory = selectedInventory();
+  const selectedPayload = showcaseSelection.extendGenerationPayload({
+    userPrompt: promptInput.value.trim(),
+  });
   const generationRequest = {
     hasRenderedDraft: false,
     streamingLocked: true,
     streamEventsOpen: true,
     inventory,
-    userPrompt: promptInput.value.trim(),
+    userPrompt: selectedPayload.userPrompt,
+    showcaseId: selectedPayload.showcase_id,
     targetPieceCount: countInventoryBricks(inventory),
     controller: new AbortController(),
   };

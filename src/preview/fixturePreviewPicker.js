@@ -4,7 +4,10 @@ import { buildCastleGateModel } from "../generation/fixtures/castleGateModel.js"
 import { buildHorseModel } from "../generation/fixtures/horseModel.js";
 import { buildLighthouseModel } from "../generation/fixtures/lighthouseModel.js";
 import { buildMailboxModel } from "../generation/fixtures/mailboxModel.js";
+import { fixedDemoInventory } from "../generation/fixtures/fixedDemoInventory.js";
 import { randomInventoryV2 } from "../generation/fixtures/randomInventoryV2.js";
+import { buildShowcaseGrandPianoModel } from "../generation/fixtures/showcaseGrandPianoModel.js";
+import { buildShowcaseSteamLocomotiveModel } from "../generation/fixtures/showcaseSteamLocomotiveModel.js";
 
 export const FIXTURE_PREVIEWS = Object.freeze([
   { id: "campfire", label: "Campfire Scene", buildModel: buildCampfireModel },
@@ -23,6 +26,18 @@ export const FIXTURE_PREVIEWS = Object.freeze([
   { id: "castle-gate", label: "Royal Castle Gate", buildModel: buildCastleGateModel },
   { id: "blocky-globe", label: "Blocky Globe", buildModel: buildBlockyGlobeModel },
   { id: "lighthouse", label: "Lighthouse Island", buildModel: buildLighthouseModel },
+  {
+    id: "scarlet-steam-locomotive",
+    label: "Scarlet Steam Locomotive",
+    buildModel: buildShowcaseSteamLocomotiveModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "midnight-grand-piano",
+    label: "Midnight Grand Piano",
+    buildModel: buildShowcaseGrandPianoModel,
+    inventory: fixedDemoInventory,
+  },
 ]);
 
 export function buildFixturePreviewModel(fixtureId, inventory) {
