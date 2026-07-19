@@ -7,6 +7,8 @@ import { buildMailboxModel } from "../generation/fixtures/mailboxModel.js";
 import { fixedDemoInventory } from "../generation/fixtures/fixedDemoInventory.js";
 import { randomInventoryV2 } from "../generation/fixtures/randomInventoryV2.js";
 import { buildShowcaseGrandPianoModel } from "../generation/fixtures/showcaseGrandPianoModel.js";
+import { buildShowcaseCoastalLighthouseModel } from "../generation/fixtures/showcaseCoastalLighthouseModel.js";
+import { buildShowcaseFireEngineModel } from "../generation/fixtures/showcaseFireEngineModel.js";
 import { buildShowcaseSteamLocomotiveModel } from "../generation/fixtures/showcaseSteamLocomotiveModel.js";
 
 export const FIXTURE_PREVIEWS = Object.freeze([
@@ -36,6 +38,18 @@ export const FIXTURE_PREVIEWS = Object.freeze([
     id: "midnight-grand-piano",
     label: "Midnight Grand Piano",
     buildModel: buildShowcaseGrandPianoModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "coastal-beacon-lighthouse",
+    label: "Coastal Beacon Lighthouse",
+    buildModel: buildShowcaseCoastalLighthouseModel,
+    inventory: fixedDemoInventory,
+  },
+  {
+    id: "red-rescue-fire-engine",
+    label: "Red Rescue Fire Engine",
+    buildModel: buildShowcaseFireEngineModel,
     inventory: fixedDemoInventory,
   },
 ]);

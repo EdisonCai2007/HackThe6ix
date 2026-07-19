@@ -50,12 +50,17 @@ describe("generation server showcase suggestion route", () => {
     return response.json();
   }
 
-  it("returns both credential-free showcases for the compatible fixed inventory", async () => {
+  it("returns all credential-free showcases for the compatible fixed inventory", async () => {
     const result = await requestSuggestions(fixedDemoInventory);
 
     assert.deepEqual(
       result.suggestions.map(({ showcase_id }) => showcase_id),
-      ["scarlet-steam-locomotive", "midnight-grand-piano"],
+      [
+        "scarlet-steam-locomotive",
+        "midnight-grand-piano",
+        "coastal-beacon-lighthouse",
+        "red-rescue-fire-engine",
+      ],
     );
   });
 

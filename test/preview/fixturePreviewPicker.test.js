@@ -23,6 +23,8 @@ describe("fixture preview picker", () => {
         "lighthouse",
         "scarlet-steam-locomotive",
         "midnight-grand-piano",
+        "coastal-beacon-lighthouse",
+        "red-rescue-fire-engine",
       ],
     );
   });
@@ -59,11 +61,26 @@ describe("fixture preview picker", () => {
       ({ id }) => id === "scarlet-steam-locomotive",
     );
     const piano = FIXTURE_PREVIEWS.find(({ id }) => id === "midnight-grand-piano");
+    const lighthouse = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "coastal-beacon-lighthouse",
+    );
+    const fireEngine = FIXTURE_PREVIEWS.find(
+      ({ id }) => id === "red-rescue-fire-engine",
+    );
 
-    assert.equal(locomotive.inventory, fixedDemoInventory);
-    assert.equal(piano.inventory, fixedDemoInventory);
+    for (const fixture of [locomotive, piano, lighthouse, fireEngine]) {
+      assert.equal(fixture.inventory, fixedDemoInventory);
+    }
     assert.equal(
       buildFixturePreviewModel(locomotive.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(lighthouse.id, randomBuildInventory).created_from_inventory_id,
+      fixedDemoInventory.inventory_id,
+    );
+    assert.equal(
+      buildFixturePreviewModel(fireEngine.id, randomBuildInventory).created_from_inventory_id,
       fixedDemoInventory.inventory_id,
     );
     assert.equal(

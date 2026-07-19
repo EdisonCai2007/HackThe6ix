@@ -1,4 +1,6 @@
 import { buildShowcaseGrandPianoModel } from "./fixtures/showcaseGrandPianoModel.js";
+import { buildShowcaseCoastalLighthouseModel } from "./fixtures/showcaseCoastalLighthouseModel.js";
+import { buildShowcaseFireEngineModel } from "./fixtures/showcaseFireEngineModel.js";
 import { buildShowcaseSteamLocomotiveModel } from "./fixtures/showcaseSteamLocomotiveModel.js";
 import { validateGeneratedModelShape } from "./generatedModelSchema.js";
 import { validateModel } from "./validator.js";
@@ -39,6 +41,20 @@ export const SHOWCASE_BUILDS = Object.freeze([
     promptMetadata: "Elegant black concert grand with contrasting keyboard, warm soundboard, raised lid, pedals, and bench",
     promptPhrases: ["midnight grand piano"],
     buildModel: buildShowcaseGrandPianoModel,
+  }),
+  descriptor({
+    id: "coastal-beacon-lighthouse",
+    label: "Coastal Beacon Lighthouse",
+    promptMetadata: "Striped red-and-white beacon on a rocky blue-water base with keeper cottage, balcony, lantern room, and black cap",
+    promptPhrases: ["coastal beacon lighthouse"],
+    buildModel: buildShowcaseCoastalLighthouseModel,
+  }),
+  descriptor({
+    id: "red-rescue-fire-engine",
+    label: "Red Rescue Fire Engine",
+    promptMetadata: "Detailed red emergency truck with glazed cab, block wheels, equipment compartments, hose reels, warning lights, and roof ladder",
+    promptPhrases: ["red rescue fire engine"],
+    buildModel: buildShowcaseFireEngineModel,
   }),
 ]);
 
