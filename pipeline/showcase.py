@@ -229,6 +229,38 @@ def select_showcase(
             **candidate.refs,
         })
 
+    strict_count = len(selected_payload)  # pieces that cleared the strict bar
+    # Best-effort fallback: if the strict funnel accepted nothing, the demo
+    # must still advance. Surface the highest-confidence IDENTIFIED pieces
+    # (real model output, real masks) up to n, flagged as lower-confidence so
+    # the UI/user treats them as "please confirm" rather than trusted.
+    if not selected_payload:
+        backfill = sorted(
+            (c for c in candidates if c.part_id is not None and c.refs.get("rgb")),
+            key=lambda c: (c.top1_score, c.margin),
+            reverse=True,
+        )[:max(0, n)]
+        for candidate in backfill:
+            _, components = _safety_score(candidate)
+            selected_payload.append({
+                "instance_id": candidate.instance_id,
+                "part_id": candidate.part_id,
+                "part_name": candidate.part_name,
+                "top1_score": candidate.top1_score,
+                "top2_score": candidate.top2_score,
+                "margin": round(candidate.margin, 4),
+                "agreement": candidate.agreement,
+                "num_views": candidate.num_views,
+                "seg_confidence": candidate.seg_confidence,
+                "color": candidate.color,
+                "color_reliable": candidate.color_reliable,
+                "question": f"I think this is a {candidate.part_name} — is that right?",
+                "safety": components,
+                "selection_reasons": ["best-effort fallback (no piece cleared the strict bar)"],
+                "low_confidence": True,
+                **candidate.refs,
+            })
+
     # Strongest rejects first: highest top1 among rejected, so the audit shows
     # the near-misses rather than the obvious junk.
     rejected.sort(key=lambda item: item[0].top1_score, reverse=True)
@@ -249,6 +281,7 @@ def select_showcase(
     return {
         "requested": n,
         "selected_count": len(selected_payload),
+        "strict_count": strict_count,
         "selected": selected_payload,
         "rejected": rejected_payload,
     }

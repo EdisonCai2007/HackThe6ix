@@ -44,7 +44,10 @@ def early_exit(
     view_limits = [1] if maximum == 1 else [1, maximum]
     for view_limit in view_limits:
         result = attempt(view_limit)
-        if int(result.get("selected_count", 0)) >= int(min_safe):
+        # Expand views only while genuinely-safe pieces are short; a
+        # best-effort backfill does not count toward stopping early.
+        strict = int(result.get("strict_count", result.get("selected_count", 0)))
+        if strict >= int(min_safe):
             break
     return result
 
