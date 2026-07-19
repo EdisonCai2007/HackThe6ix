@@ -13,9 +13,11 @@ const REQUIRED_FEATURES = [
   "pickup",
   "bridge",
   "control-knob",
+  "selector-switch",
   "neck",
   "fretboard",
   "fret-marker",
+  "string-detail",
   "headstock",
   "tuning-peg",
 ];
@@ -39,11 +41,12 @@ describe("buildShowcaseElectricGuitarModel", () => {
     assert.equal(validateGeneratedModelShape(model).ok, true);
     assert.deepEqual(buildShowcaseElectricGuitarModel(), model);
     assert.deepEqual(buildShowcaseElectricGuitarModel(fixedDemoInventory), model);
-    assert.ok(model.piece_count >= 95);
-    assert.ok(model.piece_count <= 125);
+    assert.ok(model.piece_count >= 180);
+    assert.ok(model.piece_count <= 220);
     assert.equal(model.bricks.length, model.piece_count);
-    assert.ok(model.dimensions.width_studs >= 36);
-    assert.ok(model.dimensions.height_layers <= 10);
+    assert.ok(model.dimensions.width_studs >= 48);
+    assert.ok(model.dimensions.depth_studs >= 16);
+    assert.ok(model.dimensions.height_layers <= 12);
   });
 
   it("passes geometry, connectivity, build-order, and fixed-inventory validation", () => {
@@ -75,7 +78,34 @@ describe("buildShowcaseElectricGuitarModel", () => {
       );
     }
 
+    assert.equal(featureBricks(model, "pickup").length, 3);
+    assert.equal(featureBricks(model, "control-knob").length, 3);
+    assert.equal(featureBricks(model, "selector-switch").length, 1);
     assert.equal(featureBricks(model, "tuning-peg").length, 6);
+
+    const stringLanes = new Set(
+      featureBricks(model, "string-detail").map(({ id }) =>
+        Number(/^string-(\d+)-/.exec(id)?.[1]),
+      ),
+    );
+    assert.deepEqual([...stringLanes].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6]);
+
+    const contour = featureBricks(model, "guitar-body");
+    const bodyXs = contour.map(({ position }) => position.x);
+    const bodyYs = contour.map(({ position }) => position.y);
+
+    assert.ok(Math.max(...bodyXs) - Math.min(...bodyXs) >= 20);
+    assert.ok(Math.max(...bodyYs) - Math.min(...bodyYs) >= 16);
+    for (const prefix of [
+      "lower-bout-",
+      "waist-",
+      "long-horn-",
+      "short-horn-",
+      "upper-cutaway-",
+      "lower-cutaway-",
+    ]) {
+      assert.ok(contour.some(({ id }) => id.startsWith(prefix)), `Missing ${prefix}`);
+    }
   });
 
   it("uses the locked guitar palette on the intended features", () => {
@@ -86,10 +116,12 @@ describe("buildShowcaseElectricGuitarModel", () => {
       ["pickguard", "white"],
       ["pickup", "black"],
       ["bridge", "dark gray"],
-      ["control-knob", "yellow"],
+      ["control-knob", "white"],
+      ["selector-switch", "dark gray"],
       ["neck", "brown"],
       ["fretboard", "black"],
       ["fret-marker", "white"],
+      ["string-detail", "dark gray"],
       ["headstock", "brown"],
       ["tuning-peg", "dark gray"],
     ]);
