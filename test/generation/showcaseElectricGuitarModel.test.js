@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { fixedDemoInventory } from "../../src/generation/fixtures/fixedDemoInventory.js";
 import { buildShowcaseElectricGuitarModel } from "../../src/generation/fixtures/showcaseElectricGuitarModel.js";
 import { validateGeneratedModelShape } from "../../src/generation/generatedModelSchema.js";
+import { SUPPORTED_PARTS } from "../../src/generation/partCatalog.js";
 import { validateModel } from "../../src/generation/validator.js";
 
 const REQUIRED_FEATURES = [
@@ -133,6 +134,25 @@ describe("buildShowcaseElectricGuitarModel", () => {
         `${feature} should be ${colorName}.`,
       );
     }
+  });
+
+  it("keeps strings, markers, controls, and selector as low-profile surface details", () => {
+    const model = buildShowcaseElectricGuitarModel(fixedDemoInventory);
+    const surfaceFeatures = new Set([
+      "string-detail",
+      "fret-marker",
+      "control-knob",
+      "selector-switch",
+    ]);
+    const surfaceDetails = model.bricks.filter(({ feature }) => surfaceFeatures.has(feature));
+
+    const strings = featureBricks(model, "string-detail");
+    assert.equal(strings.length, 6);
+    assert.equal(strings.every(({ position }) => position.x >= 18), true);
+    assert.equal(
+      surfaceDetails.every(({ part_id }) => SUPPORTED_PARTS[part_id].category === "plate"),
+      true,
+    );
   });
 
   it("independently stays within every fixed part/color quantity", () => {

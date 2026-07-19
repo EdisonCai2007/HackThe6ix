@@ -309,16 +309,27 @@ function addHeadstock(bricks, placement) {
       step: 4,
     }));
   }
+  for (const [index, x] of [49, 53].entries()) {
+    bricks.push(placement.place({
+      id: `headstock-face-bridge-${index + 1}`,
+      part_id: "3710",
+      color_name: "black",
+      position: { x, y: 8, z: 4 },
+      rotation: 90,
+      feature: "fretboard",
+      step: 5,
+    }));
+  }
 
-  for (const [index, [x, y, partId]] of [
-    [54, 6, "3005"], [54, 7, "3005"], [51, 8, "3005"],
-    [54, 9, "3005"], [54, 10, "3005"], [54, 11, "3004"],
+  for (const [index, [x, y, z, partId]] of [
+    [52, 6, 4, "3005"], [55, 6, 4, "3005"], [52, 8, 5, "3005"],
+    [55, 8, 5, "3005"], [52, 10, 4, "3005"], [55, 10, 4, "3004"],
   ].entries()) {
     bricks.push(placement.place({
       id: `tuning-peg-${index + 1}`,
       part_id: partId,
       color_name: "dark gray",
-      position: { x, y, z: 7 },
+      position: { x, y, z },
       rotation: 0,
       feature: "tuning-peg",
       step: 7,
@@ -366,21 +377,24 @@ function addPickguardAndHardware(bricks, placement) {
     step: 5,
   }));
 
-  for (const [index, [x, y]] of [[6, 11], [9, 12], [13, 12]].entries()) {
+  for (const [index, [partId, x, y]] of [
+    ["3023", 6, 11], ["3023", 9, 12], ["3623", 13, 12],
+  ].entries()) {
     bricks.push(placement.place({
       id: `control-knob-${index + 1}`,
-      part_id: "3005",
+      part_id: partId,
       color_name: "white",
       position: { x, y, z: 5 },
+      rotation: 90,
       feature: "control-knob",
       step: 6,
     }));
   }
   bricks.push(placement.place({
     id: "selector-switch",
-    part_id: "3004",
+    part_id: "3022",
     color_name: "dark gray",
-    position: { x: 12, y: 11, z: 5 },
+    position: { x: 12, y: 10, z: 5 },
     feature: "selector-switch",
     step: 6,
   }));
@@ -390,9 +404,9 @@ function addStringsAndMarkers(bricks, placement) {
   for (const [index, x] of [24, 32, 38, 46].entries()) {
     bricks.push(placement.place({
       id: `fret-marker-${index + 1}`,
-      part_id: "3005",
+      part_id: "3666",
       color_name: "white",
-      position: { x, y: 8, z: 3 },
+      position: { x, y: 6, z: 3 },
       feature: "fret-marker",
       step: 5,
     }));
@@ -402,30 +416,10 @@ function addStringsAndMarkers(bricks, placement) {
   for (let lane = 1; lane <= 6; lane += 1) {
     const y = 5 + lane;
     bricks.push(placement.place({
-      id: `string-${lane}-body`,
+      id: `string-${lane}-neck-joint`,
       part_id: bodyParts[lane - 1],
       color_name: "dark gray",
-      position: { x: 8, y, z: 5 },
-      rotation: 90,
-      feature: "string-detail",
-      step: 6,
-    }));
-    for (const [segment, x] of [["neck", 28], ["upper", 40]]) {
-      bricks.push(placement.place({
-        id: `string-${lane}-${segment}`,
-        part_id: "3004",
-        color_name: "dark gray",
-        position: { x, y, z: 3 },
-        rotation: 90,
-        feature: "string-detail",
-        step: 6,
-      }));
-    }
-    bricks.push(placement.place({
-      id: `string-${lane}-headstock`,
-      part_id: "3010",
-      color_name: "dark gray",
-      position: { x: lane === 3 ? 49 : 52, y, z: 4 },
+      position: { x: 20, y, z: 3 },
       rotation: 90,
       feature: "string-detail",
       step: 6,
