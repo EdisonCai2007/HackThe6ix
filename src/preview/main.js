@@ -3,18 +3,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
-import { carInventory } from "../generation/fixtures/carInventory.js";
-import { daisyInventory } from "../generation/fixtures/daisyInventory.js";
-import { duckInventory } from "../generation/fixtures/duckInventory.js";
-import { horseInventory } from "../generation/fixtures/horseInventory.js";
-import { houseFlyInventory } from "../generation/fixtures/houseFlyInventory.js";
+import { buildCampfireModel } from "../generation/fixtures/campfireModel.js";
 import { randomBuildInventory } from "../generation/fixtures/randomBuildInventory.js";
-import { sandcastleInventory } from "../generation/fixtures/sandcastleInventory.js";
-import { buildSportsCarV2Model } from "../generation/fixtures/carModel.js";
 import { validateGeneratedModelShape } from "../generation/generatedModelSchema.js";
 import { validateModel } from "../generation/validator.js";
 import { exportModelToLDraw } from "../ldraw/exportLDraw.js";
 import { createBrickScene } from "./brickScene.js";
+import { promptTextForBuildSuggestion } from "./buildSuggestionPrompt.js";
 import { cameraFrameForModelSize } from "./cameraFraming.js";
 import { createCatalogueThumbnailRenderer } from "./catalogueThumbnailRenderer.js";
 import {
@@ -29,6 +24,7 @@ import {
 } from "./editorDeletion.js";
 import { STUD_LDU } from "./editorGeometry.js";
 import { createEditorHistory } from "./editorHistory.js";
+import { installFixturePreviewPicker } from "./fixturePreviewPicker.js";
 import { createIsometricSnapshotRenderer } from "./isometricSnapshotRenderer.js";
 import { nextToolAfterSelectionChange } from "./editorToolState.js";
 import { countInventoryBricks } from "./inventoryPieceCount.js";
@@ -106,12 +102,6 @@ const resultStageTimelineMap = {
 };
 
 const inventories = [
-  { id: "duck", label: "Duck demo pieces", inventory: duckInventory },
-  { id: "car", label: "Car demo pieces", inventory: carInventory },
-  { id: "daisy", label: "Daisy demo pieces", inventory: daisyInventory },
-  { id: "horse", label: "Horse demo pieces", inventory: horseInventory },
-  { id: "house-fly", label: "House fly demo pieces", inventory: houseFlyInventory },
-  { id: "sandcastle", label: "Sandcastle demo pieces", inventory: sandcastleInventory },
   { id: "random-build", label: "Random build assortment", inventory: randomBuildInventory },
 ];
 
@@ -122,7 +112,7 @@ for (const option of inventories) {
   inventorySelect.append(element);
 }
 
-inventorySelect.value = "car";
+inventorySelect.value = "random-build";
 
 let isLeftPanelCollapsed = false;
 let isRightDrawerCollapsed = false;
@@ -175,7 +165,7 @@ function collapseLeftPanelWhenEmpty() {
 }
 
 function selectedInventory() {
-  return inventories.find((entry) => entry.id === inventorySelect.value)?.inventory ?? duckInventory;
+  return inventories.find((entry) => entry.id === inventorySelect.value)?.inventory ?? randomBuildInventory;
 }
 
 function showBuildSuggestionsStatus(message) {
@@ -192,7 +182,7 @@ function showBuildSuggestions(suggestions) {
       button.className = "build-suggestion";
       button.textContent = suggestion.label;
       button.addEventListener("click", () => {
-        promptInput.value = suggestion.prompt_metadata;
+        promptInput.value = promptTextForBuildSuggestion(suggestion);
         promptInput.focus();
       });
       return button;
@@ -1264,6 +1254,11 @@ async function requestGeneration(generationRequest) {
     throw new DOMException("Generation request was superseded.", "AbortError");
   }
 
+  if (initialResult.requiresRefinement === false || initialResult.complete === true) {
+    updateTimelineStage("refinement", "skipped");
+    return initialResult;
+  }
+
   setStatusLine("Rendering isometric refinement view", { loading: true });
   const image = await isometricSnapshotRenderer.capture(
     initialResult.cleanedModel ?? initialResult.model,
@@ -1561,11 +1556,27 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-const initialModel = buildSportsCarV2Model(carInventory);
-const initialValidation = validateModel(initialModel, carInventory);
+// Removable preview-only feature: delete this installer call and its module.
+installFixturePreviewPicker({
+  form,
+  beforeElement: generateButton,
+  inventory: randomBuildInventory,
+  disabledWhen: generateButton,
+  onSelect: ({ fixture, inventory, model }) => {
+    const validation = validateModel(model, inventory);
+    showModel(model, validation, {
+      editorMode: true,
+      editorInventory: inventory,
+      onRendered: () => setStatusLine(`Fixture preview: ${fixture.label}`),
+    });
+  },
+});
+
+const initialModel = buildCampfireModel(randomBuildInventory);
+const initialValidation = validateModel(initialModel, randomBuildInventory);
 showModel(initialModel, initialValidation, {
   editorMode: true,
-  editorInventory: carInventory,
+  editorInventory: randomBuildInventory,
 });
 requestBuildSuggestions();
 
