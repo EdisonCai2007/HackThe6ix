@@ -200,7 +200,7 @@ git commit -m "feat: add inventory-safe steam locomotive"
 
 - [ ] **Step 1: Write failing piano contract tests**
 
-Assert schema validity, deterministic deep equality, validator validity, at least 110 pieces, and nonempty features for `case-base`, `curved-rim`, `soundboard`, `keyboard-bed`, `white-key`, `black-key`, `music-desk`, `leg`, `pedal`, `bench`, and `raised-lid`. Independently enforce inventory counts. Assert a black case/lid, white keys, black accidentals, brown soundboard/bench, and yellow pedals.
+Assert schema validity, deterministic deep equality, validator validity, at least 95 pieces, and nonempty features for `case-base`, `curved-rim`, `soundboard`, `keyboard-bed`, `white-key`, `black-key`, `music-desk`, `leg`, `pedal`, `bench`, and `raised-lid`. Independently enforce inventory counts. Assert a black case/lid, white keys, black accidentals, brown soundboard/bench, and yellow pedals. The final 99-piece acceptance threshold favors the cleaner all-black case silhouette established during live visual review over a higher count produced by an unwanted gray wall course.
 
 - [ ] **Step 2: Run the focused test and confirm RED**
 
@@ -373,7 +373,7 @@ export function createShowcaseSelection() {
 
 - [ ] **Step 4: Integrate local server generation before credentials**
 
-Import Task 4 APIs. Validate `showcase_id` when present. Read and validate bodies before credential checks in both JSON and stream handlers. Pass `body` to `generationCredentialError`; recognized showcases bypass credentials. At the top of `createGenerationResult`, call `generateShowcaseBuild` with `delayMs` read from `SHOWCASE_STREAM_DELAY_MS` (default `35` for streams and `0` for JSON). For suggestions, always start with the two local suggestions; without credentials return them immediately, and with credentials append provider suggestions then cap the result at five. Put both descriptors into the fixture picker with `fixedDemoInventory`.
+Import Task 4 APIs. Validate `showcase_id` when present. Read and validate bodies before credential checks in both JSON and stream handlers. Pass `body` to `generationCredentialError`; recognized showcases bypass credentials. At the top of `createGenerationResult`, call `generateShowcaseBuild` with `delayMs` read from `SHOWCASE_STREAM_DELAY_MS` (default `35` for streams and `0` for JSON). For suggestions, start with the local suggestions that validate against the requested inventory; without credentials return those compatible suggestions immediately, and with credentials append provider suggestions then cap the result at five. Put both descriptors into the fixture picker with `fixedDemoInventory`.
 
 ```js
 if (isShowcaseBuildRequest(body)) {

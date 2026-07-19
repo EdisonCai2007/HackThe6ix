@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { fixedDemoInventory } from "../../src/generation/fixtures/fixedDemoInventory.js";
+import { randomBuildInventory } from "../../src/generation/fixtures/randomBuildInventory.js";
 import {
   findShowcaseBuild,
   generateShowcaseBuild,
@@ -39,6 +40,14 @@ describe("showcase build registry", () => {
 
     suggestions[0].label = "Changed locally";
     assert.equal(SHOWCASE_BUILDS[0].label, "Scarlet Steam Locomotive");
+  });
+
+  it("only suggests showcases that the requested inventory can build", () => {
+    assert.deepEqual(
+      listShowcaseBuildSuggestions(fixedDemoInventory).map(({ showcase_id }) => showcase_id),
+      ["scarlet-steam-locomotive", "midnight-grand-piano"],
+    );
+    assert.deepEqual(listShowcaseBuildSuggestions(randomBuildInventory), []);
   });
 
   it("resolves exact ids and normalized legacy suggestion prompts", () => {

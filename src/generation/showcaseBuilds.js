@@ -48,8 +48,23 @@ function normalizedText(value) {
     : "";
 }
 
-export function listShowcaseBuildSuggestions() {
-  return SHOWCASE_BUILDS.map(({ id, label, prompt_metadata }) => ({
+function supportsInventory(showcase, inventory) {
+  try {
+    const model = showcase.buildModel(inventory);
+    const shape = validateGeneratedModelShape(model);
+
+    return shape.ok && validateModel(model, inventory).valid;
+  } catch {
+    return false;
+  }
+}
+
+export function listShowcaseBuildSuggestions(inventory) {
+  const builds = inventory === undefined
+    ? SHOWCASE_BUILDS
+    : SHOWCASE_BUILDS.filter((showcase) => supportsInventory(showcase, inventory));
+
+  return builds.map(({ id, label, prompt_metadata }) => ({
     showcase_id: id,
     label,
     prompt_metadata,

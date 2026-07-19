@@ -409,7 +409,7 @@ async function createRefinementResult(body, onProgress, { streamRefinement = fal
 
 async function createSuggestionResult(body) {
   const inventory = await resolveInventoryFromBody(body);
-  const showcaseSuggestions = listShowcaseBuildSuggestions();
+  const showcaseSuggestions = listShowcaseBuildSuggestions(inventory);
 
   if (aiCredentialError(process.env)) {
     return { ok: true, suggestions: showcaseSuggestions };
@@ -639,53 +639,57 @@ async function handleGenerateStream(request, response) {
   }
 }
 
-const server = createServer(async (request, response) => {
-  if (request.method === "OPTIONS") {
-    sendJson(request, response, 204, {});
-    return;
-  }
+export function createGenerationServer() {
+  return createServer(async (request, response) => {
+    if (request.method === "OPTIONS") {
+      sendJson(request, response, 204, {});
+      return;
+    }
 
-  if (request.method !== "POST") {
+    if (request.method !== "POST") {
+      sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
+      return;
+    }
+
+    if (request.url === "/api/generate/stream") {
+      await handleGenerateStream(request, response);
+      return;
+    }
+
+    try {
+      if (request.url === "/api/generate") {
+        await handleGenerateJson(request, response);
+        return;
+      }
+
+      if (request.url === "/api/generate/refine") {
+        await handleRefineGeneration(request, response);
+        return;
+      }
+
+      if (request.url === "/api/suggest-builds") {
+        await handleSuggestBuilds(request, response);
+        return;
+      }
+
+      if (request.url === "/api/inventory-sessions") {
+        await handleCreateInventorySession(request, response);
+        return;
+      }
+    } catch (error) {
+      sendJson(request, response, 500, {
+        ok: false,
+        stage: "server",
+        errors: [error.message],
+      });
+      return;
+    }
+
     sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
-    return;
-  }
+  });
+}
 
-  if (request.url === "/api/generate/stream") {
-    await handleGenerateStream(request, response);
-    return;
-  }
-
-  try {
-    if (request.url === "/api/generate") {
-      await handleGenerateJson(request, response);
-      return;
-    }
-
-    if (request.url === "/api/generate/refine") {
-      await handleRefineGeneration(request, response);
-      return;
-    }
-
-    if (request.url === "/api/suggest-builds") {
-      await handleSuggestBuilds(request, response);
-      return;
-    }
-
-    if (request.url === "/api/inventory-sessions") {
-      await handleCreateInventorySession(request, response);
-      return;
-    }
-  } catch (error) {
-    sendJson(request, response, 500, {
-      ok: false,
-      stage: "server",
-      errors: [error.message],
-    });
-    return;
-  }
-
-  sendJson(request, response, 404, { ok: false, errors: ["Not found."] });
-});
+const server = createGenerationServer();
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
   const logger = getRuntimeLogger();
