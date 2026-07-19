@@ -20,6 +20,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pipeline.inventory_constraints import InventoryCatalog
+
 # --- funnel thresholds (documented, not tuned against inventory ordering) ---
 # Floors sit deliberately ABOVE the 0.70 identification-acceptance threshold so
 # "safest" means clearly-accepted, not marginally-accepted.
@@ -230,16 +232,22 @@ def select_showcase(
         })
 
     strict_count = len(selected_payload)  # pieces that cleared the strict bar
-    # Best-effort fallback: if the strict funnel accepted nothing, the demo
-    # must still advance. Surface the highest-confidence IDENTIFIED pieces
-    # (real model output, real masks) up to n, flagged as lower-confidence so
-    # the UI/user treats them as "please confirm" rather than trusted.
-    if not selected_payload:
+    # Best-effort fallback: if the strict funnel cannot fill the tiny demo
+    # review, surface the highest-confidence remaining IDENTIFIED pieces
+    # (real model output, real masks) up to n.  ``strict_count`` stays separate
+    # so early-exit still expands views before accepting this fallback.
+    if len(selected_payload) < max(0, n):
+        selected_ids = {row["instance_id"] for row in selected_payload}
         backfill = sorted(
-            (c for c in candidates if c.part_id is not None and c.refs.get("rgb")),
+            (
+                c for c in candidates
+                if c.instance_id not in selected_ids
+                and c.part_id is not None
+                and c.refs.get("rgb")
+            ),
             key=lambda c: (c.top1_score, c.margin),
             reverse=True,
-        )[:max(0, n)]
+        )[:max(0, n - len(selected_payload))]
         for candidate in backfill:
             _, components = _safety_score(candidate)
             selected_payload.append({
@@ -317,6 +325,7 @@ def build_showcase(
     *,
     colors: list[str] | None = None,
     single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
+    inventory_catalog: InventoryCatalog | None = None,
 ) -> dict:
     """Extract candidates from a completed scan and run the funnel."""
     colors = colors or []
@@ -326,7 +335,18 @@ def build_showcase(
     ):
         brickognize = id_crop.get("brickognize", {})
         raw = id_crop.get("brickognize_raw", {})
-        top1, top2 = _margin_over_alternative(brickognize, raw)
+        if inventory_catalog is None:
+            top1, top2 = _margin_over_alternative(brickognize, raw)
+        else:
+            allowed = inventory_catalog.ranked_candidates(brickognize, raw)
+            brickognize = allowed[0] if allowed else {}
+            top1 = float(brickognize.get("score") or 0.0)
+            alternatives = [
+                float(row.get("score") or 0.0)
+                for row in allowed[1:]
+                if row.get("part_id") != brickognize.get("part_id")
+            ]
+            top2 = max(alternatives) if alternatives else 0.0
         support = id_crop.get("identity_support", {}) or {}
         agreement = int(support.get(brickognize.get("part_id"), 0))
         gate = id_crop.get("gate", {}) or {}
@@ -375,12 +395,14 @@ def write_showcase(
     result, output_dir, n: int = 5, *, colors: list[str] | None = None,
     scene_state_ref: str = "scene_state.json",
     single_view_min_top1: float = SINGLE_VIEW_MIN_TOP1,
+    inventory_catalog: InventoryCatalog | None = None,
 ) -> Path:
     payload = build_showcase(
         result,
         n,
         colors=colors,
         single_view_min_top1=single_view_min_top1,
+        inventory_catalog=inventory_catalog,
     )
     payload["scene_state"] = scene_state_ref  # viewer joins by instance_id
     output_dir = Path(output_dir)

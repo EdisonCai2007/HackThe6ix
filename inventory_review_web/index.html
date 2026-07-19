@@ -44,7 +44,8 @@
             <span class="eyebrow">Correct this piece</span>
             <strong id="correction-title">What LEGO piece is this?</strong>
             <label>Piece type
-              <input id="correction-part-name" autocomplete="off" placeholder="e.g. Brick 2 x 8">
+              <input id="correction-part-name" list="inventory-piece-types" autocomplete="off" placeholder="e.g. Brick 2 x 8">
+              <datalist id="inventory-piece-types"></datalist>
             </label>
             <p class="correction-help">Use the shape and stud size—for example, Brick 2 x 8.</p>
             <div class="correction-actions">
@@ -195,6 +196,6 @@
     </div>
   </dialog>
 
-  <script src="/app.js?v=12"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>

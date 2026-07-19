@@ -8,6 +8,7 @@ from pipeline.showcase import (
     build_showcase,
     select_showcase,
 )
+from pipeline.inventory_constraints import InventoryCatalog
 
 
 def _cand(instance_id, *, part_id="3001", name="Brick 2 x 4", top1=0.92,
@@ -186,6 +187,24 @@ def test_zero_selected_is_valid():
     assert out["selected"] == []
 
 
+def test_best_effort_fills_partial_strict_selection_to_requested_cap():
+    candidates = [
+        _cand(0, top1=0.94, top2=0.30),
+        _cand(1, top1=0.78, top2=0.20),
+        _cand(2, top1=0.76, top2=0.20),
+        _cand(3, top1=0.74, top2=0.20),
+    ]
+    for candidate in candidates:
+        candidate.refs["rgb"] = f"frames/{candidate.instance_id:05d}.rgb.jpg"
+
+    out = select_showcase(candidates, n=4)
+
+    assert out["strict_count"] == 1
+    assert out["selected_count"] == 4
+    assert [row["instance_id"] for row in out["selected"]] == [0, 1, 2, 3]
+    assert all(row["part_name"] == "Brick 2 x 4" for row in out["selected"])
+
+
 # --- build_showcase over a result-like object -----------------------------
 
 class _Obs:
@@ -237,6 +256,44 @@ def test_build_showcase_extracts_real_signals():
     assert piece["seg_confidence"] == 0.95
     assert piece["rgb"] == "frames/00111.rgb.jpg"
     assert piece["box_original"] == [100, 120, 300, 260]
+
+
+def test_build_showcase_uses_best_inventory_allowed_candidate(tmp_path):
+    inventory = tmp_path / "inventory.csv"
+    inventory.write_text(
+        "piece_type,color,quantity\nPlate 2 x 2,red,8\nBrick 2 x 2,blue,3\n"
+    )
+    best = _Obs(111, complete=True, color_evidence={"flags": []})
+    inst = _Inst([best, _Obs(10)], best)
+    id_crop = {
+        "brickognize": {
+            "part_id": "3039", "name": "Slope 45 2 x 2", "score": 0.94,
+        },
+        "brickognize_raw": {"candidates": [
+            {"part_id": "3039", "name": "Slope 45 2 x 2", "score": 0.94},
+            {"part_id": "3022", "name": "Plate 2 x 2", "score": 0.90},
+            {"part_id": "3003", "name": "Brick 2 x 2", "score": 0.30},
+        ]},
+        "identity_support": {"3022": 2},
+        "segmentation_confidence": 0.95,
+        "gate": {"boundary_zone": False},
+        "frame_id": 111,
+        "rgb": "frames/00111.rgb.jpg",
+        "box_original": [100, 120, 300, 260],
+        "source": "original-masked",
+        "flags": [],
+    }
+
+    out = build_showcase(
+        _Result([inst], [id_crop]), n=4, colors=["red"],
+        inventory_catalog=InventoryCatalog.load(inventory),
+    )
+
+    assert out["selected_count"] == 1
+    assert out["selected"][0]["part_name"] == "Plate 2 x 2"
+    assert out["selected"][0]["part_id"] == "3022"
+    assert out["selected"][0]["margin"] == 0.6
+    assert "Slope" not in out["selected"][0]["question"]
 
 
 def test_build_showcase_chosen_view_flag_vetoes():

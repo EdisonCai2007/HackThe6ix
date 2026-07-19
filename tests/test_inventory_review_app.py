@@ -201,6 +201,35 @@ def test_showcase_confirmation_accepts_part_without_claiming_color(tmp_path):
     assert response.json()["components"][0]["review"]["color"] == ""
 
 
+def test_showcase_confirmation_rejects_type_outside_inventory_allowlist(
+    tmp_path,
+):
+    workspace, review_path = _workspace(tmp_path)
+    document = json.loads(review_path.read_text())
+    document.update({
+        "showcase_only": True,
+        "inventory_piece_types": ["Brick 2 x 2", "Plate 2 x 2"],
+    })
+    atomic_write_json(review_path, document)
+    client = TestClient(create_app(workspace))
+
+    rejected = client.put(
+        "/api/sessions/s1/components/piece-000",
+        json=_confirmed(
+            part_id="3039", part_name="Slope 45 2 x 2", color=""
+        ),
+    )
+    accepted = client.put(
+        "/api/sessions/s1/components/piece-000",
+        json=_confirmed(part_id="3022", part_name="plate  2 X 2", color=""),
+    )
+
+    assert rejected.status_code == 422
+    assert "not present in the inventory" in rejected.json()["detail"]
+    assert accepted.status_code == 200
+    assert accepted.json()["components"][0]["review"]["part_name"] == "Plate 2 x 2"
+
+
 def test_showcase_handoff_requires_confirmation_and_writes_artifact(tmp_path):
     workspace, review_path = _workspace(tmp_path)
     document = json.loads(review_path.read_text())
@@ -439,7 +468,7 @@ def test_browser_client_is_served(tmp_path):
     index = client.get("/").text
     assert 'id="segmentation-stage"' in index
     assert 'id="export-inventory"' in index
-    assert '/app.js?v=12' in index
+    assert '/app.js?v=13' in index
     assert client.get("/app.js").headers["content-type"].startswith(
         "text/javascript"
     )
@@ -586,9 +615,12 @@ def test_confirmation_has_compact_yes_no_and_type_correction_slide(tmp_path):
     assert 'id="correction-slide"' in index
     assert 'id="correction-part-name"' in index
     assert 'placeholder="e.g. Brick 2 x 8"' in index
+    assert 'list="inventory-piece-types"' in index
+    assert 'id="inventory-piece-types"' in index
     assert "function renderCorrectionSlide" in script
     assert "function cancelCorrection" in script
     assert "function saveCorrection" in script
+    assert "inventory_piece_types" in script
     assert ".quick-confirm-actions button" in styles
     assert ".correction-mode #callout-layer" in styles
     assert "main { display: block;" in styles

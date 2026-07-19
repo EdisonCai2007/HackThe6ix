@@ -85,6 +85,8 @@ def test_fast_showcase_cli_exposes_bounded_demo_options():
     assert "--min-safe" in result.stdout
     assert "--workspace" in result.stdout
     assert "--fixed-inventory" in result.stdout
+    assert "--inventory-csv" in result.stdout
+    assert "--target TARGET" in result.stdout
 
 
 def test_selected_showcase_masks_are_cropped_and_referenced(tmp_path):

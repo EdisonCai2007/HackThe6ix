@@ -11,6 +11,8 @@ import cv2
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
+from pipeline.inventory_constraints import normalize_piece_name
+from pipeline.showcase_handoff import write_showcase_handoff
 from training.inventory_review import (
     add_manual_waypoint_component,
     add_manual_piece,
@@ -232,6 +234,23 @@ def create_app(workspace_path: Path) -> FastAPI:
                          payload: dict) -> dict:
         path, document = load_review(session_id)
         try:
+            allowed_names = document.get("inventory_piece_types", [])
+            if (
+                document.get("showcase_only")
+                and payload.get("confirmed")
+                and payload.get("included", True)
+                and allowed_names
+            ):
+                allowed = {
+                    normalize_piece_name(name): name for name in allowed_names
+                }
+                submitted = str(payload.get("part_name") or "")
+                canonical = allowed.get(normalize_piece_name(submitted))
+                if canonical is None:
+                    raise ValueError(
+                        f"{submitted!r} is not present in the inventory"
+                    )
+                payload = {**payload, "part_name": canonical}
             apply_component_review(document, component_id, payload)
         except (KeyError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
@@ -241,43 +260,10 @@ def create_app(workspace_path: Path) -> FastAPI:
     @app.post("/api/sessions/{session_id}/handoff")
     def create_handoff(session_id: str) -> dict:
         path, document = load_review(session_id)
-        if not document.get("showcase_only"):
-            raise HTTPException(
-                status_code=422, detail="handoff is only available for showcases"
-            )
-        rows = document.get("components", [])
-        if not rows or any(
-            not (row.get("review") or {}).get("confirmed") for row in rows
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="confirm every showcase piece before handoff",
-            )
-        confirmed = []
-        for row in rows:
-            review = row["review"]
-            confirmed.append({
-                "component_id": row["component_id"],
-                "part_id": review.get("part_id") or None,
-                "part_name": review.get("part_name") or "unknown brick",
-                "color": review.get("color") or None,
-                "accepted_prediction": (
-                    review.get("part_id") == row.get("prediction", {}).get("part_id")
-                    and review.get("part_name")
-                    == row.get("prediction", {}).get("part_name")
-                ),
-            })
-        handoff_path = path.parent / "handoff.json"
-        atomic_write_json(handoff_path, {
-            "schema_version": 1,
-            "session_id": document["session_id"],
-            "fixed_inventory": document.get("fixed_inventory"),
-            "confirmed_pieces": confirmed,
-        })
-        return {
-            "handoff_path": str(handoff_path),
-            "generator_url": document.get("generator_url"),
-        }
+        try:
+            return write_showcase_handoff(path, document)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.post("/api/sessions/{session_id}/manual-pieces")
     def create_manual_piece(session_id: str, payload: dict) -> dict:

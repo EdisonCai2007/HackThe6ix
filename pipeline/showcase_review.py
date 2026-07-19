@@ -7,6 +7,7 @@ from pathlib import Path
 
 import cv2
 
+from pipeline.inventory_constraints import InventoryCatalog
 from training.inventory_review import atomic_write_json, new_review_document
 
 
@@ -16,14 +17,14 @@ def write_showcase_workspace(
     output_dir: Path,
     fixed_inventory: Path | None,
     generator_url: str | None = None,
+    inventory_csv: Path | None = None,
 ) -> Path:
     showcase_path = Path(showcase_path).resolve()
     session_dir = Path(session_dir).resolve()
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     selected = json.loads(showcase_path.read_text()).get("selected", [])
-    if not selected:
-        raise ValueError("showcase contains no safe pieces to confirm")
+    catalog = InventoryCatalog.load(inventory_csv) if inventory_csv else None
 
     source_frames = {}
     components = []
@@ -92,13 +93,19 @@ def write_showcase_workspace(
     document.update({
         "showcase_only": True,
         "run_dir": str(output_dir),
-        "primary_frame_id": int(components[0]["source_anchor"]["frame_id"]),
+        "primary_frame_id": (
+            int(components[0]["source_anchor"]["frame_id"])
+            if components else None
+        ),
         "source_frames": list(source_frames.values()),
         "draft_component_count": len(components),
         "fixed_inventory": (
             None if fixed_inventory is None else str(Path(fixed_inventory).resolve())
         ),
         "generator_url": generator_url,
+        "inventory_piece_types": (
+            list(catalog.allowed_names) if catalog is not None else []
+        ),
     })
     review_path = output_dir / "review.json"
     atomic_write_json(review_path, document)

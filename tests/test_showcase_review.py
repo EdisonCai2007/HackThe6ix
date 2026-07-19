@@ -86,3 +86,52 @@ def test_adapter_abstains_from_unreliable_color(tmp_path):
     payload = json.loads((workspace.parent / "review.json").read_text())
 
     assert payload["components"][0]["prediction"]["color"] == ""
+
+
+def test_adapter_writes_empty_workspace_for_native_error_screen(tmp_path):
+    session = tmp_path / "session"
+    session.mkdir()
+    analysis = session / "analysis"
+    analysis.mkdir()
+    showcase = analysis / "showcase.json"
+    showcase.write_text(json.dumps({"selected_count": 0, "selected": []}))
+
+    workspace = write_showcase_workspace(
+        showcase, session, tmp_path / "review", fixed_inventory=None
+    )
+
+    document = json.loads((workspace.parent / "review.json").read_text())
+    assert document["showcase_only"] is True
+    assert document["components"] == []
+    assert document["source_frames"] == []
+
+
+def test_adapter_persists_inventory_piece_types_for_all_confirmation_uis(
+    tmp_path,
+):
+    session = tmp_path / "session"
+    frames = session / "frames"
+    frames.mkdir(parents=True)
+    cv2.imwrite(str(frames / "00001.rgb.jpg"), np.full((20, 30, 3), 80, np.uint8))
+    analysis = session / "analysis"
+    analysis.mkdir()
+    cv2.imwrite(str(analysis / "mask.png"), np.full((10, 10), 255, np.uint8))
+    showcase = analysis / "showcase.json"
+    showcase.write_text(json.dumps({"selected": [{
+        "instance_id": 0, "part_id": "3022", "part_name": "Plate 2 x 2",
+        "top1_score": 0.9, "best_frame_id": 1,
+        "rgb": "frames/00001.rgb.jpg", "box_original": [0, 0, 10, 10],
+        "mask": "mask.png",
+    }]}))
+    inventory = tmp_path / "inventory.csv"
+    inventory.write_text(
+        "piece_type,color,quantity\nPlate 2 x 2,red,3\nBrick 2 x 4,blue,2\n"
+    )
+
+    workspace = write_showcase_workspace(
+        showcase, session, tmp_path / "review", inventory,
+        inventory_csv=inventory,
+    )
+
+    document = json.loads((workspace.parent / "review.json").read_text())
+    assert document["inventory_piece_types"] == ["Brick 2 x 4", "Plate 2 x 2"]

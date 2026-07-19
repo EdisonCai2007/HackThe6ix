@@ -91,6 +91,12 @@ async function refreshOverlapCandidates() {
 async function loadSession(sessionId) {
   state.sessionId = sessionId;
   state.document = await api(`/api/sessions/${encodeURIComponent(sessionId)}`);
+  const pieceTypes = $("inventory-piece-types");
+  pieceTypes.replaceChildren(...(state.document.inventory_piece_types || []).map((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    return option;
+  }));
   document.body.classList.toggle("showcase-mode", Boolean(
     state.document.showcase_only
   ));

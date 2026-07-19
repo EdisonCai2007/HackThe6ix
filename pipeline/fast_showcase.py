@@ -87,14 +87,16 @@ def run_fast_showcase(
     manifest_path: Path,
     output_dir: Path,
     *,
-    target: int = 5,
+    target: int = 4,
     min_safe: int = 3,
     max_views: int = 3,
     identify_limit: int = 12,
     weights: Path = Path("models/lego_seg.pt"),
+    inventory_csv: Path | None = None,
 ) -> Path:
     """Run bounded authoritative attempts and persist the normal UI artifacts."""
     from pipeline.multiview import consensus_color, scan_manifest
+    from pipeline.inventory_constraints import InventoryCatalog
     from pipeline.scene_state import write_scene_state
     from pipeline.segdetect import YoloSegModel
     from pipeline.showcase import build_showcase, write_showcase
@@ -105,6 +107,10 @@ def run_fast_showcase(
     manifest = json.loads(manifest_path.read_text())
     session_dir = Path(manifest["session_dir"])
     model = YoloSegModel(weights=weights)
+    inventory_catalog = (
+        None if inventory_csv is None else InventoryCatalog.load(inventory_csv)
+    )
+    target = min(4, max(0, int(target)))
     events_path = output_dir / "fast-showcase-events.jsonl"
     final_result = None
     final_payload = {"selected_count": 0, "selected": []}
@@ -152,6 +158,7 @@ def run_fast_showcase(
             target,
             colors=colors,
             single_view_min_top1=0.85,
+            inventory_catalog=inventory_catalog,
         )
         emit(
             "attempt_complete",
@@ -181,6 +188,7 @@ def run_fast_showcase(
         colors=colors,
         scene_state_ref=scene_path.name,
         single_view_min_top1=0.85,
+        inventory_catalog=inventory_catalog,
     )
     payload = json.loads(showcase_path.read_text())
     write_selected_masks(final_result, payload, output_dir)

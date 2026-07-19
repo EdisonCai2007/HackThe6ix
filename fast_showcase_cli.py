@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--target", type=int, default=5)
+    parser.add_argument("--target", type=int, default=4)
     parser.add_argument("--min-safe", type=int, default=3)
     parser.add_argument("--max-views", type=int, default=3)
     parser.add_argument("--identify-limit", type=int, default=12)
@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> None:
         help="write a disposable compact-confirmation workspace here",
     )
     parser.add_argument("--fixed-inventory", type=Path)
+    parser.add_argument("--inventory-csv", type=Path)
     parser.add_argument("--generator-url")
     parser.add_argument(
         "--weights", type=Path,
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> None:
         max_views=args.max_views,
         identify_limit=args.identify_limit,
         weights=args.weights,
+        inventory_csv=args.inventory_csv,
     )
     print(f"SHOWCASE_READY {path}", flush=True)
     if args.workspace is not None:
@@ -47,8 +49,9 @@ def main(argv: list[str] | None = None) -> None:
             path,
             args.session,
             args.workspace,
-            args.fixed_inventory,
+            args.fixed_inventory or args.inventory_csv,
             generator_url=args.generator_url,
+            inventory_csv=args.inventory_csv,
         )
         print(f"WORKSPACE_READY {workspace}", flush=True)
 
