@@ -1,7 +1,7 @@
 import { MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
 
 const GENERATION_MAX_TOKENS = 10000;
-const PLACEMENT_GENERATION_MAX_TOKENS = 30000;
+export const PLACEMENT_GENERATION_MAX_TOKENS = 40000;
 const JSON_GENERATION_CONFIG = {
   maxOutputTokens: GENERATION_MAX_TOKENS,
   responseMimeType: "application/json",
@@ -278,17 +278,22 @@ export function buildBuildSuggestionsPrompt({ inventory, model }) {
       "You suggest build ideas for a local LEGO generation app from the confirmed inventory.",
       "Return exactly one JSON object matching generationConfig.responseSchema.",
       "No markdown, no commentary, and no text before or after the JSON object.",
-      "Return at most 5 suggestions.",
+      "Return exactly 5 suggestions when the inventory can support 5 meaningfully different ideas; otherwise return the feasible count.",
       "Each suggestion must describe one free-standing connected LEGO object, never a scene, diorama, landscape, or multi-object set.",
-      "Favor distinctive realistic everyday objects: household items, tools, food, furniture, signs, simple animals, basic vehicles, or common fixtures.",
-      "Never use generic cargo blocks, cubes, columns, towers, slabs, abstract structures, and speculative add-ons like boosters, propellers, glowing engines, weapons, or impossible moving parts.",
-      "Each label must be short and specific; avoid color adjectives and prefer Mailbox, Coffee Mug, Fire Hydrant, or Snack Cart over generic labels.",
+      "Make the menu diverse: no two suggestions should share the same object family, silhouette class, or primary functional feature unless the inventory is too constrained.",
+      "Make each suggestion visibly responsive to this specific inventory, not a generic LEGO prior.",
+      "Each suggestion must rely on a different mix of inventory signals, such as plate-vs-brick ratio, long-vs-short parts, repeated part dimensions, abundant colors, scarce colors, or color contrasts.",
+      "Favor distinctive real-world single objects with clear silhouettes and recognizable functional details.",
+      "Prioritize subjects whose identity can be expressed by the provided part shapes and quantities, not by exact color.",
+      "Use color as a secondary creative cue: when a color is abundant, scarce, or high-contrast, prefer objects where that palette helps recognition, but never choose an object that is only color-matched and geometrically weak.",
+      "Never use generic geometric masses, abstract structures, scenes, speculative devices, weapons, impossible moving parts, or builds that require unavailable specialty parts.",
+      "Each label must be short, specific, and object-like; avoid color adjectives, vague category names, and made-up futuristic branding.",
       "Each prompt_metadata value must be a concise user-ready generation prompt that names concrete features and silhouette for that one object.",
       "For prompt_metadata, use shape first: describe the broad form, whether the object reads as flat or bulky, and the recognizable details.",
       "For prompt_metadata, do not include color words, color names, or palette guidance; the builder must choose colors from inventory availability instead of treating metadata colors as strict requirements.",
       "For prompt_metadata, avoid size adjectives.",
       "For prompt_metadata, Do not mention specific bricks, part IDs, dimensions, piece counts, or construction instructions; the planner decides exact LEGO parts and layout.",
-      "Each inventory_reasoning value must explain how the available part shapes, flat-or-bulky profile, quantities, and dimensions support the object; consider color last as a weak tie-breaker only.",
+      "Each inventory_reasoning value must name at least two concrete inventory signals and explain how the available part shapes, flat-or-bulky profile, quantities, dimensions, and color distribution support the object.",
       "Use only capabilities supported by the provided inventory; do not claim unavailable parts or colors.",
       "Use inventory shape heuristics before color: taller-piece inventory should favor bulky silhouettes, while flatter-piece inventory should favor flatter silhouettes; color alone is never enough to choose an object.",
       "In the inventory summary, height_layers 3 means a brick and height_layers 1 means a plate.",
@@ -398,6 +403,7 @@ export function buildJsonRepairPrompt({
   errorMessage,
   model,
   responseSchema = STRUCTURE_PLAN_SCHEMA,
+  maxOutputTokens = GENERATION_MAX_TOKENS,
 }) {
   return buildGeminiJsonRequest({
     model,
@@ -414,6 +420,7 @@ export function buildJsonRepairPrompt({
       malformed_json_text: malformedText,
     },
     responseSchema,
+    maxOutputTokens,
   });
 }
 
@@ -505,5 +512,6 @@ export function buildPlacementInventoryRepairPrompt({
       invalid_generated_model: invalidModel,
     },
     responseSchema: GENERATED_MODEL_SCHEMA,
+    maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
   });
 }

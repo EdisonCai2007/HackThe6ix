@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+import { randomBuildInventory as duckInventory } from "../../src/generation/fixtures/randomBuildInventory.js";
 import { generateBuildSuggestions, generateModel, refineModel } from "../../src/generation/service.js";
 
 const TEST_STRUCTURE_MODEL = "env-structure-model";
@@ -18,7 +18,7 @@ const structurePlan = {
       name: "body",
       visual_goal: "Yellow rectangular body",
       priority: "required",
-      preferred_colors: ["yellow"],
+      preferred_colors: ["green"],
       approximate_piece_budget: 1,
     },
   ],
@@ -26,9 +26,9 @@ const structurePlan = {
     {
       feature: "body",
       allowed_part_ids: ["3001"],
-      allowed_color_ids: ["14"],
+      allowed_color_ids: ["2"],
       max_pieces: 1,
-      notes: "Use a yellow 2x4 brick.",
+      notes: "Use a green 2x4 brick.",
     },
   ],
   build_strategy: {
@@ -46,7 +46,7 @@ const validModel = {
   prompt: "build me a tiny duck",
   piece_count: 1,
   dimensions: { width_studs: 2, depth_studs: 4, height_layers: 3 },
-  created_from_inventory_id: "duck-demo",
+  created_from_inventory_id: "random-build-assortment",
   generator_version: "gemini-two-stage-v1",
   bricks: [
     {
@@ -54,8 +54,8 @@ const validModel = {
       part_id: "3001",
       ldraw_id: "3001.dat",
       label: "2x4 brick",
-      color_id: "14",
-      color_name: "yellow",
+      color_id: "2",
+      color_name: "green",
       position: { x: 0, y: 0, z: 0 },
       rotation: 0,
       feature: "body",
@@ -82,9 +82,9 @@ const missingInventoryAndFloatingModel = {
     {
       ...validModel.bricks[0],
       id: "floating-body",
-      part_id: "3023",
-      ldraw_id: "3023.dat",
-      label: "1x2 plate",
+      part_id: "3623",
+      ldraw_id: "3623.dat",
+      label: "1x3 plate",
       color_id: "15",
       color_name: "white",
       position: { x: 0, y: 0, z: 3 },
@@ -114,13 +114,40 @@ const unsupportedPartAndFloatingModel = {
   ],
 };
 
+const offGridModel = {
+  ...validModel,
+  bricks: [
+    {
+      ...validModel.bricks[0],
+      position: { x: 0.5, y: 0, z: 0 },
+    },
+  ],
+};
+
+const offGridPatch = {
+  operations: [
+    { type: "move", id: "body-1", position: { x: 0, y: 0, z: 0 } },
+  ],
+};
+
+const stillOffGridPatch = {
+  operations: [
+    { type: "move", id: "body-1", position: { x: 0.5, y: 0, z: 0 } },
+  ],
+};
+
 function fakeClient(contents) {
   const calls = [];
   const metadataCalls = [];
+  const serviceEvents = [];
 
   return {
     calls,
     metadataCalls,
+    serviceEvents,
+    logServiceEvent(event) {
+      serviceEvents.push(event);
+    },
     async complete(request, metadata) {
       calls.push(request);
       metadataCalls.push(metadata);
@@ -136,15 +163,6 @@ function generateTestModel(options) {
     repairModel: TEST_REPAIR_MODEL,
     ...options,
   });
-}
-
-function requestText(request) {
-  return [
-    ...(request.systemInstruction?.parts ?? []),
-    ...(request.contents ?? []).flatMap((content) => content.parts),
-  ]
-    .map((part) => part.text)
-    .join("\n");
 }
 
 describe("generateModel", () => {
@@ -173,6 +191,39 @@ describe("generateModel", () => {
     assert.equal(result.ok, true);
     assert.equal(events.some((event) => event.type === "brick" && event.phase === "placement"), true);
   });
+
+  it("repairs truncated streamed placement JSON with the generated model schema", async () => {
+    const calls = [];
+    const metadataCalls = [];
+    const client = {
+      async complete(request, metadata) {
+        calls.push(request);
+        metadataCalls.push(metadata);
+
+        if (request.model === TEST_STRUCTURE_MODEL) return JSON.stringify(structurePlan);
+        return JSON.stringify(validModel);
+      },
+      async *streamWithMetadata() {
+        yield { text: JSON.stringify(validModel).slice(0, 120) };
+      },
+    };
+
+    const result = await generateTestModel({
+      userPrompt: "build me a tiny duck",
+      inventory: duckInventory,
+      targetPieceCount: 2,
+      generationClient: client,
+      streamPlacement: true,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 2);
+    assert.equal(metadataCalls[1].stage, "placement_repair");
+    assert.equal(calls[1].generationConfig.maxOutputTokens, 40000);
+    assert.equal(calls[1].generationConfig.responseSchema.properties.bricks.type, "array");
+    assert.equal(calls[1].generationConfig.responseSchema.properties.primary_object, undefined);
+  });
+
   it("runs structure, placement, shape validation, and model validation", async () => {
     const client = fakeClient([JSON.stringify(structurePlan), JSON.stringify(validModel)]);
 
@@ -259,9 +310,13 @@ describe("generateModel", () => {
     assert.equal(result.ok, false);
     assert.equal(result.stage, "structure_parse");
     assert.match(result.errors[0].message, /Invalid structure plan JSON/);
+    assert.equal(client.serviceEvents.length, 1);
+    assert.equal(client.serviceEvents[0].type, "json_parse_failure");
+    assert.equal(client.serviceEvents[0].stage, "structure_parse");
+    assert.equal(client.serviceEvents[0].label, "Structure JSON parse");
   });
 
-  it("repairs malformed structure JSON once before failing generation", async () => {
+  it("does not hide malformed structure JSON behind a fixture repair", async () => {
     const client = fakeClient([
       '{"model_name":"Tiny Duck",.',
       JSON.stringify(structurePlan),
@@ -274,13 +329,10 @@ describe("generateModel", () => {
       generationClient: client,
     });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.structurePlan.model_name, "Tiny Duck");
-    assert.equal(client.calls.length, 3);
+    assert.equal(result.ok, false);
+    assert.equal(result.stage, "structure_parse");
+    assert.equal(client.calls.length, 1);
     assert.equal(client.calls[0].model, TEST_STRUCTURE_MODEL);
-    assert.equal(client.calls[1].model, TEST_REPAIR_MODEL);
-    assert.equal(client.calls[2].model, TEST_PLACEMENT_MODEL);
-    assert.match(requestText(client.calls[1]), /repair malformed JSON/i);
   });
 
   it("returns shape errors before validator when placement JSON is malformed", async () => {
@@ -300,7 +352,7 @@ describe("generateModel", () => {
     assert.equal(result.errors.some((error) => error.field.includes("part_id")), true);
   });
 
-  it("repairs malformed placement JSON once before shape validation", async () => {
+  it("returns malformed buffered placement JSON without fixture repair", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
       '{"model_name":"Tiny Duck",.',
@@ -313,16 +365,20 @@ describe("generateModel", () => {
       generationClient: client,
     });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.model.model_name, "Tiny Duck");
-    assert.equal(client.calls.length, 3);
+    assert.equal(result.ok, false);
+    assert.equal(result.stage, "placement_parse");
+    assert.equal(client.calls.length, 2);
     assert.equal(client.calls[0].model, TEST_STRUCTURE_MODEL);
     assert.equal(client.calls[1].model, TEST_PLACEMENT_MODEL);
-    assert.equal(client.calls[2].model, TEST_REPAIR_MODEL);
-    assert.match(requestText(client.calls[2]), /repair malformed JSON/i);
+    assert.equal(client.serviceEvents.length, 1);
+    assert.equal(client.serviceEvents[0].type, "json_parse_failure");
+    assert.equal(client.serviceEvents[0].source, "generation_service");
+    assert.equal(client.serviceEvents[0].stage, "placement_parse");
+    assert.equal(client.serviceEvents[0].label, "Placement JSON parse");
+    assert.match(client.serviceEvents[0].errors[0].message, /Invalid placement model JSON/);
   });
 
-  it("cleans unsupported generated placements before asking AI to repair", async () => {
+  it("returns locally cleaned generated placements without refinement", async () => {
     const invalidModel = {
       ...validModel,
       bricks: [
@@ -350,12 +406,21 @@ describe("generateModel", () => {
     assert.equal(result.removedBricks.length, 1);
     assert.equal(result.removedBricks[0].id, "body-1");
     assert.equal(result.removedBricks[0].reason, "unsupported_part");
-    assert.equal(client.calls.length, 3);
-    assert.match(requestText(client.calls[2]), /unsupported_part/);
-    assert.match(requestText(client.calls[2]), /removed_bricks/);
+    assert.equal(result.stage, "complete");
+    assert.equal(result.complete, true);
+    assert.equal(result.requiresRefinement, false);
+    assert.equal(result.model.bricks.length, 0);
+    assert.equal(result.validation.valid, true);
+    assert.equal(result.repair.outcome, "local_deterministic_valid");
+    assert.equal(client.calls.length, 2);
+    assert.equal(client.serviceEvents.length, 1);
+    assert.equal(client.serviceEvents[0].type, "local_deterministic_repair");
+    assert.equal(client.serviceEvents[0].repairKind, "local_deterministic_repair");
+    assert.deepEqual(client.serviceEvents[0].removedBrickIds, ["body-1"]);
+    assert.deepEqual(client.serviceEvents[0].removedReasons, ["unsupported_part"]);
   });
 
-  it("uses pruned cleanup context when unsupported inventory and buildability errors are mixed", async () => {
+  it("returns pruned cleanup context when unsupported inventory and buildability errors are mixed", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
       JSON.stringify(unsupportedPartAndFloatingModel),
@@ -369,19 +434,18 @@ describe("generateModel", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.removedBricks.length, 1);
+    assert.equal(result.removedBricks.length, 2);
     assert.equal(result.removedBricks[0].id, "unsupported-accent");
     assert.equal(result.removedBricks[0].reason, "unsupported_part");
-    assert.equal(client.calls.length, 3);
-
-    const repairText = requestText(client.calls[2]);
-    assert.match(repairText, /floating-body/);
-    assert.match(repairText, /unsupported-accent/);
-    assert.match(repairText, /pruned_generated_model/);
-    assert.match(repairText, /removed_bricks/);
+    assert.equal(result.removedBricks[1].id, "floating-body");
+    assert.equal(result.removedBricks[1].reason, "floating_brick");
+    assert.equal(result.model.bricks.length, 0);
+    assert.equal(result.validation.valid, true);
+    assert.equal(result.requiresRefinement, false);
+    assert.equal(client.calls.length, 2);
   });
 
-  it("repairs buildability validation errors once before returning success", async () => {
+  it("removes obvious floating geometry locally before asking AI", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
       JSON.stringify(floatingModel),
@@ -395,22 +459,19 @@ describe("generateModel", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.model.bricks[0].position.z, 0);
+    assert.equal(result.stage, "complete");
+    assert.equal(result.model.bricks.length, 0);
     assert.equal(result.validation.valid, true);
-    assert.equal(client.calls.length, 3);
+    assert.equal(client.calls.length, 2);
     assert.equal(client.calls[0].model, TEST_STRUCTURE_MODEL);
     assert.equal(client.calls[1].model, TEST_PLACEMENT_MODEL);
-    assert.equal(client.calls[2].model, TEST_REPAIR_MODEL);
-    assert.match(requestText(client.calls[2]), /repair a LEGO GeneratedModel/i);
-    assert.match(requestText(client.calls[2]), /floating_brick/);
   });
 
-  it("repairs malformed validation repair JSON once before returning success", async () => {
+  it("repairs invalid placement with an AI patch before full-model refinement", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
-      JSON.stringify(floatingModel),
-      '{"model_name":"Tiny Duck",.',
-      JSON.stringify(validModel),
+      JSON.stringify(offGridModel),
+      JSON.stringify(offGridPatch),
     ]);
 
     const result = await generateTestModel({
@@ -420,22 +481,148 @@ describe("generateModel", () => {
     });
 
     assert.equal(result.ok, true);
+    assert.equal(result.stage, "complete");
+    assert.equal(result.complete, true);
+    assert.equal(result.requiresRefinement, false);
     assert.equal(result.validation.valid, true);
-    assert.equal(client.calls.length, 4);
+    assert.deepEqual(result.model.bricks[0].position, { x: 0, y: 0, z: 0 });
+    assert.equal(result.repair.outcome, "ai_patch_repair_valid");
+    assert.equal(client.calls.length, 3);
     assert.equal(client.calls[2].model, TEST_REPAIR_MODEL);
-    assert.equal(client.calls[3].model, TEST_REPAIR_MODEL);
-    assert.match(requestText(client.calls[2]), /repair a LEGO GeneratedModel/i);
-    assert.match(requestText(client.calls[3]), /repair malformed JSON/i);
-    assert.match(requestText(client.calls[3]), /placement validation repair model/);
     assert.deepEqual(client.metadataCalls.map((metadata) => metadata.stage), [
       "structure_generate",
       "placement_generate",
-      "validation_repair",
-      "validation_repair_parse",
+      "patch_repair",
     ]);
+    assert.equal(client.metadataCalls[2].repairKind, "ai_patch_repair");
+    assert.equal(client.calls[2].generationConfig.responseSchema.properties.bricks, undefined);
   });
 
-  it("repairs inventory validation errors before buildability errors", async () => {
+  it("falls back to full-model refinement after malformed patch repair attempts", async () => {
+    const client = fakeClient([
+      JSON.stringify(structurePlan),
+      JSON.stringify(offGridModel),
+      "not json",
+      '{"operations":',
+    ]);
+
+    const result = await generateTestModel({
+      userPrompt: "build me a duck",
+      inventory: duckInventory,
+      generationClient: client,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stage, "awaiting_refinement");
+    assert.equal(result.complete, false);
+    assert.equal(result.requiresRefinement, true);
+    assert.equal(result.validation.valid, false);
+    assert.equal(client.calls.length, 4);
+    assert.deepEqual(client.metadataCalls.map((metadata) => metadata.stage), [
+      "structure_generate",
+      "placement_generate",
+      "patch_repair",
+      "patch_retry",
+    ]);
+    assert.equal(client.calls[3].generationConfig.maxOutputTokens, 1500);
+    assert.equal(
+      client.serviceEvents.filter((event) => event.type === "json_parse_failure").length,
+      2,
+    );
+    assert.equal(
+      client.serviceEvents.some((event) => event.type === "full_model_fallback"),
+      true,
+    );
+  });
+
+  it("falls back to full-model refinement after invalid patch repair attempts", async () => {
+    const client = fakeClient([
+      JSON.stringify(structurePlan),
+      JSON.stringify(offGridModel),
+      JSON.stringify(stillOffGridPatch),
+      JSON.stringify(stillOffGridPatch),
+    ]);
+
+    const result = await generateTestModel({
+      userPrompt: "build me a duck",
+      inventory: duckInventory,
+      generationClient: client,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stage, "awaiting_refinement");
+    assert.equal(result.requiresRefinement, true);
+    assert.equal(result.validation.valid, false);
+    assert.equal(client.calls.length, 4);
+    assert.equal(
+      client.serviceEvents.filter((event) => event.reason === "patched_model_invalid").length,
+      2,
+    );
+    assert.equal(
+      client.serviceEvents.find((event) => event.type === "full_model_fallback")?.reason,
+      "patch_repair_failed",
+    );
+  });
+
+  it("does not fall back to full-model refinement when the patch retry succeeds", async () => {
+    const client = fakeClient([
+      JSON.stringify(structurePlan),
+      JSON.stringify(offGridModel),
+      "not json",
+      JSON.stringify(offGridPatch),
+    ]);
+
+    const result = await generateTestModel({
+      userPrompt: "build me a duck",
+      inventory: duckInventory,
+      generationClient: client,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stage, "complete");
+    assert.equal(result.requiresRefinement, false);
+    assert.equal(result.validation.valid, true);
+    assert.equal(result.repair.outcome, "ai_patch_retry_valid");
+    assert.equal(client.calls.length, 4);
+    assert.deepEqual(client.metadataCalls.map((metadata) => metadata.stage), [
+      "structure_generate",
+      "placement_generate",
+      "patch_repair",
+      "patch_retry",
+    ]);
+    assert.equal(
+      client.serviceEvents.some((event) => event.type === "full_model_fallback"),
+      false,
+    );
+  });
+
+  it("normal repair no longer requires AI to emit all bricks", async () => {
+    const client = fakeClient([
+      JSON.stringify(structurePlan),
+      JSON.stringify(offGridModel),
+      JSON.stringify({
+        operations: [
+          { op: "move", id: "body-1", position: { x: 0, y: 0, z: 0 } },
+        ],
+      }),
+    ]);
+
+    const result = await generateTestModel({
+      userPrompt: "build me a duck",
+      inventory: duckInventory,
+      generationClient: client,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.validation.valid, true);
+    assert.equal(result.model.bricks.length, 1);
+    assert.equal(result.model.bricks[0].id, "body-1");
+    assert.equal(result.model.bricks[0].label, "2x4 brick");
+    assert.equal(result.repair.patchRepair.operationCount, 1);
+    assert.equal(client.calls.length, 3);
+  });
+
+  it("cleans inventory validation errors before returning the initial result", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
       JSON.stringify(missingInventoryAndFloatingModel),
@@ -452,17 +639,15 @@ describe("generateModel", () => {
     assert.equal(result.validation.valid, true);
     assert.equal(result.removedBricks.length, 1);
     assert.equal(result.removedBricks[0].reason, "inventory_missing");
-    assert.equal(client.calls.length, 3);
-    assert.match(requestText(client.calls[2]), /repair a LEGO GeneratedModel/i);
-    assert.match(requestText(client.calls[2]), /removed_bricks/);
-    assert.match(requestText(client.calls[2]), /pruned_generated_model/);
+    assert.equal(result.requiresRefinement, false);
+    assert.equal(client.calls.length, 2);
   });
 
-  it("emits a draft event for schema-valid placement before validation repair", async () => {
+  it("emits cleaned and patched draft events during patch repair", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
-      JSON.stringify(floatingModel),
-      JSON.stringify(validModel),
+      JSON.stringify(offGridModel),
+      JSON.stringify(offGridPatch),
     ]);
     const events = [];
 
@@ -478,12 +663,13 @@ describe("generateModel", () => {
       events
         .filter((event) => event.type === "draft")
         .map((event) => event.stage),
-      ["placement_draft"],
+      ["cleaned_placement_draft", "patched_placement_draft"],
     );
-    assert.equal(events.find((event) => event.type === "draft").model.bricks[0].id, "floating-body");
+    assert.equal(events.find((event) => event.stage === "cleaned_placement_draft").validation.valid, false);
+    assert.equal(events.find((event) => event.stage === "patched_placement_draft").validation.valid, true);
   });
 
-  it("cleans illegal inventory before asking AI to repair buildability", async () => {
+  it("cleans illegal inventory before exposing the result model", async () => {
     const prunedValidModel = {
       ...validModel,
       bricks: [],
@@ -504,16 +690,11 @@ describe("generateModel", () => {
     assert.equal(result.ok, true);
     assert.equal(result.removedBricks.length, 1);
     assert.equal(result.removedBricks[0].reason, "inventory_missing");
-    assert.equal(client.calls.length, 3);
-
-    const repairText = requestText(client.calls[2]);
-    assert.match(repairText, /removed_bricks/);
-    assert.match(repairText, /pruned_generated_model/);
-    assert.match(repairText, /floating-body/);
-    assert.notDeepEqual(result.model, prunedValidModel);
+    assert.equal(client.calls.length, 2);
+    assert.deepEqual(result.model, prunedValidModel);
   });
 
-  it("falls back to a valid pruned model when AI repair fails", async () => {
+  it("returns a valid pruned model without refinement", async () => {
     const invalidInventoryOnlyModel = {
       ...validModel,
       bricks: [
@@ -521,9 +702,9 @@ describe("generateModel", () => {
         {
           ...validModel.bricks[0],
           id: "illegal-extra",
-          part_id: "3023",
-          ldraw_id: "3023.dat",
-          label: "1x2 plate",
+          part_id: "3623",
+          ldraw_id: "3623.dat",
+          label: "1x3 plate",
           color_id: "15",
           color_name: "white",
           position: { x: 5, y: 0, z: 0 },
@@ -549,11 +730,13 @@ describe("generateModel", () => {
     assert.equal(result.validation.valid, true);
     assert.equal(result.model.bricks.length, 1);
     assert.equal(result.model.bricks[0].id, "body-1");
-    assert.equal(result.repaired, false);
+    assert.equal(result.stage, "complete");
+    assert.equal(result.requiresRefinement, false);
+    assert.equal(client.calls.length, 2);
     assert.equal(result.removedBricks[0].id, "illegal-extra");
   });
 
-  it("emits seven timeline stages and skips repairs when JSON is valid", async () => {
+  it("emits the initial generation timeline when JSON is valid", async () => {
     const client = fakeClient([JSON.stringify(structurePlan), JSON.stringify(validModel)]);
     const events = [];
 
@@ -578,12 +761,7 @@ describe("generateModel", () => {
         "validation",
       ],
     );
-    assert.deepEqual(
-      events
-        .filter((event) => event.status === "skipped")
-        .map((event) => event.stage),
-      ["structure_repair", "placement_repair", "validation_repair"],
-    );
+    assert.equal(events.some((event) => event.status === "skipped"), false);
     assert.deepEqual(
       events
         .filter((event) => event.status === "complete")
@@ -598,7 +776,7 @@ describe("generateModel", () => {
     );
   });
 
-  it("marks placement repair failed when repaired placement JSON is still invalid", async () => {
+  it("marks placement parsing failed when buffered placement JSON is invalid", async () => {
     const client = fakeClient([
       JSON.stringify(structurePlan),
       "We need to place the body first.",
@@ -617,13 +795,13 @@ describe("generateModel", () => {
     assert.equal(result.stage, "placement_parse");
     assert.equal(
       events.some(
-        (event) => event.stage === "placement_repair" && event.status === "failed",
+        (event) => event.stage === "placement_parse" && event.status === "failed",
       ),
       true,
     );
   });
 
-  it("marks parse complete when malformed JSON is repaired successfully", async () => {
+  it("marks structure parsing failed when malformed JSON is returned", async () => {
     const client = fakeClient([
       '{"model_name":"Tiny Duck",.',
       JSON.stringify(structurePlan),
@@ -638,23 +816,60 @@ describe("generateModel", () => {
       onProgress: (event) => events.push(event),
     });
 
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, false);
     assert.deepEqual(
       events
         .filter((event) => event.stage === "structure_parse")
         .map((event) => event.status),
-      ["running", "complete"],
+      ["running", "failed"],
     );
     assert.deepEqual(
       events
         .filter((event) => event.stage === "structure_repair")
         .map((event) => event.status),
-      ["running", "complete"],
+      [],
     );
   });
 });
 
 describe("refineModel", () => {
+  it("logs parse failure and full-model fallback for malformed refinement JSON", async () => {
+    const serviceEvents = [];
+    const client = {
+      serviceEvents,
+      logServiceEvent(event) {
+        serviceEvents.push(event);
+      },
+      async complete() {
+        return "not json";
+      },
+    };
+
+    const result = await refineModel({
+      userPrompt: "build me a tiny duck",
+      inventory: duckInventory,
+      targetPieceCount: 2,
+      structurePlan,
+      originalModel: validModel,
+      generationClient: client,
+      refinementModel: TEST_REPAIR_MODEL,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.refinement.outcome, "cleaned_initial_parse_fallback");
+
+    const parseEvent = serviceEvents.find((event) => event.type === "json_parse_failure");
+    assert.equal(parseEvent.stage, "refinement_parse");
+    assert.equal(parseEvent.label, "Refinement JSON parse");
+    assert.match(parseEvent.errors[0].message, /Invalid refinement model JSON/);
+
+    const fallbackEvent = serviceEvents.find((event) => event.type === "full_model_fallback");
+    assert.equal(fallbackEvent.repairKind, "full_model_fallback");
+    assert.equal(fallbackEvent.reason, "refinement_json_parse_failed");
+    assert.equal(fallbackEvent.outcome, "cleaned_initial_parse_fallback");
+    assert.equal(fallbackEvent.cleanedInitialValid, true);
+  });
+
   it("marks replacement metadata from live streamed placement ids", async () => {
     const events = [];
     const client = {

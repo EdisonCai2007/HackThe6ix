@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { duckInventory } from "../../src/generation/fixtures/duckInventory.js";
+import { randomBuildInventory as duckInventory } from "../../src/generation/fixtures/randomBuildInventory.js";
 import {
   buildBuildSuggestionsPrompt,
   buildJsonRepairPrompt,
@@ -36,6 +36,10 @@ function requestText(request) {
     .join("\n");
 }
 
+function requestSystemText(request) {
+  return (request.systemInstruction?.parts ?? []).map((part) => part.text).join("\n");
+}
+
 function firstUserPayload(request) {
   return JSON.parse(request.contents[0].parts[0].text);
 }
@@ -51,7 +55,7 @@ describe("generation prompt builders", () => {
   it("summarizes only supported inventory fields needed by the model", () => {
     const summary = summarizeSupportedInventory(duckInventory);
 
-    assert.equal(summary.inventory_id, "duck-demo");
+    assert.equal(summary.inventory_id, "random-build-assortment");
     assert.equal(summary.items.some((item) => item.part_id === "3001"), true);
     assert.equal(summary.items.every((item) => "count" in item), true);
     assert.equal(summary.items.every((item) => "label" in item), false);
@@ -78,7 +82,7 @@ describe("generation prompt builders", () => {
     assert.match(text, /no text before or after the JSON object/i);
     assert.match(text, /Do not output exact brick coordinates/);
     assert.match(text, /100-piece MVP cap/);
-    assert.match(text, /duck-demo/);
+    assert.match(text, /random-build-assortment/);
   });
 
   it("builds the placement-planner request for GeneratedModel JSON, not LDraw", () => {
@@ -100,7 +104,7 @@ describe("generation prompt builders", () => {
     assert.match(text, /plates are 1 layer tall and bricks are 3 layers tall/);
     assert.match(text, /3001/);
     assert.equal(request.model, TEST_PLACEMENT_MODEL);
-    assertGeminiJsonRequest(request, { maxOutputTokens: 30000 });
+    assertGeminiJsonRequest(request, { maxOutputTokens: 40000 });
     assert.equal(request.generationConfig.responseSchema.properties.bricks.type, "array");
     assert.equal(firstUserPayload(request).required_output_shape, undefined);
   });
@@ -132,29 +136,41 @@ describe("generation prompt builders", () => {
     assert.match(placementText, /never shrink or simplify solely/i);
   });
 
-  it("builds a suggestions request that favors realistic everyday objects over generic or high-tech shapes", () => {
+  it("builds a suggestions request that favors inventory-grounded real-world objects without examples", () => {
     const request = buildBuildSuggestionsPrompt({
       inventory: duckInventory,
       model: "suggestion-model",
     });
 
     const text = requestText(request);
+    const systemText = requestSystemText(request);
 
     assert.equal(request.model, "suggestion-model");
     assertGeminiJsonRequest(request);
     assert.equal(request.generationConfig.responseSchema.properties.suggestions.type, "array");
+    assert.match(text, /exactly 5 suggestions/i);
+    assert.match(text, /menu diverse/i);
+    assert.match(text, /same object family/i);
+    assert.match(text, /specific inventory/i);
+    assert.match(text, /different mix of inventory signals/i);
     assert.match(text, /distinctive/i);
-    assert.match(text, /realistic everyday objects/i);
-    assert.match(text, /generic/i);
-    assert.match(text, /block/i);
-    assert.match(text, /cargo/i);
-    assert.match(text, /household items/i);
-    assert.match(text, /simple animals/i);
-    assert.match(text, /boosters/i);
-    assert.match(text, /propellers/i);
+    assert.match(text, /real-world single objects/i);
+    assert.match(text, /clear silhouettes/i);
+    assert.match(text, /provided part shapes and quantities/i);
+    assert.match(text, /not by exact color/i);
+    assert.match(text, /color as a secondary creative cue/i);
+    assert.match(text, /abundant, scarce, or high-contrast/i);
+    assert.match(text, /generic geometric masses/i);
+    assert.match(text, /speculative devices/i);
+    assert.match(text, /unavailable specialty parts/i);
+    assert.match(text, /object-like/i);
+    assert.match(text, /vague category names/i);
     assert.doesNotMatch(text, /gadgets/i);
+    assert.doesNotMatch(systemText, /Mailbox|Coffee Mug|Fire Hydrant|Snack Cart/i);
     assert.doesNotMatch(text, /Moon Rover/i);
     assert.doesNotMatch(text, /Dragon Scooter/i);
+    assert.doesNotMatch(systemText, /household items|simple animals|basic vehicles|common fixtures/i);
+    assert.doesNotMatch(systemText, /cargo blocks|boosters|propellers|glowing engines/i);
   });
 
   it("builds suggestion metadata guidance around shape before color and keeps metadata color-neutral", () => {
@@ -170,7 +186,7 @@ describe("generation prompt builders", () => {
     assert.match(text, /shape first/i);
     assert.match(text, /flat/i);
     assert.match(text, /bulky/i);
-    assert.match(text, /consider color last/i);
+    assert.match(text, /color distribution support the object/i);
     assert.match(text, /prompt_metadata[\s\S]*do not include color words/i);
     assert.match(text, /prompt_metadata[\s\S]*avoid size adjectives/i);
     assert.match(text, /prompt_metadata[\s\S]*Do not mention specific bricks/i);
@@ -245,7 +261,7 @@ describe("generation prompt builders", () => {
     const text = requestText(request);
 
     assert.equal(request.model, TEST_PLACEMENT_MODEL);
-    assertGeminiJsonRequest(request, { maxOutputTokens: 30000 });
+    assertGeminiJsonRequest(request, { maxOutputTokens: 40000 });
     assert.equal(request.generationConfig.responseSchema.properties.bricks.type, "array");
     assert.match(text, /repair a LEGO GeneratedModel/i);
     assert.match(text, /floating_brick/);
@@ -330,7 +346,7 @@ describe("generation prompt builders", () => {
     const text = requestText(request);
 
     assert.equal(request.model, TEST_PLACEMENT_MODEL);
-    assertGeminiJsonRequest(request);
+    assertGeminiJsonRequest(request, { maxOutputTokens: 40000 });
     assert.match(text, /repair LEGO inventory validation errors/i);
     assert.match(text, /inventory_missing/);
     assert.match(text, /Do not use part\/color combinations that are absent/i);

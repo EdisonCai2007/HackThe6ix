@@ -1,11 +1,12 @@
 import {
   parseJsonObject,
-  parseStructurePlanText,
   validateStructurePlan,
 } from "./designPlan.js";
 import { validateGeneratedModelShape } from "./generatedModelSchema.js";
 import {
   BUILD_SUGGESTIONS_SCHEMA,
+  GENERATED_MODEL_SCHEMA,
+  PLACEMENT_GENERATION_MAX_TOKENS,
   buildBuildSuggestionsPrompt,
   buildJsonRepairPrompt,
   buildPlacementPrompt,
@@ -13,6 +14,13 @@ import {
   buildStructurePrompt,
 } from "./generationPrompts.js";
 import { cleanupIllegalInventoryUsage } from "./inventoryCleanup.js";
+import { cleanupObviousInvalidGeometry } from "./deterministicRepair.js";
+import { applyModelPatch, ModelPatchError } from "./modelPatch.js";
+import { buildCompactRepairContext } from "./repairContext.js";
+import {
+  PATCH_REPAIR_RETRY_MAX_TOKENS,
+  buildPlacementPatchRepairPrompt,
+} from "./repairPatchPrompts.js";
 import { validateModel } from "./validator.js";
 import { createStreamingBrickExtractor } from "./streamingBrickExtractor.js";
 
@@ -38,6 +46,29 @@ const BUILD_SUGGESTION_FIELDS = new Set([
   "label",
   "prompt_metadata",
   "inventory_reasoning",
+]);
+
+const PATCH_REPAIR_RETRY_LIMITS = {
+  maxNearbyOrSupportingBricks: 8,
+  maxValidationSummaryBrickIds: 8,
+  maxValidationMessageLength: 120,
+};
+
+const BRICK_UPDATE_FIELDS = new Set([
+  "part_id",
+  "ldraw_id",
+  "label",
+  "color_id",
+  "color_name",
+  "position",
+  "rotation",
+  "feature",
+  "step",
+]);
+
+const ADD_BRICK_FIELDS = new Set([
+  "id",
+  ...BRICK_UPDATE_FIELDS,
 ]);
 
 function validateBuildSuggestions(payload) {
@@ -131,6 +162,180 @@ async function emitDraft(onProgress, stage, payload) {
   });
 }
 
+function compactObject(entries) {
+  return Object.fromEntries(
+    Object.entries(entries).filter(([, value]) => value !== undefined),
+  );
+}
+
+function serviceErrors(errors = []) {
+  return errors.map((error) => {
+    if (!error || typeof error !== "object") {
+      return { message: String(error) };
+    }
+
+    return compactObject({
+      type: error.type,
+      field: error.field,
+      severity: error.severity,
+      message: error.message,
+    });
+  });
+}
+
+function logServiceEvent(generationClient, event) {
+  if (typeof generationClient?.logServiceEvent !== "function") {
+    return;
+  }
+
+  generationClient.logServiceEvent({
+    source: "generation_service",
+    ...event,
+  });
+}
+
+function logJsonParseFailure(generationClient, {
+  phase,
+  stage,
+  label,
+  text,
+  errors,
+  parseAttempt = 1,
+}) {
+  logServiceEvent(generationClient, {
+    type: "json_parse_failure",
+    phase,
+    stage,
+    label,
+    parseAttempt,
+    textLength: typeof text === "string" ? text.length : undefined,
+    errors: serviceErrors(errors),
+  });
+}
+
+function logLocalDeterministicRepair(generationClient, {
+  phase,
+  stage,
+  removedBricks,
+  validation,
+}) {
+  if (!Array.isArray(removedBricks) || removedBricks.length === 0) {
+    return;
+  }
+
+  logServiceEvent(generationClient, {
+    type: "local_deterministic_repair",
+    repairKind: "local_deterministic_repair",
+    phase,
+    stage,
+    removedBrickCount: removedBricks.length,
+    removedBrickIds: removedBricks.map((brick) => brick.id),
+    removedReasons: Array.from(new Set(removedBricks.map((brick) => brick.reason))),
+    validationValidAfter: validation?.valid,
+  });
+}
+
+function logFullModelFallback(generationClient, {
+  phase = "refinement",
+  stage = "refinement",
+  outcome,
+  reason,
+  errors,
+  cleanedInitialValid,
+}) {
+  logServiceEvent(generationClient, {
+    type: "full_model_fallback",
+    repairKind: "full_model_fallback",
+    phase,
+    stage,
+    outcome,
+    reason,
+    cleanedInitialValid,
+    errors: errors ? serviceErrors(errors) : undefined,
+  });
+}
+
+function operationFieldSubset(operation, allowedFields) {
+  return compactObject(
+    Object.fromEntries(
+      [...allowedFields]
+        .filter((field) => operation[field] !== undefined)
+        .map((field) => [field, operation[field]]),
+    ),
+  );
+}
+
+function normalizePatchOperation(operation) {
+  if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+    return operation;
+  }
+
+  const type = operation.type ?? operation.op;
+  const normalized = {
+    ...operation,
+    ...(type !== undefined ? { type } : {}),
+  };
+  delete normalized.op;
+
+  if (type === "add" && !normalized.brick) {
+    normalized.brick = operationFieldSubset(operation, ADD_BRICK_FIELDS);
+    for (const field of ADD_BRICK_FIELDS) {
+      delete normalized[field];
+    }
+  }
+
+  if (type === "update" && !normalized.updates) {
+    normalized.updates = operationFieldSubset(operation, BRICK_UPDATE_FIELDS);
+    for (const field of BRICK_UPDATE_FIELDS) {
+      delete normalized[field];
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeModelPatch(patch) {
+  if (!patch || typeof patch !== "object" || !Array.isArray(patch.operations)) {
+    return patch;
+  }
+
+  return {
+    ...patch,
+    operations: patch.operations.map(normalizePatchOperation),
+  };
+}
+
+function patchFailureSummary(failureResult) {
+  return compactObject({
+    stage: failureResult.stage,
+    reason: failureResult.reason,
+    validationValid: failureResult.validation?.valid,
+    errors: serviceErrors(failureResult.errors),
+  });
+}
+
+function logPatchFailure(generationClient, {
+  type = "ai_patch_repair_failed",
+  phase = "repair",
+  stage,
+  repairKind,
+  repairAttempt,
+  reason,
+  errors,
+  validation,
+}) {
+  logServiceEvent(generationClient, {
+    type,
+    repairKind,
+    phase,
+    stage,
+    repairAttempt,
+    reason,
+    validationValidAfter: validation?.valid,
+    errors: errors ? serviceErrors(errors) : undefined,
+  });
+}
+
 async function streamTextAndBricks({ generationClient, request, phase, onProgress, seenIds }) {
   const extractor = createStreamingBrickExtractor();
   let text = "";
@@ -175,6 +380,14 @@ async function parseSuggestionWithOneRepair({
     return initialResult;
   }
 
+  logJsonParseFailure(generationClient, {
+    phase: "suggestion",
+    stage: "suggestion_parse",
+    label: "Build suggestion JSON parse",
+    text,
+    errors: initialResult.errors,
+  });
+
   const repairRequest = buildJsonRepairPrompt({
     label: "build suggestions",
     malformedText: text,
@@ -186,9 +399,25 @@ async function parseSuggestionWithOneRepair({
     phase: "suggestion",
     stage: "suggestion_repair",
     label: "Build suggestion JSON repair",
+    repairKind: "ai_json_repair",
+    repairAttempt: 1,
+    retryOf: "suggestion_generate",
   });
 
-  return parseJsonObject(repairedText, "build suggestions");
+  const repairedResult = parseJsonObject(repairedText, "build suggestions");
+
+  if (!repairedResult.ok) {
+    logJsonParseFailure(generationClient, {
+      phase: "suggestion",
+      stage: "suggestion_repair_parse",
+      label: "Build suggestion repaired JSON parse",
+      text: repairedText,
+      errors: repairedResult.errors,
+      parseAttempt: 2,
+    });
+  }
+
+  return repairedResult;
 }
 
 export async function generateBuildSuggestions({ inventory, generationClient, suggestionModel }) {
@@ -231,18 +460,326 @@ function initialPlacementContext({
   originalModel,
   inventory,
 }) {
-  const cleanup = cleanupIllegalInventoryUsage(originalModel, inventory);
-  const validation = validateModel(cleanup.model, inventory);
+  const inventoryCleanup = cleanupIllegalInventoryUsage(originalModel, inventory);
+  const geometryCleanup = cleanupObviousInvalidGeometry(
+    inventoryCleanup.model,
+    inventory,
+  );
+  const removedBricks = [
+    ...inventoryCleanup.removedBricks,
+    ...geometryCleanup.removedBricks,
+  ];
 
   return {
     userPrompt,
     targetPieceCount,
     structurePlan,
     originalModel,
-    cleanedModel: cleanup.model,
-    removedBricks: cleanup.removedBricks,
-    validation,
+    inventory,
+    cleanedModel: geometryCleanup.model,
+    removedBricks,
+    validation: geometryCleanup.validationAfter,
+    deterministicCleanup: {
+      inventoryRemovedBricks: inventoryCleanup.removedBricks,
+      geometryRemovedBricks: geometryCleanup.removedBricks,
+      geometryReasonMetadata: geometryCleanup.reasonMetadata,
+      validationBeforeGeometry: geometryCleanup.validationBefore,
+    },
   };
+}
+
+function successFromInitialGeneration(context, model, validation, repairOutcome, extra = {}) {
+  return {
+    ok: true,
+    stage: "complete",
+    complete: true,
+    requiresRefinement: false,
+    structurePlan: context.structurePlan,
+    originalModel: context.originalModel,
+    cleanedModel: context.cleanedModel,
+    model,
+    validation,
+    removedBricks: context.removedBricks,
+    targetPieceCount: context.targetPieceCount,
+    repair: {
+      outcome: repairOutcome,
+      ...extra,
+    },
+  };
+}
+
+function awaitingFullModelFallback(context, generationClient, {
+  reason,
+  errors,
+  patchFailures,
+}) {
+  logFullModelFallback(generationClient, {
+    phase: "repair",
+    stage: "patch_repair",
+    outcome: "awaiting_refinement",
+    reason,
+    errors,
+    cleanedInitialValid: context.validation.valid,
+  });
+
+  return {
+    ok: true,
+    stage: "awaiting_refinement",
+    complete: false,
+    requiresRefinement: true,
+    structurePlan: context.structurePlan,
+    originalModel: context.originalModel,
+    cleanedModel: context.cleanedModel,
+    model: context.cleanedModel,
+    validation: context.validation,
+    removedBricks: context.removedBricks,
+    targetPieceCount: context.targetPieceCount,
+    refinement: {
+      outcome: "awaiting_refinement",
+      reason,
+      patchFailures,
+    },
+  };
+}
+
+function buildPatchRepairContext(context, {
+  currentModel = context.cleanedModel,
+  validation = context.validation,
+  retry = false,
+} = {}) {
+  return buildCompactRepairContext({
+    userPrompt: context.userPrompt,
+    structurePlan: context.structurePlan,
+    inventory: context.inventory,
+    currentModel,
+    cleanedModel: context.cleanedModel,
+    invalidModel: currentModel,
+    originalModel: context.originalModel,
+    validationErrors: validation.errors,
+    targetPieceCount: context.targetPieceCount,
+    limits: retry ? PATCH_REPAIR_RETRY_LIMITS : {},
+  });
+}
+
+async function runPatchRepairAttempt({
+  context,
+  generationClient,
+  repairModel,
+  attempt,
+  currentModel = context.cleanedModel,
+  validation = context.validation,
+  priorPatchFailure,
+}) {
+  const retry = attempt > 1;
+  const repairKind = retry ? "ai_patch_retry" : "ai_patch_repair";
+  const stage = retry ? "patch_retry" : "patch_repair";
+  const label = retry ? "AI patch repair retry" : "AI patch repair";
+  const repairContext = buildPatchRepairContext(context, {
+    currentModel,
+    validation,
+    retry,
+  });
+  const request = buildPlacementPatchRepairPrompt({
+    repairContext,
+    priorPatchFailure,
+    model: repairModel.trim(),
+    maxOutputTokens: retry ? PATCH_REPAIR_RETRY_MAX_TOKENS : undefined,
+  });
+  let patchText;
+
+  try {
+    patchText = await generationClient.complete(request, {
+      phase: "repair",
+      stage,
+      label,
+      repairKind,
+      repairAttempt: attempt,
+      retryOf: retry ? "patch_repair" : "validation",
+    });
+  } catch (error) {
+    const errors = [{ message: error.message }];
+    logPatchFailure(generationClient, {
+      stage,
+      repairKind,
+      repairAttempt: attempt,
+      reason: "patch_provider_error",
+      errors,
+    });
+    return {
+      ok: false,
+      stage,
+      reason: "patch_provider_error",
+      errors,
+    };
+  }
+
+  const parsedPatch = parseJsonObject(patchText, "model patch");
+
+  if (!parsedPatch.ok) {
+    logJsonParseFailure(generationClient, {
+      phase: "repair",
+      stage: `${stage}_parse`,
+      label: `${label} JSON parse`,
+      text: patchText,
+      errors: parsedPatch.errors,
+      parseAttempt: attempt,
+    });
+    logPatchFailure(generationClient, {
+      stage,
+      repairKind,
+      repairAttempt: attempt,
+      reason: "patch_json_parse_failed",
+      errors: parsedPatch.errors,
+    });
+
+    return {
+      ok: false,
+      stage,
+      reason: "patch_json_parse_failed",
+      errors: parsedPatch.errors,
+    };
+  }
+
+  const patch = normalizeModelPatch(parsedPatch.value);
+  let patchedModel;
+
+  try {
+    patchedModel = applyModelPatch(currentModel, patch);
+  } catch (error) {
+    const errors = error instanceof ModelPatchError
+      ? error.errors
+      : [{ message: error.message }];
+    logPatchFailure(generationClient, {
+      stage,
+      repairKind,
+      repairAttempt: attempt,
+      reason: "patch_apply_failed",
+      errors,
+    });
+
+    return {
+      ok: false,
+      stage,
+      reason: "patch_apply_failed",
+      errors,
+    };
+  }
+
+  const patchedValidation = validateModel(patchedModel, context.inventory);
+
+  if (patchedValidation.valid) {
+    logServiceEvent(generationClient, {
+      type: "ai_patch_repair_applied",
+      repairKind,
+      phase: "repair",
+      stage,
+      repairAttempt: attempt,
+      operationCount: patch.operations.length,
+      validationValidAfter: true,
+    });
+
+    return {
+      ok: true,
+      stage,
+      model: patchedModel,
+      validation: patchedValidation,
+      patch,
+      repairKind,
+      repairAttempt: attempt,
+    };
+  }
+
+  logPatchFailure(generationClient, {
+    stage,
+    repairKind,
+    repairAttempt: attempt,
+    reason: "patched_model_invalid",
+    errors: patchedValidation.errors,
+    validation: patchedValidation,
+  });
+
+  return {
+    ok: false,
+    stage,
+    reason: "patched_model_invalid",
+    errors: patchedValidation.errors,
+    model: patchedModel,
+    validation: patchedValidation,
+  };
+}
+
+async function repairInitialPlacementIfNeeded({
+  context,
+  generationClient,
+  repairModel,
+}) {
+  if (context.validation.valid) {
+    return successFromInitialGeneration(
+      context,
+      context.cleanedModel,
+      context.validation,
+      "local_deterministic_valid",
+    );
+  }
+
+  const firstPatchResult = await runPatchRepairAttempt({
+    context,
+    generationClient,
+    repairModel,
+    attempt: 1,
+  });
+
+  if (firstPatchResult.ok) {
+    return successFromInitialGeneration(
+      context,
+      firstPatchResult.model,
+      firstPatchResult.validation,
+      "ai_patch_repair_valid",
+      {
+        patchRepair: {
+          repairAttempt: firstPatchResult.repairAttempt,
+          operationCount: firstPatchResult.patch.operations.length,
+        },
+      },
+    );
+  }
+
+  const retryPatchResult = await runPatchRepairAttempt({
+    context,
+    generationClient,
+    repairModel,
+    attempt: 2,
+    currentModel: firstPatchResult.model ?? context.cleanedModel,
+    validation: firstPatchResult.validation ?? context.validation,
+    priorPatchFailure: patchFailureSummary(firstPatchResult),
+  });
+
+  if (retryPatchResult.ok) {
+    return successFromInitialGeneration(
+      context,
+      retryPatchResult.model,
+      retryPatchResult.validation,
+      "ai_patch_retry_valid",
+      {
+        patchRepair: {
+          repairAttempt: retryPatchResult.repairAttempt,
+          operationCount: retryPatchResult.patch.operations.length,
+          previousFailure: patchFailureSummary(firstPatchResult),
+        },
+      },
+    );
+  }
+
+  const patchFailures = [
+    patchFailureSummary(firstPatchResult),
+    patchFailureSummary(retryPatchResult),
+  ];
+
+  return awaitingFullModelFallback(context, generationClient, {
+    reason: "patch_repair_failed",
+    errors: retryPatchResult.errors ?? firstPatchResult.errors,
+    patchFailures,
+  });
 }
 
 function successFromSelection(context, model, validation, outcome, extra = {}) {
@@ -260,7 +797,7 @@ function successFromSelection(context, model, validation, outcome, extra = {}) {
   };
 }
 
-function selectRefinementResult(context, parsedRefinement) {
+function selectRefinementResult(context, parsedRefinement, generationClient) {
   if (parsedRefinement.ok) {
     const shapeResult = validateGeneratedModelShape(parsedRefinement.value);
 
@@ -277,6 +814,13 @@ function selectRefinementResult(context, parsedRefinement) {
       }
 
       if (context.validation.valid) {
+        logFullModelFallback(generationClient, {
+          outcome: "cleaned_initial_valid_fallback",
+          reason: "refined_model_invalid",
+          errors: refinedValidation.errors,
+          cleanedInitialValid: context.validation.valid,
+        });
+
         return successFromSelection(
           context,
           context.cleanedModel,
@@ -294,6 +838,13 @@ function selectRefinementResult(context, parsedRefinement) {
       );
     }
 
+    logFullModelFallback(generationClient, {
+      outcome: "cleaned_initial_schema_fallback",
+      reason: "refined_model_shape_invalid",
+      errors: shapeResult.errors,
+      cleanedInitialValid: context.validation.valid,
+    });
+
     return successFromSelection(
       context,
       context.cleanedModel,
@@ -302,6 +853,13 @@ function selectRefinementResult(context, parsedRefinement) {
       { errors: shapeResult.errors },
     );
   }
+
+  logFullModelFallback(generationClient, {
+    outcome: "cleaned_initial_parse_fallback",
+    reason: "refinement_json_parse_failed",
+    errors: parsedRefinement.errors,
+    cleanedInitialValid: context.validation.valid,
+  });
 
   return successFromSelection(
     context,
@@ -323,6 +881,7 @@ export async function generateModel({
   generationClient,
   structureModel,
   placementModel,
+  repairModel = placementModel,
   onProgress,
   streamPlacement = false,
 }) {
@@ -352,7 +911,27 @@ export async function generateModel({
   });
   await emitProgress(onProgress, "structure_generate", "complete");
   await emitProgress(onProgress, "structure_parse", "running");
-  const structureResult = parseStructurePlanText(structureText);
+  const parsedStructure = parseJsonObject(structureText, "structure plan");
+  let structureResult;
+
+  if (parsedStructure.ok) {
+    const structureValidation = validateStructurePlan(parsedStructure.value);
+    structureResult = {
+      ok: structureValidation.ok,
+      value: structureValidation.ok ? parsedStructure.value : undefined,
+      errors: structureValidation.errors,
+    };
+  } else {
+    logJsonParseFailure(generationClient, {
+      phase: "planning",
+      stage: "structure_parse",
+      label: "Structure JSON parse",
+      text: structureText,
+      errors: parsedStructure.errors,
+    });
+    structureResult = parsedStructure;
+  }
+
   await emitProgress(
     onProgress,
     "structure_parse",
@@ -388,19 +967,45 @@ export async function generateModel({
   await emitProgress(onProgress, "placement_parse", "running");
   let placementJson = parseJsonObject(placementText, "placement model");
 
+  if (!placementJson.ok) {
+    logJsonParseFailure(generationClient, {
+      phase: "placing",
+      stage: "placement_parse",
+      label: "Placement JSON parse",
+      text: placementText,
+      errors: placementJson.errors,
+    });
+  }
+
   if (!placementJson.ok && streamPlacement && typeof generationClient.complete === "function") {
     const repairRequest = buildJsonRepairPrompt({
       label: "placement model",
       malformedText: placementText,
       errorMessage: placementJson.errors[0]?.message ?? "Incomplete streamed placement JSON.",
       model: placementModel.trim(),
+      responseSchema: GENERATED_MODEL_SCHEMA,
+      maxOutputTokens: PLACEMENT_GENERATION_MAX_TOKENS,
     });
     const repairedText = await generationClient.complete(repairRequest, {
       phase: "placing",
       stage: "placement_repair",
       label: "Placement JSON repair",
+      repairKind: "ai_json_repair",
+      repairAttempt: 1,
+      retryOf: "placement_generate",
     });
     placementJson = parseJsonObject(repairedText, "placement model");
+
+    if (!placementJson.ok) {
+      logJsonParseFailure(generationClient, {
+        phase: "placing",
+        stage: "placement_repair_parse",
+        label: "Placement repaired JSON parse",
+        text: repairedText,
+        errors: placementJson.errors,
+        parseAttempt: 2,
+      });
+    }
   }
 
   if (!placementJson.ok) {
@@ -428,25 +1033,41 @@ export async function generateModel({
     originalModel: placementJson.value,
     inventory,
   });
+  logLocalDeterministicRepair(generationClient, {
+    phase: "placing",
+    stage: "validation",
+    removedBricks: context.removedBricks,
+    validation: context.validation,
+  });
 
   await emitDraft(onProgress, "cleaned_placement_draft", {
     model: context.cleanedModel,
     validation: context.validation,
     removedBricks: context.removedBricks,
   });
+  const repairedResult = await repairInitialPlacementIfNeeded({
+    context,
+    generationClient,
+    repairModel: typeof repairModel === "string" && repairModel.trim() !== ""
+      ? repairModel
+      : placementModel,
+  });
+
+  if (
+    repairedResult.ok &&
+    repairedResult.stage === "complete" &&
+    repairedResult.repair?.outcome?.startsWith("ai_patch")
+  ) {
+    await emitDraft(onProgress, "patched_placement_draft", {
+      model: repairedResult.model,
+      validation: repairedResult.validation,
+      removedBricks: repairedResult.removedBricks,
+    });
+  }
+
   await emitProgress(onProgress, "validation", "complete");
 
-  return {
-    ok: true,
-    stage: "awaiting_refinement",
-    structurePlan: context.structurePlan,
-    originalModel: context.originalModel,
-    cleanedModel: context.cleanedModel,
-    model: context.cleanedModel,
-    validation: context.validation,
-    removedBricks: context.removedBricks,
-    targetPieceCount,
-  };
+  return repairedResult;
 }
 
 /**
@@ -494,6 +1115,12 @@ export async function refineModel({
     inventory,
   });
   const context = { ...initialContext, inventory };
+  logLocalDeterministicRepair(generationClient, {
+    phase: "refinement",
+    stage: "refinement_context",
+    removedBricks: context.removedBricks,
+    validation: context.validation,
+  });
   const refinementRequest = buildRefinementPrompt({
     userPrompt,
     inventory,
@@ -529,6 +1156,13 @@ export async function refineModel({
     if (streamRefinement) {
       throw error;
     }
+    logFullModelFallback(generationClient, {
+      outcome: "cleaned_initial_provider_fallback",
+      reason: "refinement_provider_error",
+      errors: [{ message: error.message }],
+      cleanedInitialValid: context.validation.valid,
+    });
+
     return successFromSelection(
       context,
       context.cleanedModel,
@@ -539,6 +1173,16 @@ export async function refineModel({
   }
 
   const parsedRefinement = parseJsonObject(refinementText, "refinement model");
+  if (!parsedRefinement.ok) {
+    logJsonParseFailure(generationClient, {
+      phase: streamRefinement ? "repair" : "refinement",
+      stage: "refinement_parse",
+      label: "Refinement JSON parse",
+      text: refinementText,
+      errors: parsedRefinement.errors,
+    });
+  }
+
   if (streamRefinement && !parsedRefinement.ok) {
     return failure("refinement_parse", parsedRefinement.errors, {
       model: context.cleanedModel,
@@ -546,5 +1190,5 @@ export async function refineModel({
       structurePlan,
     });
   }
-  return selectRefinementResult(context, parsedRefinement);
+  return selectRefinementResult(context, parsedRefinement, generationClient);
 }
