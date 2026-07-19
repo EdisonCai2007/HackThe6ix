@@ -4,6 +4,7 @@ import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
 import { buildCampfireModel } from "../generation/fixtures/campfireModel.js";
+import { fixedDemoInventory } from "../generation/fixtures/fixedDemoInventory.js";
 import { randomBuildInventory } from "../generation/fixtures/randomBuildInventory.js";
 import { validateGeneratedModelShape } from "../generation/generatedModelSchema.js";
 import { validateModel } from "../generation/validator.js";
@@ -77,6 +78,11 @@ const rightDrawer = document.querySelector("#right-drawer");
 const rightDrawerToggle = document.querySelector("#right-drawer-toggle");
 
 const timelineStages = [
+  { id: "geometry_generate", label: "BrickGPT geometry generation" },
+  { id: "geometry_normalize", label: "Target-volume normalization" },
+  { id: "inventory_compile", label: "Exact-inventory compilation" },
+  { id: "candidate_validate", label: "Candidate validation" },
+  { id: "candidate_select", label: "Best-candidate selection" },
   { id: "structure_generate", label: "Structure generation" },
   { id: "structure_parse", label: "Structure JSON parse" },
   { id: "placement_generate", label: "Placement generation" },
@@ -102,6 +108,7 @@ const resultStageTimelineMap = {
 };
 
 const inventories = [
+  { id: "fixed-demo", label: "Fixed 787-piece inventory", inventory: fixedDemoInventory },
   { id: "random-build", label: "Random build assortment", inventory: randomBuildInventory },
 ];
 
@@ -112,7 +119,7 @@ for (const option of inventories) {
   inventorySelect.append(element);
 }
 
-inventorySelect.value = "random-build";
+inventorySelect.value = "fixed-demo";
 
 let isLeftPanelCollapsed = false;
 let isRightDrawerCollapsed = false;
@@ -1375,7 +1382,9 @@ function handleDraftEvent(payload, generationRequest) {
     const model = replaceProvisionalModel(generationRequest, payload.model);
     const statusText = payload.stage === "cleaned_placement_draft"
       ? "Refining cleaned draft"
-      : "Generating draft";
+      : payload.stage === "inventory_compile"
+        ? "Compiling best inventory-safe candidate"
+        : "Generating draft";
 
     showStreamingModel(model, validation, generationRequest, {
       statusText,
@@ -1463,7 +1472,7 @@ form.addEventListener("submit", async (event) => {
   zoomCameraOutToMaxDistance();
   generateButton.disabled = true;
   validationStatus.textContent = "Generating";
-  modelName.textContent = "Calling Backboard";
+  modelName.textContent = "Generating model";
   pieceCount.textContent = "-";
   setNotes([]);
   hideErrors();

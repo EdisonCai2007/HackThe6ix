@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "vite build",
+    "check:brickgpt": "node scripts/checkBrickGptSetup.js",
     "dev": "node scripts/dev.js",
     "dev:preview": "vite --host 127.0.0.1",
     "serve:generation": "node --env-file=.env server/generationServer.js",
