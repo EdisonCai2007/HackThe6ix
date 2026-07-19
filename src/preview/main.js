@@ -11,6 +11,7 @@ import { validateModel } from "../generation/validator.js";
 import { exportModelToLDraw } from "../ldraw/exportLDraw.js";
 import { createBrickScene } from "./brickScene.js";
 import { promptTextForBuildSuggestion } from "./buildSuggestionPrompt.js";
+import { usableBuildSuggestions } from "./buildSuggestions.js";
 import {
   cameraFrameForModelSize,
   generationCameraDistanceMode,
@@ -234,13 +235,8 @@ async function requestBuildSuggestions() {
       return;
     }
 
-    const suggestions = data?.ok && Array.isArray(data.suggestions)
-      ? data.suggestions
-        .filter((suggestion) =>
-          typeof suggestion?.label === "string" &&
-          typeof suggestion.prompt_metadata === "string",
-        )
-        .slice(0, 5)
+    const suggestions = data?.ok
+      ? usableBuildSuggestions(data.suggestions)
       : [];
 
     if (!response.ok || !data?.ok || suggestions.length === 0) {
