@@ -5,4 +5,11 @@
 node_modules/
 dist/
 logs/
+*.log
+*.jsonl
+
+data/
+inventory/
+inventories/
+.superpowers/brainstorm/
 .DS_Store
