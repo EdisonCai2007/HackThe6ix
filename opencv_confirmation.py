@@ -263,7 +263,7 @@ class ConfirmationController:
 
     def render(self) -> np.ndarray:
         width, height = self.canvas_size
-        canvas = np.full((height, width, 3), (38, 49, 59), dtype=np.uint8)
+        canvas = np.full((height, width, 3), (0, 0, 0), dtype=np.uint8)
         self.button_rects = {}
         if self.mode in {"complete", "error"}:
             title = "Inventory ready" if self.mode == "complete" else "Confirmation unavailable"

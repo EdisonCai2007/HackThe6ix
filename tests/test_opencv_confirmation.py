@@ -118,6 +118,7 @@ def test_render_draws_yellow_mask_card_and_clickable_buttons(tmp_path):
     rendered = controller.render()
 
     assert rendered.shape == (420, 720, 3)
+    assert rendered[0, 0].tolist() == [0, 0, 0]
     assert {"yes", "no"} <= set(controller.button_rects)
     yellowish = (
         (rendered[:, :, 1] > 130)
