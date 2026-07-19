@@ -109,29 +109,22 @@ def _box_iou(first: Box, second: Box) -> float:
 def _near_identical_instance_masks(
     first: SegmentationDetection, second: SegmentationDetection
 ) -> bool:
-    # box-IoU >= 0.60 is a necessary condition for a duplicate, and it is cheap
-    # (integers only). Check it FIRST so the expensive full-frame boolean mask
-    # AND/sum is skipped for the ~all non-overlapping pairs. This turns an
-    # O(n^2) full-frame scan into O(n^2) integer boxes plus mask work only on
-    # the handful of genuinely overlapping candidates. Result is unchanged.
+    # box-IoU >= 0.60 is a NECESSARY condition for the original duplicate test
+    # (it is one term of the final AND below), and it is cheap (integers only).
+    # Checking it first only short-circuits pairs the original logic would also
+    # reject, so the mask decision is byte-identical to before — but the
+    # expensive full-frame boolean mask AND/sum is skipped for the ~all
+    # non-overlapping pairs, which is what made suppression O(n^2)-slow.
     if _box_iou(first.box_original, second.box_original) < 0.60:
         return False
     first_mask = np.asarray(first.mask_original, dtype=bool)
     second_mask = np.asarray(second.mask_original, dtype=bool)
     if first_mask.shape != second_mask.shape:
         return False
-    # Only the union of the two boxes can hold overlap; scan that region, not
-    # the whole 1920x1440 frame.
-    x0 = min(first.box_original[0], second.box_original[0])
-    y0 = min(first.box_original[1], second.box_original[1])
-    x1 = max(first.box_original[2], second.box_original[2])
-    y1 = max(first.box_original[3], second.box_original[3])
-    a = first_mask[y0:y1, x0:x1]
-    b = second_mask[y0:y1, x0:x1]
-    first_area, second_area = int(a.sum()), int(b.sum())
+    first_area, second_area = int(first_mask.sum()), int(second_mask.sum())
     if not first_area or not second_area:
         return False
-    intersection = int((a & b).sum())
+    intersection = int((first_mask & second_mask).sum())
     union = first_area + second_area - intersection
     mask_iou = intersection / union if union else 0.0
     containment = intersection / min(first_area, second_area)
@@ -140,6 +133,7 @@ def _near_identical_instance_masks(
         mask_iou >= 0.65
         and containment >= 0.85
         and area_ratio >= 0.70
+        and _box_iou(first.box_original, second.box_original) >= 0.60
     )
 
 
