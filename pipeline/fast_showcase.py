@@ -125,6 +125,9 @@ def run_fast_showcase(
             identify_min_interval=0.0,
             view_limit=view_limit,
             identify_limit=identify_limit,
+            # Only the highest-confidence masks per view can become confident
+            # confirmations; bound the per-instance geometry work to them.
+            max_detections_per_view=24,
         )
         # Surface the per-stage breakdown so a future regression is obvious in
         # the demo logs (segmentation vs identification vs fusion).

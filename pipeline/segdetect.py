@@ -399,8 +399,16 @@ def detect_original_instances(
     views: list[Any],
     model: Any,
     gate_config: GateConfig = GateConfig(),
+    max_detections_per_view: int | None = None,
 ) -> list[SegmentationDetection]:
-    """Detect every selected original view and preserve gate provenance."""
+    """Detect every selected original view and preserve gate provenance.
+
+    ``max_detections_per_view`` bounds the expensive per-instance geometry
+    (full-frame gate erosion + canvas warp) to the N highest-confidence raw
+    masks per view. The demo showcase only needs a few confident pieces, so
+    processing all ~90 masks is wasted work; this is opt-in and unused by the
+    full inventory pipeline (default None keeps every detection).
+    """
     if manifest.get("version") != 3:
         raise ValueError(
             "segmentation requires manifest v3 physical workspace geometry"
@@ -433,7 +441,12 @@ def detect_original_instances(
         )
         x0, y0, x1, y1 = projection.roi.as_tuple()
         crop = original[y0:y1, x0:x1]
-        for raw in model.predict(crop):
+        raws = model.predict(crop)
+        if max_detections_per_view is not None:
+            raws = sorted(
+                raws, key=lambda r: r.confidence, reverse=True
+            )[:max(0, int(max_detections_per_view))]
+        for raw in raws:
             crop_mask = np.asarray(raw.mask, dtype=bool)
             if crop_mask.shape != crop.shape[:2]:
                 crop_mask = cv2.resize(

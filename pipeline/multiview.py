@@ -1779,6 +1779,7 @@ def scan_manifest(
     identify_min_interval: float = 1.0,
     view_limit: int | None = None,
     identify_limit: int | None = None,
+    max_detections_per_view: int | None = None,
 ) -> MultiViewScanResult:
     started = time.perf_counter()
     manifest, views = load_views(manifest_path)
@@ -1798,7 +1799,8 @@ def scan_manifest(
             confidence=gate_config.inference_confidence
         )
         segmentation_detections = detect_original_instances(
-            manifest, views, seg_model, gate_config
+            manifest, views, seg_model, gate_config,
+            max_detections_per_view=max_detections_per_view,
         )
         observations = observations_from_segmentations(
             segmentation_detections, views
