@@ -1,4 +1,4 @@
-import { getPartDimensions, MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
+import { getPartDimensions, SUPPORTED_PARTS } from "./partCatalog.js";
 
 function keyFor(partId, colorId) {
   return `${partId}:${colorId}`;
@@ -177,15 +177,6 @@ export function validateModel(model, inventory) {
   const used = new Map();
   const cellsByBrick = new Map();
   const occupiedByCell = new Map();
-
-  if (model.bricks.length > MAX_MODEL_PIECES) {
-    errors.push(
-      createError(
-        "piece_count_exceeded",
-        `Model uses ${model.bricks.length} pieces but the MVP maximum is ${MAX_MODEL_PIECES}.`,
-      ),
-    );
-  }
 
   for (const brick of model.bricks) {
     const inventoryKey = keyFor(brick.part_id, brick.color_id);

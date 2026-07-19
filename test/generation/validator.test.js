@@ -208,3 +208,40 @@ it("validateModel reports every disconnected component's brick ids", () => {
     ["separate"],
   ]);
 });
+
+it("validateModel accepts more than 100 legal pieces when inventory contains them", () => {
+  const bricks = Array.from({ length: 101 }, (_, index) => ({
+    ...brick({
+      id: `stack-${index + 1}`,
+      part_id: "3005",
+      ldraw_id: "3005.dat",
+      label: "1x1 brick",
+      position: { x: 0, y: 0, z: index * 3 },
+      step: index + 1,
+    }),
+  }));
+  const largeInventory = {
+    inventory_id: "large",
+    source: "manual_test_fixture",
+    items: [{
+      label: "1x1 brick",
+      category: "brick",
+      part_id: "3005",
+      ldraw_id: "3005.dat",
+      color_name: "red",
+      color_id: "4",
+      count: 101,
+      supported: true,
+    }],
+  };
+
+  const result = validateModel(validModel({
+    created_from_inventory_id: "large",
+    piece_count: bricks.length,
+    dimensions: { width_studs: 1, depth_studs: 1, height_layers: 303 },
+    bricks,
+  }), largeInventory);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.some((error) => error.type === "piece_count_exceeded"), false);
+});

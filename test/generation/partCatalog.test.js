@@ -3,13 +3,13 @@ import { describe, it } from "node:test";
 
 import {
   getPartDimensions,
-  MAX_MODEL_PIECES,
+  LEGACY_AI_MODEL_PIECE_CAP,
   SUPPORTED_PARTS,
 } from "../../src/generation/partCatalog.js";
 
 describe("supported part catalog", () => {
-  it("uses the documented MVP max model piece count", () => {
-    assert.equal(MAX_MODEL_PIECES, 100);
+  it("keeps a 100-piece cap for legacy AI coordinate prompts", () => {
+    assert.equal(LEGACY_AI_MODEL_PIECE_CAP, 100);
   });
 
   it("includes longer 1-wide bricks with brick-height dimensions", () => {

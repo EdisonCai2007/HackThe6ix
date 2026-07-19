@@ -81,7 +81,7 @@ describe("generation prompt builders", () => {
     assert.match(text, /matching generationConfig\.responseSchema/);
     assert.match(text, /no text before or after the JSON object/i);
     assert.match(text, /Do not output exact brick coordinates/);
-    assert.match(text, /100-piece MVP cap/);
+    assert.match(text, /100-piece legacy AI cap/);
     assert.match(text, /random-build-assortment/);
   });
 

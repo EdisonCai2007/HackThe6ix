@@ -1,4 +1,4 @@
-import { MAX_MODEL_PIECES, SUPPORTED_PARTS } from "./partCatalog.js";
+import { LEGACY_AI_MODEL_PIECE_CAP, SUPPORTED_PARTS } from "./partCatalog.js";
 
 const GENERATION_MAX_TOKENS = 10000;
 export const PLACEMENT_GENERATION_MAX_TOKENS = 40000;
@@ -170,10 +170,10 @@ export const BUILD_SUGGESTIONS_SCHEMA = {
 
 function clampTargetPieceCount(targetPieceCount) {
   if (!Number.isFinite(targetPieceCount)) {
-    return Math.min(40, MAX_MODEL_PIECES);
+    return Math.min(40, LEGACY_AI_MODEL_PIECE_CAP);
   }
 
-  return Math.max(1, Math.min(Math.floor(targetPieceCount), MAX_MODEL_PIECES));
+  return Math.max(1, Math.min(Math.floor(targetPieceCount), LEGACY_AI_MODEL_PIECE_CAP));
 }
 
 export function summarizeSupportedInventory(inventory) {
@@ -259,7 +259,7 @@ export function buildStructurePrompt({
       "Do not output meshes, vertices, or arbitrary 3D geometry.",
       "Do not invent parts, colors, or quantities outside the provided inventory.",
       "The generated model must be one free-standing connected LEGO object, not a scene.",
-      `Prefer more pieces but never exceed the requested target count or the ${MAX_MODEL_PIECES}-piece MVP cap.`,
+      `Prefer more pieces but never exceed the requested target count or the ${LEGACY_AI_MODEL_PIECE_CAP}-piece legacy AI cap.`,
       "Treat natural/requested colors as preferences: keep allowed_color_ids broad, plan coherent feature color blocks, and accept abstract colors when silhouette/features stay readable.",
     ].join("\n"),
     userPayload: {
@@ -326,7 +326,7 @@ export function buildPlacementPrompt({
       "Do not output meshes, vertices, or arbitrary 3D geometry.",
       "Use only inventory parts/colors; assign alternate colors as coherent feature blocks or symmetric patterns, not random scatter.",
       "Do not exceed inventory quantities; never shrink or simplify solely to stay within one matching color.",
-      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      `Do not exceed ${LEGACY_AI_MODEL_PIECE_CAP} pieces or the requested target count.`,
       "piece_count must be a non-negative integer.",
       "step must be a positive integer.",
       "Use x and y as stud-grid positions.",
@@ -372,7 +372,7 @@ export function buildRefinementPrompt({
       "You may replace every brick when doing so improves prompt resemblance, recognizable silhouette, proportions, color placement, or physical validity.",
       "If the cleaned current model is already the best result, return that model with identical model contents.",
       "Use only supported parts and exact part/color combinations present in the full selected inventory, without exceeding quantities.",
-      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      `Do not exceed ${LEGACY_AI_MODEL_PIECE_CAP} pieces or the requested target count.`,
       "piece_count must equal the number of bricks in the returned model.",
       "Use x and y as integer stud-grid positions and z as an integer plate-layer height.",
       "Plates are 1 layer tall and bricks are 3 layers tall.",
@@ -453,7 +453,7 @@ export function buildPlacementValidationRepairPrompt({
       "You may add legal supported inventory pieces if available.",
       "Do not re-add removed illegal bricks.",
       "Use only supported parts and part/color combinations present in inventory.",
-      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      `Do not exceed ${LEGACY_AI_MODEL_PIECE_CAP} pieces or the requested target count.`,
       "Ground rule: at least one brick must have position.z === 0.",
       "Support rule: every brick with position.z > 0 must have at least one occupied stud cell directly below it at z - 1 from a different brick.",
       "Connection rule: all bricks must form one connected component through vertical stud overlap.",
@@ -498,7 +498,7 @@ export function buildPlacementInventoryRepairPrompt({
       "Fix only invalid part/color choices and inventory overuse.",
       "Use only parts and colors present in the inventory. Do not exceed inventory quantities.",
       "Do not use part/color combinations that are absent from the inventory, even if the part id exists in another color.",
-      `Do not exceed ${MAX_MODEL_PIECES} pieces or the requested target count.`,
+      `Do not exceed ${LEGACY_AI_MODEL_PIECE_CAP} pieces or the requested target count.`,
       "Preserve the requested object and recognizable features.",
       "Preserve brick positions, rotations, features, and steps where possible.",
       "If a missing part/color has no direct substitute, replace it with the closest available supported inventory item.",

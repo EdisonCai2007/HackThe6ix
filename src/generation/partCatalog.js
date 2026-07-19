@@ -1,4 +1,4 @@
-export const MAX_MODEL_PIECES = 100;
+export const LEGACY_AI_MODEL_PIECE_CAP = 100;
 
 export const PART_HEIGHTS = {
   brick: 3,
