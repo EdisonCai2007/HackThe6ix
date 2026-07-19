@@ -13,7 +13,7 @@ BrickGPT is Python software built on the gated `meta-llama/Llama-3.2-1B-Instruct
 
    ```bash
    python3 -m venv .venv-brickgpt
-   .venv-brickgpt/bin/pip install "https://github.com/AvaLovelace1/BrickGPT.git"
+   .venv-brickgpt/bin/pip install "git+https://github.com/AvaLovelace1/BrickGPT.git@main"
    ```
 
 3. Copy `.env.example` to `.env` and configure:

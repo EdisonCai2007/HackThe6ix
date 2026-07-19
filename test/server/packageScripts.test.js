@@ -53,4 +53,13 @@ describe("server package scripts", () => {
 
     assert.equal(packageJson.scripts.test, "node --test test/**/*.test.js");
   });
+
+  it("loads local environment variables before checking BrickGPT setup", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url)));
+
+    assert.equal(
+      packageJson.scripts["check:brickgpt"],
+      "node --env-file=.env scripts/checkBrickGptSetup.js",
+    );
+  });
 });

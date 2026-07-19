@@ -3,6 +3,7 @@
 !.env.example
 
 node_modules/
+.venv-brickgpt/
 dist/
 logs/
 *.log
