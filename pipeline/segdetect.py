@@ -109,14 +109,29 @@ def _box_iou(first: Box, second: Box) -> float:
 def _near_identical_instance_masks(
     first: SegmentationDetection, second: SegmentationDetection
 ) -> bool:
+    # box-IoU >= 0.60 is a necessary condition for a duplicate, and it is cheap
+    # (integers only). Check it FIRST so the expensive full-frame boolean mask
+    # AND/sum is skipped for the ~all non-overlapping pairs. This turns an
+    # O(n^2) full-frame scan into O(n^2) integer boxes plus mask work only on
+    # the handful of genuinely overlapping candidates. Result is unchanged.
+    if _box_iou(first.box_original, second.box_original) < 0.60:
+        return False
     first_mask = np.asarray(first.mask_original, dtype=bool)
     second_mask = np.asarray(second.mask_original, dtype=bool)
     if first_mask.shape != second_mask.shape:
         return False
-    first_area, second_area = int(first_mask.sum()), int(second_mask.sum())
+    # Only the union of the two boxes can hold overlap; scan that region, not
+    # the whole 1920x1440 frame.
+    x0 = min(first.box_original[0], second.box_original[0])
+    y0 = min(first.box_original[1], second.box_original[1])
+    x1 = max(first.box_original[2], second.box_original[2])
+    y1 = max(first.box_original[3], second.box_original[3])
+    a = first_mask[y0:y1, x0:x1]
+    b = second_mask[y0:y1, x0:x1]
+    first_area, second_area = int(a.sum()), int(b.sum())
     if not first_area or not second_area:
         return False
-    intersection = int((first_mask & second_mask).sum())
+    intersection = int((a & b).sum())
     union = first_area + second_area - intersection
     mask_iou = intersection / union if union else 0.0
     containment = intersection / min(first_area, second_area)
@@ -125,7 +140,6 @@ def _near_identical_instance_masks(
         mask_iou >= 0.65
         and containment >= 0.85
         and area_ratio >= 0.70
-        and _box_iou(first.box_original, second.box_original) >= 0.60
     )
 
 
@@ -341,6 +355,8 @@ class YoloSegModel:
         device: str = "mps",
         confidence: float = 0.15,
         imgsz: int = 640,
+        retina_masks: bool = True,
+        max_det: int = 300,
     ):
         from ultralytics import YOLO
 
@@ -351,11 +367,14 @@ class YoloSegModel:
         self.device = device
         self.confidence = confidence
         self.imgsz = imgsz
+        self.retina_masks = bool(retina_masks)
+        self.max_det = int(max_det)
 
     def predict(self, image: np.ndarray) -> list[RawSegmentation]:
         result = self.model.predict(
             source=image, device=self.device, conf=self.confidence,
-            imgsz=self.imgsz, retina_masks=True, max_det=300,
+            imgsz=self.imgsz, retina_masks=self.retina_masks,
+            max_det=self.max_det,
             verbose=False,
         )[0]
         if result.masks is None:
