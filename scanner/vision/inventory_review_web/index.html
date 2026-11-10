@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LEGO inventory annotation</title>
+  <link rel="stylesheet" href="/styles.css?v=12">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>LEGO inventory annotation</h1>
+      <p id="counts">Loading batches…</p>
+    </div>
+    <div class="header-actions">
+      <select id="session-select" aria-label="Session"></select>
+      <button id="review-overlaps" class="cleanup" disabled>Review possible extras</button>
+      <button id="add-missed" class="secondary">Add missed piece</button>
+      <button id="lock-session" class="secondary">Lock batch</button>
+      <button id="export-inventory" class="secondary" disabled>Export final inventory</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="canvas-panel">
+      <div id="segmentation-stage" aria-label="LEGO segmentation overview">
+        <img id="overview" alt="Original camera frame with selected LEGO segmentation">
+        <div id="shape-buttons"></div>
+        <svg id="callout-layer" aria-hidden="true">
+          <line id="callout-line"></line>
+          <circle id="callout-dot" r="5"></circle>
+        </svg>
+        <div id="confirmation-callout" role="group" aria-label="Confirm selected LEGO piece">
+          <section id="confirmation-review">
+            <span class="eyebrow">Quick confirmation</span>
+            <strong id="confirmation-question">Is this the suggested LEGO piece?</strong>
+            <span id="confirmation-confidence">Model suggestion</span>
+            <div class="quick-confirm-actions">
+              <button id="quick-confirm-yes" class="primary" type="button">Yes</button>
+              <button id="quick-confirm-no" type="button">No</button>
+            </div>
+          </section>
+          <section id="correction-slide" class="hidden" aria-labelledby="correction-title">
+            <span class="eyebrow">Correct this piece</span>
+            <strong id="correction-title">What LEGO piece is this?</strong>
+            <label>Piece type
+              <input id="correction-part-name" list="inventory-piece-types" autocomplete="off" placeholder="e.g. Brick 2 x 8">
+              <datalist id="inventory-piece-types"></datalist>
+            </label>
+            <p class="correction-help">Use the shape and stud size—for example, Brick 2 x 8.</p>
+            <div class="correction-actions">
+              <button id="correction-back" type="button">Back</button>
+              <button id="correction-save" class="primary" type="button">Save</button>
+            </div>
+            <p id="correction-status" class="hint"></p>
+          </section>
+          <img id="confirmation-mascot" src="/confirmation-mascot.svg"
+            alt="Waving yellow brick figure">
+        </div>
+      </div>
+      <p id="frame-hint" class="hint">Select a yellow segmented piece to inspect it.</p>
+    </section>
+
+    <div id="review-state" hidden>
+      <section id="inspector-review">
+      <div class="piece-heading">
+        <button id="previous" class="icon" aria-label="Previous piece">←</button>
+        <div>
+          <span class="eyebrow">Piece to confirm</span>
+          <h2 id="piece-title">Selected LEGO piece</h2>
+        </div>
+        <button id="next" class="icon" aria-label="Next piece">→</button>
+      </div>
+
+      <div class="crop-toolbar">
+        <span>Full piece crop</span>
+        <div class="crop-modes" aria-label="Crop display mode">
+          <button id="view-clear" type="button" aria-pressed="true">Clear</button>
+          <button id="view-mask" type="button" aria-pressed="false">Mask</button>
+        </div>
+      </div>
+      <img id="selected-crop" class="selected-crop" alt="Selected LEGO crop">
+      <div id="association-status" class="association-status"></div>
+
+      <span class="eyebrow">Suggested shapes</span>
+      <div id="candidate-renders" class="candidate-renders"></div>
+
+      <label>Part ID <span class="optional">optional</span>
+        <input id="part-id" autocomplete="off" placeholder="Leave blank if unknown">
+      </label>
+      <label>Block type
+        <input id="part-name" autocomplete="off" placeholder="e.g. Brick 2 x 4">
+      </label>
+      <label>Color
+        <select id="color"></select>
+      </label>
+      <label>Segmentation
+        <select id="segmentation">
+          <option value="unreviewed">Not checked</option>
+          <option value="correct">Correct</option>
+          <option value="duplicate">Duplicate detection</option>
+          <option value="merged">Merged pieces</option>
+          <option value="incomplete">Incomplete mask</option>
+          <option value="missed">Human-added missed piece</option>
+        </select>
+      </label>
+
+      <label class="include-row">
+        <input id="included" type="checkbox" checked>
+        Include this block in final inventory
+      </label>
+      <label id="exclusion-wrap" class="hidden">Why exclude it?
+        <input id="exclusion-reason" placeholder="e.g. accidental piece">
+      </label>
+
+      <div class="review-actions">
+        <button id="delete-segmentation" class="danger" type="button">Delete detection</button>
+        <button id="confirm" class="primary">Confirm + next</button>
+      </div>
+      <p id="save-status" class="hint"></p>
+      </section>
+
+    </div>
+  </main>
+
+  <dialog id="missed-piece-dialog">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <span class="eyebrow">Add missed piece</span>
+        <h2>Select it on an original camera frame</h2>
+      </div>
+      <button id="close-missed-dialog" class="icon" value="cancel" aria-label="Close">×</button>
+    </form>
+    <div class="missed-toolbar">
+      <label>Source frame
+        <select id="source-frame-select"></select>
+      </label>
+      <button id="draw-missing-box" type="button" class="secondary">Draw missing box</button>
+      <span id="missed-instructions" class="hint">Choose a numbered detector waypoint.</span>
+    </div>
+    <div class="missed-layout">
+      <div id="missed-stage">
+        <img id="missed-frame" alt="Original camera frame for adding a missed piece">
+        <div id="missed-waypoint-buttons"></div>
+        <div id="manual-box" class="hidden"></div>
+      </div>
+      <aside class="missed-inspector">
+        <img id="missed-selected-crop" class="hidden" alt="Selected missed LEGO crop">
+        <p id="missed-selection" class="hint">No waypoint selected.</p>
+        <button id="add-selected-waypoint" type="button" class="primary" disabled>Add selected waypoint</button>
+        <button id="add-drawn-box" type="button" class="primary hidden" disabled>Add drawn box</button>
+      </aside>
+    </div>
+  </dialog>
+
+  <dialog id="overlap-cleanup-dialog">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <span class="eyebrow">Overcount cleanup</span>
+        <h2>Review possible duplicate records</h2>
+      </div>
+      <button id="close-overlap-dialog" class="icon" value="cancel" aria-label="Close">×</button>
+    </form>
+    <div class="overlap-toolbar">
+      <strong id="overlap-counts">Loading count…</strong>
+      <span id="overlap-progress" class="hint"></span>
+    </div>
+    <div class="overlap-layout">
+      <div id="overlap-stage">
+        <img id="overlap-frame" alt="Full source frame for possible duplicate pair">
+        <div id="overlap-layer">
+          <div id="overlap-box-a" class="overlap-box a"><span>A</span></div>
+          <div id="overlap-box-b" class="overlap-box b"><span>B</span></div>
+        </div>
+      </div>
+      <aside class="overlap-inspector">
+        <p class="overlap-warning">Nothing is removed automatically. Keep the record whose entered type and color represent the physical inventory piece.</p>
+        <section class="overlap-card a-card">
+          <span class="overlap-letter">A</span>
+          <strong id="overlap-label-a">—</strong>
+          <small id="overlap-id-a"></small>
+        </section>
+        <section class="overlap-card b-card">
+          <span class="overlap-letter">B</span>
+          <strong id="overlap-label-b">—</strong>
+          <small id="overlap-id-b"></small>
+        </section>
+        <p id="overlap-strength" class="hint"></p>
+        <div class="overlap-actions">
+          <button id="keep-overlap-a" type="button" class="primary">Keep A</button>
+          <button id="keep-overlap-b" type="button" class="primary">Keep B</button>
+          <button id="keep-overlap-separate" type="button" class="secondary">These are separate pieces</button>
+        </div>
+        <p id="overlap-status" class="hint"></p>
+      </aside>
+    </div>
+  </dialog>
+
+  <script src="/app.js?v=13"></script>
+</body>
+</html>

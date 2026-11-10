@@ -1,0 +1,1095 @@
+{
+  "version": 1,
+  "cohort": "phase3_new",
+  "capture_root": "/Users/emily/lego-capture/sessions",
+  "summary": {
+    "listed": 20,
+    "usable": 19,
+    "empty": 1,
+    "missing": 0
+  },
+  "contact_sheets": [
+    "session-contact-sheet-1.jpg",
+    "session-contact-sheet-2.jpg"
+  ],
+  "sessions": {
+    "20260717-145941": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "Long varied sweep with multiple piece sizes.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 192,
+      "duration_s": 33.689,
+      "fps": 5.699,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 81.4,
+      "sharpness": {
+        "p10": 14.1,
+        "median": 43.61,
+        "p90": 62.0
+      },
+      "plane_inlier_fraction": 0.9998,
+      "table_extent_xy": [
+        [
+          -0.22360452606316497,
+          0.2497739735965084
+        ],
+        [
+          -0.2880284064366454,
+          0.2765648401998002
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1764,
+        0.3577
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 57,
+          "sharpness": 69.75,
+          "topdownness": 0.9898
+        },
+        {
+          "frame_id": 120,
+          "sharpness": 50.77,
+          "topdownness": 0.9857
+        },
+        {
+          "frame_id": 191,
+          "sharpness": 66.9,
+          "topdownness": 0.9966
+        }
+      ]
+    },
+    "20260717-150212": {
+      "environment": "wood",
+      "split": "val",
+      "target_frames": 2,
+      "provenance": "custom_record3d",
+      "scene_density": "sparse",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "Four-second burst; useful but low view diversity.",
+      "status": "usable",
+      "warnings": [
+        "short_capture_under_5s"
+      ],
+      "frame_count": 24,
+      "duration_s": 4.037,
+      "fps": 5.945,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 9.43,
+      "sharpness": {
+        "p10": 14.4,
+        "median": 29.25,
+        "p90": 39.64
+      },
+      "plane_inlier_fraction": 1.0,
+      "table_extent_xy": [
+        [
+          -0.2509508845272496,
+          0.29434354098105653
+        ],
+        [
+          -0.27886479258409874,
+          0.2960997701337532
+        ]
+      ],
+      "camera_height_range_m": [
+        0.3132,
+        0.3351
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 7,
+          "sharpness": 39.25,
+          "topdownness": 0.9896
+        },
+        {
+          "frame_id": 9,
+          "sharpness": 41.88,
+          "topdownness": 0.9894
+        },
+        {
+          "frame_id": 18,
+          "sharpness": 36.99,
+          "topdownness": 0.9809
+        }
+      ]
+    },
+    "20260717-150350": {
+      "environment": "wood",
+      "split": "val",
+      "target_frames": 2,
+      "provenance": "custom_record3d",
+      "scene_density": "sparse",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "Four-second sparse arrangement.",
+      "status": "usable",
+      "warnings": [
+        "short_capture_under_5s"
+      ],
+      "frame_count": 23,
+      "duration_s": 3.882,
+      "fps": 5.925,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 8.39,
+      "sharpness": {
+        "p10": 16.1,
+        "median": 23.91,
+        "p90": 30.67
+      },
+      "plane_inlier_fraction": 1.0,
+      "table_extent_xy": [
+        [
+          -0.2635903852306598,
+          0.2957230542798519
+        ],
+        [
+          -0.2877343164857197,
+          0.29628374548521086
+        ]
+      ],
+      "camera_height_range_m": [
+        0.3253,
+        0.3459
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 5,
+          "sharpness": 24.02,
+          "topdownness": 0.9956
+        },
+        {
+          "frame_id": 7,
+          "sharpness": 32.26,
+          "topdownness": 0.9943
+        },
+        {
+          "frame_id": 17,
+          "sharpness": 30.94,
+          "topdownness": 0.9908
+        }
+      ]
+    },
+    "20260717-151014": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": true,
+      "geometry_risk": null,
+      "catalog_notes": "Several close yellow pieces.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 174,
+      "duration_s": 30.402,
+      "fps": 5.723,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 65.25,
+      "sharpness": {
+        "p10": 5.24,
+        "median": 23.11,
+        "p90": 46.09
+      },
+      "plane_inlier_fraction": 0.9995,
+      "table_extent_xy": [
+        [
+          -0.2355873265455213,
+          0.21807659876398833
+        ],
+        [
+          -0.2498660296292891,
+          0.23740868838533577
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1436,
+        0.3179
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 40,
+          "sharpness": 52.51,
+          "topdownness": 0.9937
+        },
+        {
+          "frame_id": 63,
+          "sharpness": 57.11,
+          "topdownness": 0.9942
+        },
+        {
+          "frame_id": 155,
+          "sharpness": 41.01,
+          "topdownness": 0.9868
+        }
+      ]
+    },
+    "20260717-151357": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 160,
+      "duration_s": 27.868,
+      "fps": 5.741,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 65.43,
+      "sharpness": {
+        "p10": 16.43,
+        "median": 27.45,
+        "p90": 65.59
+      },
+      "plane_inlier_fraction": 0.9963,
+      "table_extent_xy": [
+        [
+          -0.24586398097911047,
+          0.25438256684183214
+        ],
+        [
+          -0.2545649258545535,
+          0.2156709878044395
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1991,
+        0.3385
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 26,
+          "sharpness": 77.74,
+          "topdownness": 0.9964
+        },
+        {
+          "frame_id": 58,
+          "sharpness": 74.06,
+          "topdownness": 0.9957
+        },
+        {
+          "frame_id": 143,
+          "sharpness": 50.75,
+          "topdownness": 0.9708
+        }
+      ]
+    },
+    "20260717-151611": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "dense",
+      "touching_priority": true,
+      "geometry_risk": null,
+      "catalog_notes": "Dense central group with multiple contacts.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 114,
+      "duration_s": 19.862,
+      "fps": 5.74,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 52.73,
+      "sharpness": {
+        "p10": 28.79,
+        "median": 52.87,
+        "p90": 65.77
+      },
+      "plane_inlier_fraction": 0.9946,
+      "table_extent_xy": [
+        [
+          -0.2502522511617358,
+          0.23919307937021406
+        ],
+        [
+          -0.25643908100175045,
+          0.2540443123084351
+        ]
+      ],
+      "camera_height_range_m": [
+        0.2489,
+        0.3478
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 30,
+          "sharpness": 65.77,
+          "topdownness": 0.9945
+        },
+        {
+          "frame_id": 60,
+          "sharpness": 78.13,
+          "topdownness": 0.9985
+        },
+        {
+          "frame_id": 90,
+          "sharpness": 90.84,
+          "topdownness": 0.9976
+        }
+      ]
+    },
+    "20260717-152048": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 3,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 132,
+      "duration_s": 23.07,
+      "fps": 5.722,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 51.43,
+      "sharpness": {
+        "p10": 6.57,
+        "median": 22.97,
+        "p90": 49.45
+      },
+      "plane_inlier_fraction": 0.9979,
+      "table_extent_xy": [
+        [
+          -0.23172818587806823,
+          0.24990292272478667
+        ],
+        [
+          -0.2763343085258205,
+          0.26900265081595
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1635,
+        0.3278
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 4,
+          "sharpness": 52.49,
+          "topdownness": 0.9988
+        },
+        {
+          "frame_id": 56,
+          "sharpness": 38.89,
+          "topdownness": 0.9902
+        },
+        {
+          "frame_id": 131,
+          "sharpness": 38.52,
+          "topdownness": 0.9947
+        }
+      ]
+    },
+    "20260717-152202": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "dense",
+      "touching_priority": true,
+      "geometry_risk": null,
+      "catalog_notes": "Long dense sweep with edge pieces.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 309,
+      "duration_s": 54.151,
+      "fps": 5.706,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 129.09,
+      "sharpness": {
+        "p10": 11.55,
+        "median": 33.27,
+        "p90": 72.13
+      },
+      "plane_inlier_fraction": 0.9437,
+      "table_extent_xy": [
+        [
+          -0.29706839395084084,
+          0.30948836097982785
+        ],
+        [
+          -0.3096512513530425,
+          0.32619622018732436
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1955,
+        0.3869
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 20,
+          "sharpness": 76.13,
+          "topdownness": 0.9943
+        },
+        {
+          "frame_id": 154,
+          "sharpness": 72.13,
+          "topdownness": 0.9852
+        },
+        {
+          "frame_id": 287,
+          "sharpness": 55.08,
+          "topdownness": 0.9844
+        }
+      ]
+    },
+    "20260717-152340": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 3,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 121,
+      "duration_s": 21.039,
+      "fps": 5.751,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 47.49,
+      "sharpness": {
+        "p10": 16.19,
+        "median": 32.14,
+        "p90": 47.05
+      },
+      "plane_inlier_fraction": 0.9585,
+      "table_extent_xy": [
+        [
+          -0.26806568270005515,
+          0.29413933049145585
+        ],
+        [
+          -0.30605647233742944,
+          0.3148915704768574
+        ]
+      ],
+      "camera_height_range_m": [
+        0.2637,
+        0.368
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 16,
+          "sharpness": 47.26,
+          "topdownness": 0.9951
+        },
+        {
+          "frame_id": 68,
+          "sharpness": 44.96,
+          "topdownness": 0.9976
+        },
+        {
+          "frame_id": 116,
+          "sharpness": 56.34,
+          "topdownness": 0.9999
+        }
+      ]
+    },
+    "20260717-152458": {
+      "environment": "wood",
+      "split": "val",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 193,
+      "duration_s": 33.72,
+      "fps": 5.724,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 78.82,
+      "sharpness": {
+        "p10": 13.19,
+        "median": 28.79,
+        "p90": 54.83
+      },
+      "plane_inlier_fraction": 0.9999,
+      "table_extent_xy": [
+        [
+          -0.24549493406579873,
+          0.22737533052232606
+        ],
+        [
+          -0.27024443492412376,
+          0.26297290820307556
+        ]
+      ],
+      "camera_height_range_m": [
+        0.2248,
+        0.3361
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 25,
+          "sharpness": 57.22,
+          "topdownness": 0.9921
+        },
+        {
+          "frame_id": 115,
+          "sharpness": 71.03,
+          "topdownness": 0.9986
+        },
+        {
+          "frame_id": 179,
+          "sharpness": 54.83,
+          "topdownness": 0.9929
+        }
+      ]
+    },
+    "20260717-152721": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 3,
+      "provenance": "custom_record3d",
+      "scene_density": "sparse",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 146,
+      "duration_s": 25.543,
+      "fps": 5.716,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 51.75,
+      "sharpness": {
+        "p10": 8.79,
+        "median": 23.29,
+        "p90": 31.98
+      },
+      "plane_inlier_fraction": 0.9994,
+      "table_extent_xy": [
+        [
+          -0.23339464507995883,
+          0.20645198284045166
+        ],
+        [
+          -0.25963695251850155,
+          0.2519253712547016
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1488,
+        0.3317
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 33,
+          "sharpness": 33.94,
+          "topdownness": 0.9889
+        },
+        {
+          "frame_id": 87,
+          "sharpness": 33.49,
+          "topdownness": 0.9969
+        },
+        {
+          "frame_id": 145,
+          "sharpness": 26.65,
+          "topdownness": 0.9941
+        }
+      ]
+    },
+    "20260717-153020": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "dense",
+      "touching_priority": true,
+      "geometry_risk": null,
+      "catalog_notes": "Densest wood arrangement; strong contact priority.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 337,
+      "duration_s": 58.92,
+      "fps": 5.72,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 142.14,
+      "sharpness": {
+        "p10": 13.47,
+        "median": 28.99,
+        "p90": 72.77
+      },
+      "plane_inlier_fraction": 1.0,
+      "table_extent_xy": [
+        [
+          -0.29401212755827477,
+          0.3055529558961494
+        ],
+        [
+          -0.2918017750167821,
+          0.3035874671670637
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1576,
+        0.3736
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 11,
+          "sharpness": 84.94,
+          "topdownness": 0.995
+        },
+        {
+          "frame_id": 156,
+          "sharpness": 66.43,
+          "topdownness": 0.9955
+        },
+        {
+          "frame_id": 246,
+          "sharpness": 81.37,
+          "topdownness": 0.9939
+        }
+      ]
+    },
+    "20260717-153200": {
+      "environment": "wood",
+      "split": "val",
+      "target_frames": 3,
+      "provenance": "custom_record3d",
+      "scene_density": "sparse",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 260,
+      "duration_s": 45.605,
+      "fps": 5.701,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 93.82,
+      "sharpness": {
+        "p10": 11.3,
+        "median": 17.06,
+        "p90": 26.33
+      },
+      "plane_inlier_fraction": 0.9985,
+      "table_extent_xy": [
+        [
+          -0.16121710168585818,
+          0.16635449499111127
+        ],
+        [
+          -0.21099836273426065,
+          0.20393440314304007
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1936,
+        0.2982
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 60,
+          "sharpness": 34.22,
+          "topdownness": 0.9983
+        },
+        {
+          "frame_id": 129,
+          "sharpness": 29.52,
+          "topdownness": 0.9994
+        },
+        {
+          "frame_id": 215,
+          "sharpness": 26.33,
+          "topdownness": 0.9931
+        }
+      ]
+    },
+    "20260717-153313": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 3,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 247,
+      "duration_s": 43.134,
+      "fps": 5.726,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 95.18,
+      "sharpness": {
+        "p10": 15.98,
+        "median": 24.55,
+        "p90": 42.24
+      },
+      "plane_inlier_fraction": 0.9993,
+      "table_extent_xy": [
+        [
+          -0.26201565043486785,
+          0.24139955179141404
+        ],
+        [
+          -0.27542058277284515,
+          0.2685566009267639
+        ]
+      ],
+      "camera_height_range_m": [
+        0.2016,
+        0.3297
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 65,
+          "sharpness": 43.03,
+          "topdownness": 0.9983
+        },
+        {
+          "frame_id": 155,
+          "sharpness": 50.24,
+          "topdownness": 0.9999
+        },
+        {
+          "frame_id": 246,
+          "sharpness": 40.51,
+          "topdownness": 0.9985
+        }
+      ]
+    },
+    "20260717-153423": {
+      "environment": "wood",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 316,
+      "duration_s": 55.425,
+      "fps": 5.701,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 124.87,
+      "sharpness": {
+        "p10": 14.59,
+        "median": 32.87,
+        "p90": 42.8
+      },
+      "plane_inlier_fraction": 0.9992,
+      "table_extent_xy": [
+        [
+          -0.28811413736722224,
+          0.2684950696695488
+        ],
+        [
+          -0.3042991060156007,
+          0.2937156530902278
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1761,
+        0.3568
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 73,
+          "sharpness": 48.04,
+          "topdownness": 0.9988
+        },
+        {
+          "frame_id": 199,
+          "sharpness": 42.8,
+          "topdownness": 0.9995
+        },
+        {
+          "frame_id": 210,
+          "sharpness": 49.22,
+          "topdownness": 0.9952
+        }
+      ]
+    },
+    "20260717-153911": {
+      "environment": "unknown",
+      "split": "exclude",
+      "target_frames": 0,
+      "provenance": "custom_record3d",
+      "scene_density": "standard",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "Directory and frames.jsonl exist but contain zero frames and bytes.",
+      "status": "empty",
+      "warnings": [
+        "zero_frames"
+      ],
+      "frame_count": 0,
+      "duration_s": 0.0,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 0.0,
+      "sharpness": {
+        "p10": null,
+        "median": null,
+        "p90": null
+      },
+      "representative_frames": []
+    },
+    "20260717-153942": {
+      "environment": "white_round",
+      "split": "test",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": "weak_plane_fit",
+      "catalog_notes": "Round tabletop with visible side/background; plane inliers about 59%.",
+      "status": "usable",
+      "warnings": [
+        "weak_plane_fit_under_0.8"
+      ],
+      "frame_count": 290,
+      "duration_s": 50.812,
+      "fps": 5.707,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 98.52,
+      "sharpness": {
+        "p10": 2.91,
+        "median": 20.57,
+        "p90": 40.35
+      },
+      "plane_inlier_fraction": 0.5871,
+      "table_extent_xy": [
+        [
+          -0.17141322565085504,
+          0.1624996483156344
+        ],
+        [
+          -0.2037903778668064,
+          0.20678012274832366
+        ]
+      ],
+      "camera_height_range_m": [
+        0.0849,
+        0.2946
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 19,
+          "sharpness": 48.19,
+          "topdownness": 0.9895
+        },
+        {
+          "frame_id": 192,
+          "sharpness": 38.33,
+          "topdownness": 0.9989
+        },
+        {
+          "frame_id": 221,
+          "sharpness": 40.35,
+          "topdownness": 1.0
+        }
+      ]
+    },
+    "20260717-154428": {
+      "environment": "gray",
+      "split": "train",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "dense",
+      "touching_priority": true,
+      "geometry_risk": null,
+      "catalog_notes": "Long, sharp gray-surface capture.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 830,
+      "duration_s": 146.035,
+      "fps": 5.684,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 479.72,
+      "sharpness": {
+        "p10": 41.47,
+        "median": 132.13,
+        "p90": 223.38
+      },
+      "plane_inlier_fraction": 0.9426,
+      "table_extent_xy": [
+        [
+          -0.2983074751710378,
+          0.31120319455230916
+        ],
+        [
+          -0.27431980493984687,
+          0.30380038684617333
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1493,
+        0.3764
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 0,
+          "sharpness": 235.25,
+          "topdownness": 0.9926
+        },
+        {
+          "frame_id": 469,
+          "sharpness": 265.64,
+          "topdownness": 0.9889
+        },
+        {
+          "frame_id": 801,
+          "sharpness": 199.65,
+          "topdownness": 1.0
+        }
+      ]
+    },
+    "20260717-154929": {
+      "environment": "gray",
+      "split": "val",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": null,
+      "catalog_notes": "Gray-surface arrangement held out from gray training session.",
+      "status": "usable",
+      "warnings": [],
+      "frame_count": 499,
+      "duration_s": 87.685,
+      "fps": 5.691,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 291.49,
+      "sharpness": {
+        "p10": 57.99,
+        "median": 130.65,
+        "p90": 259.55
+      },
+      "plane_inlier_fraction": 0.9986,
+      "table_extent_xy": [
+        [
+          -0.2530599395916592,
+          0.23501125513016888
+        ],
+        [
+          -0.2885730572186076,
+          0.28507609045040955
+        ]
+      ],
+      "camera_height_range_m": [
+        0.1385,
+        0.3676
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 33,
+          "sharpness": 331.8,
+          "topdownness": 0.9988
+        },
+        {
+          "frame_id": 232,
+          "sharpness": 170.94,
+          "topdownness": 0.998
+        },
+        {
+          "frame_id": 348,
+          "sharpness": 173.77,
+          "topdownness": 0.9973
+        }
+      ]
+    },
+    "20260717-155228": {
+      "environment": "white_round",
+      "split": "test",
+      "target_frames": 4,
+      "provenance": "custom_record3d",
+      "scene_density": "medium",
+      "touching_priority": false,
+      "geometry_risk": "weak_plane_fit",
+      "catalog_notes": "Round tabletop edge/background; plane inliers about 71%.",
+      "status": "usable",
+      "warnings": [
+        "weak_plane_fit_under_0.8"
+      ],
+      "frame_count": 335,
+      "duration_s": 58.951,
+      "fps": 5.683,
+      "missing_rgb": 0,
+      "missing_depth": 0,
+      "size_mb": 120.55,
+      "sharpness": {
+        "p10": 2.3,
+        "median": 21.82,
+        "p90": 53.9
+      },
+      "plane_inlier_fraction": 0.7048,
+      "table_extent_xy": [
+        [
+          -0.14577027615503513,
+          0.1455809130619369
+        ],
+        [
+          -0.18931561556307291,
+          0.1808709086869102
+        ]
+      ],
+      "camera_height_range_m": [
+        0.0603,
+        0.2573
+      ],
+      "representative_frames": [
+        {
+          "frame_id": 55,
+          "sharpness": 59.87,
+          "topdownness": 0.9999
+        },
+        {
+          "frame_id": 222,
+          "sharpness": 45.86,
+          "topdownness": 0.9582
+        },
+        {
+          "frame_id": 244,
+          "sharpness": 32.15,
+          "topdownness": 0.9835
+        }
+      ]
+    }
+  }
+}
