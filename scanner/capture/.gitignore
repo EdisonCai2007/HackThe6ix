@@ -9,7 +9,7 @@ outputs/
 scratchpad/
 tmp/
 .DS_Store
-.codex-work/
+.work/
 inventory-segmentation-*/
 inventory-validation-*/
 inventory-waypoint-*/

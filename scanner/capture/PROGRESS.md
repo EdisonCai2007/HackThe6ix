@@ -1,13 +1,9 @@
 # LEGO Scanner — Progress
 
 Covers both repos (`lego-capture`, `lego-cv`), branch
-`codex/option-a-color-detection` in each. The latest reliability regression,
+`lego-scanner-capture-vision` in each. The latest reliability regression,
 `sessions/20260717-233252`, now produces all 13 physical components; the older
 `005145` touching-white-piece regression remains fixed at 8/8.
-
-Note: the mission brief said to read CLAUDE.md first — no CLAUDE.md exists in
-either repo or $HOME as of 2026-07-17; state was read from git history,
-docs/superpowers specs+plans, and session artifacts instead.
 
 ## Mission status
 
@@ -51,7 +47,7 @@ Phase 2 rather than tuning crops further.
 | 234326 | 8 pcs, 2 unknown | 8 pcs, 2 unknown (orange beam now unknown — was correct pre-bridge; red 2x2) |
 | 005145 | 7 pcs, 1x10 misID | 7 pcs, 0 unknown; **1x8 ✓**; gray 6x12 reads "Brick 1x8"; white merge persists (known, Phase 3) |
 
-Phase 1 deliverables, all committed on codex/option-a-color-detection:
+Phase 1 deliverables, all committed on lego-scanner-capture-vision:
 - lego-capture: symmetric 25 mm workspace pad; manifest v2 (per-view
   homography canvas→original px, original rgb path/size, raise_uv_per_cm).
 - lego-cv: pipeline/original_crop.py (AABB mapping, fit check, quad
@@ -489,7 +485,7 @@ Run-scoped validation (`20260718-130245`):
 
 Regression gate: 302 CV tests and 80 capture tests pass. Plan and red/green
 steps are in
-`docs/superpowers/plans/2026-07-18-pre-latency-reliability.md`.
+`docs/plans/2026-07-18-pre-latency-reliability.md`.
 
 ## Phase 9 exact batch inventory review (2026-07-18) — IMPLEMENTED, HUMAN REVIEW PENDING
 
@@ -571,8 +567,8 @@ draft are respected; all other pieces use current model output.
 Focused verification: 7 exporter tests pass. Structural verification found 12
 session submodels, 810 component provenance records, 810 session part records,
 810 CSV rows, and 44 placeholders. Full capture regression gate: 90 tests pass.
-Design and execution plan are in `docs/superpowers/specs/2026-07-18-studio-inventory-export-design.md`
-and `docs/superpowers/plans/2026-07-18-studio-inventory-export.md`.
+Design and execution plan are in `docs/specs/2026-07-18-studio-inventory-export-design.md`
+and `docs/plans/2026-07-18-studio-inventory-export.md`.
 
 ## Phase 11 standalone demo viewer (2026-07-19) — P1 COMPLETE, AWAITING APPROVAL
 
@@ -652,7 +648,7 @@ overlay — stated plainly so P2 commits to it knowingly.
 364; +5 new scene-state tests, one pre-existing Starlette warning). No existing
 schema or behavior changed; artifact is purely additive. Historical session
 artifacts untouched (validation written to run-scoped scratch dirs);
-`IMG_4841.jpg` preserved. Committed on `codex/option-a-color-detection`; not
+`IMG_4841.jpg` preserved. Committed on `lego-scanner-capture-vision`; not
 merged/pushed. **Stopping for approval before P2.**
 
 ### P2 — showcase selection + confirmation payload (2026-07-19) — COMPLETE, AWAITING APPROVAL
@@ -754,7 +750,7 @@ off-screen); this was demonstrated headless on recorded frames with real poses
 
 Regression: **101 capture + 389 cv tests pass** (+11 live-glow/viewer; cv
 untouched this phase). No P1/P2 behaviour or schemas changed. Committed on
-`codex/option-a-color-detection`; not merged/pushed. **Stopping at the P3 gate.**
+`lego-scanner-capture-vision`; not merged/pushed. **Stopping at the P3 gate.**
 
 ## Log
 
@@ -776,7 +772,7 @@ untouched this phase). No P1/P2 behaviour or schemas changed. Committed on
   isolation passed.
 
 - 2026-07-17: Phase 1 plan written
-  (`lego-cv/docs/superpowers/plans/2026-07-17-phase1-original-crop-bridge.md`).
+  (`lego-cv/docs/plans/2026-07-17-phase1-original-crop-bridge.md`).
   Key finding: multiview manifest v1 carries no canvas->original geometry;
   Bridge = manifest v2 (homography + rgb path + raise-direction) + lego-cv
   original-crop module.
@@ -791,7 +787,7 @@ untouched this phase). No P1/P2 behaviour or schemas changed. Committed on
 - 2026-07-17 (Phase 2 GATE): APPROVED by Emily. No further tuning against
   212422/005145 residuals (view-count / merged-crop limits — Phase 3).
 - 2026-07-17 (Phase 3): plan written
-  (lego-cv/docs/superpowers/plans/2026-07-17-phase3-trained-separator.md),
+  (lego-cv/docs/plans/2026-07-17-phase3-trained-separator.md),
   superseded by the approved execution handoff and expanded session-safe plan.
 - 2026-07-17 (Phase 3 execution): 71 frames human-reviewed, 1,157 masks
   imported, local MPS training completed, original-frame segmentation/fusion

@@ -1,7 +1,7 @@
 # The LEGO Scanner CV Pipeline — How It Actually Works
 
 *Written 2026-07-18, from the source code and PROGRESS.md of `lego-capture` and
-`lego-cv` on branch `codex/option-a-color-detection`. Every number below comes
+`lego-cv` on branch `lego-scanner-capture-vision`. Every number below comes
 from an actual session result or an actual test run, not a hypothetical.*
 
 ## Why this document exists
