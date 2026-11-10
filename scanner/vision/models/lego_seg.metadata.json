@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "healthy": true,
+  "mode": "full",
+  "started_at": "2026-07-17T23:09:45.564430+00:00",
+  "completed_at": "2026-07-17T23:19:45.321324+00:00",
+  "duration_seconds": 597.2230212080758,
+  "seconds_per_epoch": 5.972230212080758,
+  "config": {
+    "data": "training/data/yolo/lego-seg-a751e0b2b456/data.yaml",
+    "mode": "full",
+    "model": "yolo11n-seg.pt",
+    "device": "mps",
+    "epochs": 100,
+    "fraction": 1.0,
+    "imgsz": 640,
+    "batch": 4,
+    "workers": 0,
+    "seed": 17,
+    "patience": 20,
+    "project": "training/runs/segment"
+  },
+  "environment": {
+    "python": "3.11.14",
+    "platform": "macOS-15.5-arm64-arm-64bit",
+    "torch": "2.13.0",
+    "ultralytics": "8.4.96",
+    "mps_built": true,
+    "mps_available": true,
+    "trainer_device": "mps"
+  },
+  "dataset": {
+    "version": 1,
+    "dataset_sha256": "a751e0b2b456f867c62c6c50467ba3bc635869d4fe2706ac9ced31579a0c1a8c",
+    "class_names": [
+      "lego_piece"
+    ],
+    "require_verified": true,
+    "counts": {
+      "train": 48,
+      "val": 15,
+      "test": 8
+    },
+    "sessions_by_split": {
+      "train": [
+        "20260717-005145",
+        "20260717-145941",
+        "20260717-151014",
+        "20260717-151357",
+        "20260717-151611",
+        "20260717-152048",
+        "20260717-152202",
+        "20260717-152340",
+        "20260717-152721",
+        "20260717-153020",
+        "20260717-153313",
+        "20260717-153423",
+        "20260717-154428"
+      ],
+      "val": [
+        "20260717-150212",
+        "20260717-150350",
+        "20260717-152458",
+        "20260717-153200",
+        "20260717-154929"
+      ],
+      "test": [
+        "20260717-153942",
+        "20260717-155228"
+      ]
+    },
+    "provenance_counts": {
+      "custom_record3d": 71
+    },
+    "data_yaml": "/Users/emily/lego-cv/training/data/yolo/lego-seg-a751e0b2b456/data.yaml",
+    "dataset_root": "/Users/emily/lego-cv/training/data/yolo/lego-seg-a751e0b2b456"
+  },
+  "source_checkpoint": {
+    "path": "/Users/emily/lego-cv/yolo11n-seg.pt",
+    "sha256": "55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152"
+  },
+  "checkpoints": {
+    "best": "/Users/emily/lego-cv/training/runs/segment/full-a751e0b2b456/weights/best.pt",
+    "best_sha256": "c792bdad68351b6930d6e67dd41282b497a7c06b05ee7107dbe416b2ff4ea689",
+    "last": "/Users/emily/lego-cv/training/runs/segment/full-a751e0b2b456/weights/last.pt",
+    "last_sha256": "4fae0b8faf0c2a23dc809eb49235f8c191ff3a1c997107ccb9c7a5c82730c484"
+  },
+  "training_log": {
+    "epochs_completed": 100,
+    "first": {
+      "epoch": 1.0,
+      "time": 6.55371,
+      "train/box_loss": 0.74619,
+      "train/seg_loss": 1.26631,
+      "train/cls_loss": 2.98597,
+      "train/dfl_loss": 0.9291,
+      "train/sem_loss": 0.0,
+      "metrics/precision(B)": 0.04089,
+      "metrics/recall(B)": 0.99459,
+      "metrics/mAP50(B)": 0.25559,
+      "metrics/mAP50-95(B)": 0.21695,
+      "metrics/precision(M)": 0.04089,
+      "metrics/recall(M)": 0.99459,
+      "metrics/mAP50(M)": 0.30509,
+      "metrics/mAP50-95(M)": 0.23826,
+      "val/box_loss": 0.493,
+      "val/seg_loss": 0.81207,
+      "val/cls_loss": 2.8773,
+      "val/dfl_loss": 0.78902,
+      "val/sem_loss": 0.0,
+      "lr/pg0": 0.00022,
+      "lr/pg1": 0.00022,
+      "lr/pg2": 0.00022
+    },
+    "last": {
+      "epoch": 100.0,
+      "time": 585.833,
+      "train/box_loss": 0.33848,
+      "train/seg_loss": 0.41212,
+      "train/cls_loss": 0.39929,
+      "train/dfl_loss": 0.78781,
+      "train/sem_loss": 0.0,
+      "metrics/precision(B)": 0.97279,
+      "metrics/recall(B)": 0.99459,
+      "metrics/mAP50(B)": 0.98567,
+      "metrics/mAP50-95(B)": 0.94109,
+      "metrics/precision(M)": 0.9675,
+      "metrics/recall(M)": 0.98919,
+      "metrics/mAP50(M)": 0.98201,
+      "metrics/mAP50-95(M)": 0.83129,
+      "val/box_loss": 0.31241,
+      "val/seg_loss": 0.4511,
+      "val/cls_loss": 0.38889,
+      "val/dfl_loss": 0.76807,
+      "val/sem_loss": 0.0,
+      "lr/pg0": 3.98e-05,
+      "lr/pg1": 3.98e-05,
+      "lr/pg2": 3.98e-05
+    },
+    "segmentation_loss_keys": [
+      "train/seg_loss",
+      "val/seg_loss"
+    ]
+  },
+  "metrics_by_evidence": {
+    "validation": {
+      "metrics/precision(B)": 0.9736839455509503,
+      "metrics/recall(B)": 0.9999897132266201,
+      "metrics/mAP50(B)": 0.9916856862102211,
+      "metrics/mAP50-95(B)": 0.9538005744269492,
+      "metrics/precision(M)": 0.9786836245235,
+      "metrics/recall(M)": 0.9927047347948175,
+      "metrics/mAP50(M)": 0.9916856862102211,
+      "metrics/mAP50-95(M)": 0.8365806209066745,
+      "fitness": 1.7903811953336237
+    },
+    "train_seen": {
+      "metrics/precision(B)": 0.9929879144146667,
+      "metrics/recall(B)": 0.996547756041427,
+      "metrics/mAP50(B)": 0.9949768250289687,
+      "metrics/mAP50-95(B)": 0.9493995450394636,
+      "metrics/precision(M)": 0.9906946397855336,
+      "metrics/recall(M)": 0.9942462600690449,
+      "metrics/mAP50(M)": 0.9949074313617695,
+      "metrics/mAP50-95(M)": 0.8465255713354388,
+      "fitness": 1.7959251163749024
+    },
+    "test_environment": {
+      "metrics/precision(B)": 0.9334886194550531,
+      "metrics/recall(B)": 0.9902912621359223,
+      "metrics/mAP50(B)": 0.9813200212255446,
+      "metrics/mAP50-95(B)": 0.9433416080639333,
+      "metrics/precision(M)": 0.9242471194790411,
+      "metrics/recall(M)": 0.9805825242718447,
+      "metrics/mAP50(M)": 0.9802131188686423,
+      "metrics/mAP50-95(M)": 0.8769740315291603,
+      "fitness": 1.8203156395930935
+    }
+  },
+  "reload_inference": {
+    "image": "/Users/emily/lego-cv/training/data/yolo/lego-seg-a751e0b2b456/images/val/20260717-150212__f00009.jpg",
+    "result_count": 1,
+    "predicted_instances": 299
+  },
+  "installed_model": "/Users/emily/lego-cv/models/lego_seg.pt",
+  "installed_sha256": "c792bdad68351b6930d6e67dd41282b497a7c06b05ee7107dbe416b2ff4ea689"
+}

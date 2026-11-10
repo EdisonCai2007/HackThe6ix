@@ -1,0 +1,172 @@
+version: 1
+held_out_environment: white_round
+sessions:
+  "20260717-005145":
+    environment: legacy
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: historical_target
+    scene_density: standard
+    touching_priority: true
+    notes: Known two touching white plates; any success is TRAIN-SEEN.
+
+  "20260717-145941":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+    notes: Long varied sweep with multiple piece sizes.
+  "20260717-150212":
+    environment: wood
+    split: val
+    target_frames: 2
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: sparse
+    notes: Four-second burst; useful but low view diversity.
+  "20260717-150350":
+    environment: wood
+    split: val
+    target_frames: 2
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: sparse
+    notes: Four-second sparse arrangement.
+  "20260717-151014":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+    touching_priority: true
+    notes: Several close yellow pieces.
+  "20260717-151357":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-151611":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: dense
+    touching_priority: true
+    notes: Dense central group with multiple contacts.
+  "20260717-152048":
+    environment: wood
+    split: train
+    target_frames: 3
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-152202":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: dense
+    touching_priority: true
+    notes: Long dense sweep with edge pieces.
+  "20260717-152340":
+    environment: wood
+    split: train
+    target_frames: 3
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-152458":
+    environment: wood
+    split: val
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-152721":
+    environment: wood
+    split: train
+    target_frames: 3
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: sparse
+  "20260717-153020":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: dense
+    touching_priority: true
+    notes: Densest wood arrangement; strong contact priority.
+  "20260717-153200":
+    environment: wood
+    split: val
+    target_frames: 3
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: sparse
+  "20260717-153313":
+    environment: wood
+    split: train
+    target_frames: 3
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-153423":
+    environment: wood
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+  "20260717-153911":
+    environment: unknown
+    split: exclude
+    target_frames: 0
+    provenance: custom_record3d
+    cohort: phase3_new
+    reason: zero_frames
+    notes: Directory and frames.jsonl exist but contain zero frames and bytes.
+  "20260717-153942":
+    environment: white_round
+    split: test
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    geometry_risk: weak_plane_fit
+    scene_density: medium
+    notes: Round tabletop with visible side/background; plane inliers about 59%.
+  "20260717-154428":
+    environment: gray
+    split: train
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: dense
+    touching_priority: true
+    notes: Long, sharp gray-surface capture.
+  "20260717-154929":
+    environment: gray
+    split: val
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    scene_density: medium
+    notes: Gray-surface arrangement held out from gray training session.
+  "20260717-155228":
+    environment: white_round
+    split: test
+    target_frames: 4
+    provenance: custom_record3d
+    cohort: phase3_new
+    geometry_risk: weak_plane_fit
+    scene_density: medium
+    notes: Round tabletop edge/background; plane inliers about 71%.

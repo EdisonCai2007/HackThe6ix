@@ -1,0 +1,16 @@
+.venv/
+.cache/
+__pycache__/
+*.pyc
+*.egg-info/
+models/*.pt
+debug.jpg
+detect_debug.jpg
+inventory.json
+.pytest_cache/
+training/data/
+training/artifacts/label-qa/
+training/artifacts/sam-feasibility*/
+training/runs/
+/sam*.pt
+/yolo11n-seg.pt
